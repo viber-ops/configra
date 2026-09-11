@@ -37,6 +37,9 @@ for (const platform of ['darwin', 'linux']) {
     assert.ok(entries.every((path) => path.startsWith(`${name}/`) &&
       !path.includes('\\') && !path.split('/').some((part) => part === '.' || part === '..')),
     `${name}: every file stays inside its bundle directory`);
+    const detailedEntries = execFileSync('tar', ['-tvzf', archive], { encoding: 'utf8' }).trim().split('\n');
+    assert.ok(detailedEntries.every((entry) => entry.startsWith('-') || entry.startsWith('d')),
+      'Release archives contain only regular files and directories, not links or devices');
     const read = (path) => {
       assert.ok(entries.includes(`${name}/${path}`), `${name}: missing ${path}`);
       return execFileSync('tar', ['-xOf', archive, `${name}/${path}`], { encoding: 'utf8' });
@@ -91,12 +94,19 @@ for (const platform of ['darwin', 'linux']) {
         const recordedModules = moduleBOM.components.filter((entry) => entry.type === 'library');
         assert.deepEqual(recordedModules.map((entry) => `${entry.name}@${entry.version}`).sort(),
           info.Deps.map((entry) => `${entry.Path}@${entry.Version}`).sort(), 'Every linked module has artifact licensing evidence');
+        execFileSync('tar', ['-xzf', archive, '-C', temporary, `${name}/licenses/${binary}-modules`]);
+        const moduleRoot = join(temporary, name, 'licenses', `${binary}-modules`);
         for (const dependency of recordedModules) {
           const properties = Object.fromEntries(dependency.properties.map(({ name, value }) => [name, value]));
+          assert.equal(properties['configra:go:module-sum'], info.Deps.find((entry) => entry.Path === dependency.name).Sum);
           const files = JSON.parse(properties['configra:license-files']);
           assert.ok(files.length > 0, `License files exist for ${dependency.name}`);
           for (const file of files) {
             assert.ok(entries.includes(`${name}/licenses/${binary}-modules/${file.path}`), `Missing ${file.path}`);
+            const material = resolve(moduleRoot, file.path);
+            assert.ok(material.startsWith(`${moduleRoot}/`), 'Notice stays inside its collection');
+            assert.equal(createHash('sha256').update(readFileSync(material)).digest('hex'), file.sha256,
+              `Original archive notice bytes: ${file.path}`);
           }
         }
         if (binary === 'configra') {

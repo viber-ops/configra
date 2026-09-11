@@ -8,7 +8,7 @@ the [production acceptance contract](production-readiness.md).
 
 | Requirement | Required evidence | Current state |
 | --- | --- | --- |
-| Apache-2.0 distribution | License/notice in source, nested module, binaries and images; third-party license inventory | Project and reviewed Go runtime materials passed [local archive/image verification](distribution-verification-2026-09-12.md); application-module/UI/CA materials and SBOM remain |
+| Apache-2.0 distribution | License/notice in source, nested module, binaries and images; third-party license inventory | Project/runtime plus [Go-module/UI material and MySQL source delivery](third-party-delivery-2026-09-12.md) verified in local artifacts; system CA material, whole-artifact reconciliation and prior-release supplements remain |
 | Open-source maintenance | Contribution/security policies, working private disclosure, continuous checks and dependency updates | Policies added; private reporting verified enabled on service/SDK; continuous checks/dependency updates still need completion |
 | MySQL 8.0.22 support | Exact-version integration, migration and restore tests; unchanged capacity gate | Required by the user; not replaced with an 8.4-only baseline |
 | MySQL 8.4 comparison | Official compatibility/upgrade sources, separately identified runtime evidence | [Primary-source comparison](research/mysql-8.0.22-and-8.4-compatibility.md) completed; runtime evidence absent |
@@ -41,9 +41,10 @@ the [production acceptance contract](production-readiness.md).
 MPL-2.0 for the MySQL driver, file-specific MIT/Apache licensing for YAML and
 required upstream notices. The old SDK module archives lack LICENSE/NOTICE files;
 the new SDK rc.2 ZIP was verified to contain them and is pinned by Kubernetes.
-Project and reviewed Go runtime notice delivery now have actual archive/image
-evidence. Before distribution approval, complete the application-module/UI/CA
-inventory, source-access materials and SBOM, address prior-artifact supplements,
-and verify what recipients actually download. The [distribution inclusion manifest](research/distribution-license-requirements.md)
+Project/runtime, Go application-module and UI notice delivery now have actual
+archive/image evidence, along with MySQL covered source and scoped module/UI
+SBOMs. Before distribution approval, complete system CA material and whole-
+artifact SBOM reconciliation, address prior-artifact supplements, and verify
+what recipients actually download. The [distribution inclusion manifest](research/distribution-license-requirements.md)
 records the remaining upstream requirements. Do not describe a top-level Apache
 file or a successful scanner as completion of that audit.
