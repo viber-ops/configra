@@ -11,6 +11,10 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const project = process.env.CONFIGRA_DOCS_PROJECT ?? '';
+const mode = process.argv[2] ?? 'setup';
+if (!['setup', 'read'].includes(mode)) {
+  throw new Error('Usage: docs-smoke.mjs [setup | read .cache/docs-smoke-<run>]');
+}
 if (!/^configra-doc-check-[a-z0-9-]+$/.test(project)) {
   throw new Error(
     'Set CONFIGRA_DOCS_PROJECT to an explicitly disposable configra-doc-check-* Compose project.',
@@ -286,7 +290,7 @@ async function verifyReads(directory) {
 }
 
 try {
-  if (process.argv[2] === 'read') {
+  if (mode === 'read') {
     await verifyReads(process.argv[3]);
   } else {
     assert.equal((await request(`${management}/health/ready`)).status, 204);
