@@ -115,7 +115,7 @@ func (store *Store) commitConfig(ctx context.Context, request ConfigCommit, meta
 		if err := transaction.Commit(); err != nil {
 			return ConfigCommitResult{}, fmt.Errorf("commit Config validation Audit: %w", err)
 		}
-		return result, fmt.Errorf("%w: %v", ErrValidation, validationErr)
+		return result, withCommittedAudit(fmt.Errorf("%w: %v", ErrValidation, validationErr))
 	}
 
 	var environmentID []byte
@@ -399,7 +399,7 @@ func finishConfigFailure(
 	if err := transaction.Commit(); err != nil {
 		return ConfigCommitResult{}, fmt.Errorf("commit Config failure Audit: %w", err)
 	}
-	return result, resultErr
+	return result, withCommittedAudit(resultErr)
 }
 
 func finishConfigOperation(
@@ -494,6 +494,21 @@ func finishOperation(
 	if outcome == OutcomeSuccess {
 		payload.Revision = revision
 	}
+	if outcome == OutcomeValidationFailed {
+		// Rejected input is not a resource identity and may contain secret text.
+		if !validResourceKey(payload.EnvironmentKey) {
+			payload.EnvironmentKey = ""
+		}
+		if !validResourceKey(payload.NamespaceKey) {
+			payload.NamespaceKey = ""
+		}
+		if !validAuditResourceIdentity(payload.ResourceType, payload.ResourceKey) {
+			payload.ResourceKey = ""
+		}
+		if payload.ResourceType == "vault_item" && payload.NamespaceKey == "" {
+			payload.ResourceKey = ""
+		}
+	}
 	encodedPayload, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("encode Audit Event: %w", err)
@@ -551,9 +566,9 @@ func randomID() ([]byte, error) {
 func outcomeError(outcome Outcome) error {
 	switch outcome {
 	case OutcomeConflict:
-		return ErrConflict
+		return withCommittedAudit(ErrConflict)
 	case OutcomeValidationFailed:
-		return ErrValidation
+		return withCommittedAudit(ErrValidation)
 	default:
 		return nil
 	}

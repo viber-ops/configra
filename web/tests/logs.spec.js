@@ -37,11 +37,28 @@ test('viewer distinguishes observed Access records from durable Audit attempts',
   await page.getByRole('button', { name: 'Next' }).click();
   await expect(page.getByText('Page 2')).toBeVisible();
   expect(auditRequests.at(-1).get('offset')).toBe('25');
-  await page.getByPlaceholder('Operation, actor, action, outcome, or resource').fill('operation-1');
+  await page.getByPlaceholder('Operation or Request ID, actor, action, outcome, or resource').fill('operation-1');
   await page.getByRole('button', { name: 'Search', exact: true }).click();
   await expect(page.getByRole('row', { name: /operation-1.*payment/ })).toBeVisible();
   await expect(page.getByRole('row', { name: /operation-2/ })).toHaveCount(0);
   expect(auditRequests.at(-1).get('q')).toBe('operation-1');
   expect(auditRequests.at(-1).get('offset')).toBe('0');
   await expect(page.getByText('vault-secret-sentinel')).toHaveCount(0);
+});
+
+test('rejected requests show a searchable Request ID and reason without an OperationID', async ({ page }) => {
+  const requestID = '0123456789abcdef01234567';
+  await page.route('**/v1/me', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ subject: 'viewer-1', role: 'viewer' }) }));
+  await page.route('**/v1/audit*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [{
+    id: '1234567890abcdef1234567890abcdef', time: '2026-09-12T00:00:00Z',
+    operation_id: '', request_id: requestID, error_code: 'forbidden', actor_id: 'viewer-1',
+    action: 'environment.create', outcome: 'validation_failed', resource_type: 'environment', resource: '', revision: 0, delivery_attempt: 1,
+  }], has_more: false }) }));
+  await page.goto('/ui/#/audit');
+  await expect(page.getByRole('cell', { name: requestID, exact: true })).toBeVisible();
+  await expect(page.getByText('forbidden', { exact: true })).toBeVisible();
+  await page.getByRole('searchbox').fill(requestID);
+  const searched = page.waitForRequest(request => request.url().includes('/v1/audit?') && new URL(request.url()).searchParams.get('q') === requestID);
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
+  await searched;
 });

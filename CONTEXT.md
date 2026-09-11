@@ -169,5 +169,5 @@ An API Server request represented by a persisted Access Event. It is an operatio
 _Avoid_: Audited request, total request
 
 **Audit Event**:
-An immutable metadata record of an authenticated Mutation attempt, identifying the principal, resource, outcome, and resulting Revision when one exists, without recording values.
+An immutable metadata record of an authenticated Mutation attempt, identifying the principal, known resource, outcome, and resulting Revision when one exists, without recording values. A rejection before a logical Operation is accepted is correlated by its Request ID and does not reserve a caller's OperationID; replay of an accepted Operation retains its original Audit identity.
 _Avoid_: Access event

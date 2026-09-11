@@ -2,9 +2,7 @@ package management
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/x509"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -32,6 +30,7 @@ const maxManagementRequestBytes = 32 << 20
 
 type ConfigRepository interface {
 	AuthorityRepository
+	RecordRejectedMutation(context.Context, mysqlstore.RejectedMutation) error
 	ListEnvironments(context.Context, bool) ([]mysqlstore.Environment, error)
 	ApplyEnvironmentChange(context.Context, mysqlstore.EnvironmentChange) (mysqlstore.EnvironmentChangeResult, error)
 	ListConfigs(context.Context, bool) ([]mysqlstore.ConfigSummary, error)
@@ -147,7 +146,7 @@ func NewHandler(configs ConfigRepository, publisher machine.AccessPublisher, cli
 	csrf.SetDenyHandler(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
 		writeError(response, http.StatusForbidden, "csrf_rejected")
 	}))
-	return csrf.Handler(mux)
+	return server.auditRejections(mux, csrf.Handler(mux))
 }
 
 func (server *server) readMe(response http.ResponseWriter, request *http.Request) {
@@ -1191,6 +1190,9 @@ func writeReadError(response http.ResponseWriter, err error) {
 
 func writeMutationResult(response http.ResponseWriter, result any, err error) {
 	if err != nil {
+		if writer, ok := response.(*auditResponseWriter); ok && mysqlstore.AuditWasCommitted(err) {
+			writer.committed = true
+		}
 		switch {
 		case errors.Is(err, mysqlstore.ErrOperationReuse):
 			writeError(response, http.StatusConflict, "operation_id_reused")
@@ -1225,8 +1227,10 @@ func writeJSONResponse(response http.ResponseWriter, value any) bool {
 }
 
 func writeError(response http.ResponseWriter, status int, code string) {
-	requestID := make([]byte, 12)
-	_, _ = rand.Read(requestID)
+	requestID := newErrorRequestID()
+	if writer, ok := response.(*auditResponseWriter); ok {
+		requestID, writer.errorCode = writer.requestID, code
+	}
 	body := struct {
 		Error struct {
 			Code      string `json:"code"`
@@ -1234,7 +1238,7 @@ func writeError(response http.ResponseWriter, status int, code string) {
 		} `json:"error"`
 	}{}
 	body.Error.Code = code
-	body.Error.RequestID = hex.EncodeToString(requestID)
+	body.Error.RequestID = requestID
 	response.Header().Set("Cache-Control", "no-store")
 	response.Header().Set("Content-Type", "application/json")
 	response.WriteHeader(status)

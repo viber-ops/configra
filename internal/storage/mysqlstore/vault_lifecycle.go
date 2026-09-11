@@ -111,5 +111,5 @@ func finishVaultLifecycleFailure(
 	if err := transaction.Commit(); err != nil {
 		return VaultLifecycleResult{}, fmt.Errorf("commit Vault lifecycle failure Audit: %w", err)
 	}
-	return result, ErrValidation
+	return result, withCommittedAudit(ErrValidation)
 }

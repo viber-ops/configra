@@ -256,5 +256,5 @@ func finishCertificateFailure(
 	if err := transaction.Commit(); err != nil {
 		return ClientCertificateResult{}, fmt.Errorf("commit Client Certificate validation Audit: %w", err)
 	}
-	return result, fmt.Errorf("%w: %v", ErrValidation, cause)
+	return result, withCommittedAudit(fmt.Errorf("%w: %v", ErrValidation, cause))
 }

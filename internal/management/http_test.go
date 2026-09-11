@@ -1358,3 +1358,6 @@ func (writer *recordingConfigWriter) ReadResolvedConfig(_ context.Context, envir
 	writer.resolvedReads = append(writer.resolvedReads, [2]string{environment, config})
 	return writer.resolved, writer.resolvedErr
 }
+func (writer *recordingConfigWriter) RecordRejectedMutation(context.Context, mysqlstore.RejectedMutation) error {
+	return nil
+}

@@ -579,7 +579,7 @@ func finishNotificationDestinationFailure(
 	if err := transaction.Commit(); err != nil {
 		return NotificationDestinationResult{}, fmt.Errorf("commit Notification Destination validation Audit: %w", err)
 	}
-	return result, fmt.Errorf("%w: %v", ErrValidation, cause)
+	return result, withCommittedAudit(fmt.Errorf("%w: %v", ErrValidation, cause))
 }
 
 func finishNotificationDestinationLifecycleFailure(
@@ -597,5 +597,5 @@ func finishNotificationDestinationLifecycleFailure(
 	if err := transaction.Commit(); err != nil {
 		return NotificationDestinationLifecycleResult{}, fmt.Errorf("commit Notification Destination lifecycle Audit: %w", err)
 	}
-	return result, ErrValidation
+	return result, withCommittedAudit(ErrValidation)
 }

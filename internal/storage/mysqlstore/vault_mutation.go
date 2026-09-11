@@ -547,9 +547,9 @@ func finishVaultFailure(
 		return VaultCommitResult{}, fmt.Errorf("commit Vault failure Audit: %w", err)
 	}
 	if outcome == OutcomeConflict {
-		return result, ErrConflict
+		return result, withCommittedAudit(ErrConflict)
 	}
-	return result, fmt.Errorf("%w: %v", ErrValidation, cause)
+	return result, withCommittedAudit(fmt.Errorf("%w: %v", ErrValidation, cause))
 }
 
 func finishVaultOperation(

@@ -79,3 +79,9 @@ warning during credential setup. This run did not inspect the final outbox and
 ClickHouse delivery state, so it provides no evidence that every setup audit was
 delivered. Reproduce this with the same smoke sequence and inspect durable
 delivery/retry outcomes before closing the Audit requirement.
+
+Follow-up: the warning was reproduced and traced to a 64-character certificate
+fingerprint being rejected by a 63-character metadata limit. The original event
+was recovered and queried successfully after the fix; see
+[the audit verification record](audit-hardening-2026-09-12.md) for the executed
+tests and remaining acceptance scope.

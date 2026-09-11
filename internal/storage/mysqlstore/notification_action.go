@@ -195,5 +195,5 @@ func finishNotificationActionFailure(
 	if err := transaction.Commit(); err != nil {
 		return NotificationQueueResult{}, fmt.Errorf("commit Notification action validation Audit: %w", err)
 	}
-	return result, ErrValidation
+	return result, withCommittedAudit(ErrValidation)
 }

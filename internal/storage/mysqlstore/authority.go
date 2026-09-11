@@ -406,5 +406,5 @@ func finishPKIFailure(ctx context.Context, transaction *sql.Tx, operationID stri
 	if err := transaction.Commit(); err != nil {
 		return errors.New("commit certificate validation Audit")
 	}
-	return fmt.Errorf("%w: %v", ErrValidation, cause)
+	return withCommittedAudit(fmt.Errorf("%w: %v", ErrValidation, cause))
 }

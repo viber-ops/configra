@@ -356,7 +356,7 @@ func (store *Store) finishTokenCreateFailure(ctx context.Context, transaction *s
 	if err := transaction.Commit(); err != nil {
 		return TokenCreateResult{}, fmt.Errorf("commit API Token validation Audit: %w", err)
 	}
-	return result, fmt.Errorf("%w: %v", ErrValidation, cause)
+	return result, withCommittedAudit(fmt.Errorf("%w: %v", ErrValidation, cause))
 }
 
 func finishTokenEnvironmentFailure(ctx context.Context, transaction *sql.Tx, request TokenEnvironmentChange, cause error) (TokenEnvironmentResult, error) {
@@ -369,7 +369,7 @@ func finishTokenEnvironmentFailure(ctx context.Context, transaction *sql.Tx, req
 	if err := transaction.Commit(); err != nil {
 		return TokenEnvironmentResult{}, fmt.Errorf("commit API Token Environment validation Audit: %w", err)
 	}
-	return result, fmt.Errorf("%w: %v", ErrValidation, cause)
+	return result, withCommittedAudit(fmt.Errorf("%w: %v", ErrValidation, cause))
 }
 
 func finishTokenRevokeFailure(ctx context.Context, transaction *sql.Tx, request TokenRevoke, cause error) (TokenRevokeResult, error) {
@@ -382,7 +382,7 @@ func finishTokenRevokeFailure(ctx context.Context, transaction *sql.Tx, request 
 	if err := transaction.Commit(); err != nil {
 		return TokenRevokeResult{}, fmt.Errorf("commit API Token revocation validation Audit: %w", err)
 	}
-	return result, fmt.Errorf("%w: %v", ErrValidation, cause)
+	return result, withCommittedAudit(fmt.Errorf("%w: %v", ErrValidation, cause))
 }
 
 func tokenRequestDigest(request any) [sha256.Size]byte {

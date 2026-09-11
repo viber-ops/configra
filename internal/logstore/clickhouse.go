@@ -38,6 +38,8 @@ type AuditRecord struct {
 	Time         time.Time `json:"time"`
 	EventType    string    `json:"event_type"`
 	OperationID  string    `json:"operation_id"`
+	RequestID    string    `json:"request_id,omitempty"`
+	ErrorCode    string    `json:"error_code,omitempty"`
 	ActorType    string    `json:"actor_type"`
 	ActorID      string    `json:"actor_id"`
 	Action       string    `json:"action"`
@@ -135,7 +137,7 @@ func (store *Store) AppendAudits(ctx context.Context, events []AuditRecord) erro
 	batch, err := store.connection.PrepareBatch(ctx, `
 		INSERT INTO audit_events (
 			schema_version, event_id, event_time, event_type, operation_id,
-			actor_type, actor_id, action, outcome, environment,
+			actor_type, actor_id, action, outcome, environment, request_id, error_code,
 			namespace, resource_type, resource, revision, delivery_attempt
 		)
 	`)
@@ -146,7 +148,7 @@ func (store *Store) AppendAudits(ctx context.Context, events []AuditRecord) erro
 	for _, event := range events {
 		if err := batch.Append(
 			uint16(1), event.ID, event.Time.UTC(), event.EventType, event.OperationID,
-			event.ActorType, event.ActorID, event.Action, event.Outcome, event.Environment,
+			event.ActorType, event.ActorID, event.Action, event.Outcome, event.Environment, event.RequestID, event.ErrorCode,
 			event.Namespace, event.ResourceType, event.Resource, event.Revision, event.Attempt,
 		); err != nil {
 			return errors.New("encode Audit Event batch")
@@ -192,7 +194,7 @@ func (store *Store) ListAccess(ctx context.Context, limit int) ([]AccessRecord, 
 
 func (store *Store) ListAudits(ctx context.Context, query AuditQuery) (AuditPage, error) {
 	statement := `
-		SELECT event_id, event_time, event_type, operation_id,
+		SELECT event_id, event_time, event_type, operation_id, request_id, error_code,
 		       actor_type, actor_id, action, outcome, environment,
 		       namespace, resource_type, resource, revision, delivery_attempt
 		FROM audit_events
@@ -201,7 +203,7 @@ func (store *Store) ListAudits(ctx context.Context, query AuditQuery) (AuditPage
 	if query.Search != "" {
 		statement += `
 		WHERE positionCaseInsensitiveUTF8(
-			concat(event_id, ' ', operation_id, ' ', actor_id, ' ', action, ' ', outcome, ' ',
+			concat(event_id, ' ', operation_id, ' ', request_id, ' ', error_code, ' ', actor_id, ' ', action, ' ', outcome, ' ',
 			       environment, ' ', namespace, ' ', resource_type, ' ', resource), ?
 		) > 0
 		`
@@ -221,7 +223,7 @@ func (store *Store) ListAudits(ctx context.Context, query AuditQuery) (AuditPage
 	for rows.Next() {
 		var record AuditRecord
 		if err := rows.Scan(
-			&record.ID, &record.Time, &record.EventType, &record.OperationID,
+			&record.ID, &record.Time, &record.EventType, &record.OperationID, &record.RequestID, &record.ErrorCode,
 			&record.ActorType, &record.ActorID, &record.Action, &record.Outcome, &record.Environment,
 			&record.Namespace, &record.ResourceType, &record.Resource, &record.Revision, &record.Attempt,
 		); err != nil {
@@ -245,13 +247,15 @@ func (store *Store) Close() error {
 }
 
 func DecodeAuditOutbox(event mysqlstore.OutboxEvent) (AuditRecord, error) {
-	if event.Kind != mysqlstore.OutboxAudit || event.Type == "" || event.OperationID == "" ||
+	if event.Kind != mysqlstore.OutboxAudit || event.Type == "" ||
 		event.Attempts == 0 || len(event.Payload) == 0 || len(event.Payload) > 64<<10 || zeroOutboxID(event.ID) {
 		return AuditRecord{}, errors.New("invalid Audit Outbox metadata")
 	}
 	var payload struct {
 		Time           time.Time          `json:"time"`
 		OperationID    string             `json:"operation_id"`
+		RequestID      string             `json:"request_id,omitempty"`
+		ErrorCode      string             `json:"error_code,omitempty"`
 		Actor          mysqlstore.Actor   `json:"actor"`
 		Action         string             `json:"action"`
 		Outcome        mysqlstore.Outcome `json:"outcome"`
@@ -269,11 +273,34 @@ func DecodeAuditOutbox(event mysqlstore.OutboxEvent) (AuditRecord, error) {
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return AuditRecord{}, errors.New("invalid Audit Outbox payload")
 	}
+	if payload.Outcome == mysqlstore.OutcomeValidationFailed {
+		// Older writers retained invalid input in identity slots. It is omitted
+		// when recovering those records; value-bearing/unknown JSON fields still fail.
+		if !auditNamedKey(payload.EnvironmentKey) {
+			payload.EnvironmentKey = ""
+		}
+		if !auditNamedKey(payload.NamespaceKey) {
+			payload.NamespaceKey = ""
+		}
+		if !validAuditResourceKey(payload.ResourceType, payload.ResourceKey) {
+			payload.ResourceKey = ""
+		}
+		if payload.ResourceType == "vault_item" && payload.NamespaceKey == "" {
+			payload.ResourceKey = ""
+		}
+	}
+	rejection := event.Type == "management.request_rejected"
+	requestID, requestIDErr := hex.DecodeString(payload.RequestID)
+	if (rejection && (event.OperationID != "" || requestIDErr != nil || len(payload.RequestID) != 24 || len(requestID) != 12 || payload.ErrorCode == "" || payload.Outcome != mysqlstore.OutcomeValidationFailed)) ||
+		(!rejection && (event.OperationID == "" || payload.RequestID != "" || payload.ErrorCode != "")) {
+		return AuditRecord{}, errors.New("invalid Audit request identity")
+	}
 	if payload.Time.IsZero() || payload.OperationID != event.OperationID ||
 		(payload.Actor.Type != "user" && payload.Actor.Type != "system") || payload.Actor.ID == "" || len(payload.Actor.ID) > 255 ||
 		payload.Action == "" || len(payload.Action) > 128 || payload.ResourceType == "" || len(payload.ResourceType) > 64 ||
-		len(payload.NamespaceKey) > 63 || (payload.ResourceType == "vault_item" && payload.NamespaceKey == "") ||
-		payload.ResourceKey == "" || len(payload.ResourceKey) > 63 || !validAuditOutcome(payload.Outcome) {
+		len(payload.NamespaceKey) > 63 || (payload.ResourceType == "vault_item" && payload.NamespaceKey == "" && payload.Outcome != mysqlstore.OutcomeValidationFailed) ||
+		(!(payload.Outcome == mysqlstore.OutcomeValidationFailed && payload.ResourceKey == "") && !validAuditResourceKey(payload.ResourceType, payload.ResourceKey)) || !validAuditOutcome(payload.Outcome) ||
+		(payload.ErrorCode != "" && !validAuditErrorCode(payload.ErrorCode)) || (payload.Outcome != mysqlstore.OutcomeSuccess && payload.Revision != 0) {
 		return AuditRecord{}, errors.New("invalid Audit Outbox payload")
 	}
 	return AuditRecord{
@@ -281,6 +308,8 @@ func DecodeAuditOutbox(event mysqlstore.OutboxEvent) (AuditRecord, error) {
 		Time:         payload.Time.UTC(),
 		EventType:    event.Type,
 		OperationID:  payload.OperationID,
+		RequestID:    payload.RequestID,
+		ErrorCode:    payload.ErrorCode,
 		ActorType:    payload.Actor.Type,
 		ActorID:      payload.Actor.ID,
 		Action:       payload.Action,
@@ -292,6 +321,39 @@ func DecodeAuditOutbox(event mysqlstore.OutboxEvent) (AuditRecord, error) {
 		Revision:     payload.Revision,
 		Attempt:      event.Attempts,
 	}, nil
+}
+
+func validAuditResourceKey(resourceType, key string) bool {
+	if resourceType == "client_certificate" || resourceType == "certificate_authority" || resourceType == "api_token" {
+		length := map[string]int{"client_certificate": 64, "certificate_authority": 32, "api_token": 16}[resourceType]
+		decoded, err := hex.DecodeString(key)
+		return err == nil && len(key) == length && len(decoded)*2 == length
+	}
+	return auditNamedKey(key)
+}
+
+func auditNamedKey(value string) bool {
+	if value == "" || len(value) > 63 || value[0] < 'a' || value[0] > 'z' {
+		return false
+	}
+	for _, c := range value {
+		if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '_' && c != '-' {
+			return false
+		}
+	}
+	return true
+}
+
+func validAuditErrorCode(value string) bool {
+	if value == "" || len(value) > 64 {
+		return false
+	}
+	for _, c := range value {
+		if (c < 'a' || c > 'z') && c != '_' {
+			return false
+		}
+	}
+	return true
 }
 
 func validAuditOutcome(outcome mysqlstore.Outcome) bool {
@@ -341,4 +403,6 @@ var clickHouseSchemaV1 = []string{
 	) ENGINE = MergeTree
 	PARTITION BY toYYYYMM(event_time)
 	ORDER BY (event_time, event_id)`,
+	`ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS request_id String DEFAULT ''`,
+	`ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS error_code LowCardinality(String) DEFAULT ''`,
 }

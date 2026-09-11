@@ -50,6 +50,8 @@ func Run(
 	go func() { consumerDone <- consumer.Run(ctx, logs) }()
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
+	var recoveryCursor mysqlstore.OutboxID
+	recoveryDone := false
 	for {
 		select {
 		case err := <-consumerDone:
@@ -61,6 +63,22 @@ func Run(
 			}
 			return err
 		case <-ticker.C:
+			if !recoveryDone {
+				recoveryContext, cancel := context.WithTimeout(ctx, 5*time.Second)
+				page, err := outbox.RequeueAuditFailures(recoveryContext, recoveryCursor, 100, func(event mysqlstore.OutboxEvent) bool {
+					_, err := logstore.DecodeAuditOutbox(event)
+					return err == nil
+				})
+				cancel()
+				if err == nil {
+					recoveryCursor, recoveryDone = page.After, page.Done
+					if page.Requeued > 0 {
+						logger.Info("Recovered valid Audit Events", zap.Int("count", page.Requeued))
+					}
+				} else if ctx.Err() == nil {
+					logger.Warn("Audit recovery will retry")
+				}
+			}
 			deliveryContext, cancel := context.WithTimeout(ctx, 10*time.Second)
 			_, err := DeliverAuditOnce(deliveryContext, outbox, logs)
 			cancel()

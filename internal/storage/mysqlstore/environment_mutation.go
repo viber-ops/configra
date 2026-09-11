@@ -207,9 +207,9 @@ func finishEnvironmentFailure(
 		return EnvironmentChangeResult{}, fmt.Errorf("commit Environment failure Audit: %w", err)
 	}
 	if outcome == OutcomeConflict {
-		return result, ErrConflict
+		return result, withCommittedAudit(ErrConflict)
 	}
-	return result, fmt.Errorf("%w: %v", ErrValidation, cause)
+	return result, withCommittedAudit(fmt.Errorf("%w: %v", ErrValidation, cause))
 }
 
 func finishEnvironmentOperation(

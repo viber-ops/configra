@@ -26,7 +26,8 @@ const messages = {
     auditBody: 'Durable metadata for authenticated mutation attempts and their outcomes.',
     auditAtLeastOnce: 'At-least-once delivery may produce duplicate rows.',
     searchAudit: 'Search audit logs',
-    searchAuditPlaceholder: 'Operation, actor, action, outcome, or resource',
+    searchAuditPlaceholder: 'Operation or Request ID, actor, action, outcome, or resource',
+    auditIdentifier: 'Operation / Request ID',
     search: 'Search',
     noMatchingAudits: 'No audit records match this search.',
     auditPagination: 'Audit pagination',
@@ -351,7 +352,8 @@ const messages = {
     auditBody: '已认证 Mutation 尝试及结果的持久化元数据。',
     auditAtLeastOnce: '至少一次投递可能产生重复行。',
     searchAudit: '搜索审计日志',
-    searchAuditPlaceholder: '操作 ID、操作者、动作、结果或资源',
+    searchAuditPlaceholder: '操作或请求 ID、操作者、动作、结果或资源',
+    auditIdentifier: '操作 / 请求 ID',
     search: '搜索',
     noMatchingAudits: '没有符合当前搜索条件的审计记录。',
     auditPagination: '审计日志分页',
@@ -2218,7 +2220,7 @@ function AuditPage({ principal, t }) {
       {state.status === 'failed' && <div className="collection-state"><p>{t.loadFailed}</p></div>}
       {state.status === 'ready' && state.items.length === 0 && <div className="collection-state"><p>{search ? t.noMatchingAudits : t.noResources}</p></div>}
       {state.status === 'ready' && state.items.length > 0 && <>
-        <div className="table-frame log-table"><table><thead><tr><th>{t.time}</th><th>{t.operation}</th><th>{t.actor}</th><th>{t.action}</th><th>{t.outcome}</th><th>{t.resource}</th><th>{t.revision}</th><th>{t.delivery}</th></tr></thead><tbody>{state.items.map(record => <tr key={record.id}><td><time>{formatDate(record.time, t.locale)}</time></td><td><code title={record.operation_id}>{record.operation_id}</code></td><td><ActorIdentity actorID={record.actor_id} principal={principal} /></td><td><code>{record.action}</code></td><td><span className={record.outcome === 'success' ? 'status active' : 'status archived'}>{record.outcome}</span></td><td><span>{record.resource_type}</span><strong title={record.namespace ? `${record.namespace}/${record.resource}` : record.resource}>{record.namespace ? `${record.namespace}/${record.resource}` : record.resource}</strong></td><td>{record.revision ? `v${record.revision}` : '—'}</td><td>#{record.delivery_attempt}</td></tr>)}</tbody></table></div>
+        <div className="table-frame log-table"><table><thead><tr><th>{t.time}</th><th>{t.auditIdentifier}</th><th>{t.actor}</th><th>{t.action}</th><th>{t.outcome}</th><th>{t.resource}</th><th>{t.revision}</th><th>{t.delivery}</th></tr></thead><tbody>{state.items.map(record => <tr key={record.id}><td><time>{formatDate(record.time, t.locale)}</time></td><td><code title={record.operation_id || record.request_id}>{record.operation_id || record.request_id || '—'}</code></td><td><ActorIdentity actorID={record.actor_id} principal={principal} /></td><td><code>{record.action}</code></td><td><span className={record.outcome === 'success' ? 'status active' : 'status archived'}>{record.outcome}</span>{record.error_code && <code className="row-subkey">{record.error_code}</code>}</td><td><span>{record.resource_type}</span><strong title={record.namespace ? `${record.namespace}/${record.resource}` : record.resource}>{record.namespace ? `${record.namespace}/${record.resource}` : record.resource}</strong></td><td>{record.revision ? `v${record.revision}` : '—'}</td><td>#{record.delivery_attempt}</td></tr>)}</tbody></table></div>
         <nav className="config-pagination" aria-label={t.auditPagination}><span>{first}–{first + state.items.length - 1}</span><div><button type="button" disabled={page === 0} onClick={() => setPage(value => value - 1)}>{t.previous}</button><code>{t.pageNumber.replace('{page}', page + 1)}</code><button type="button" disabled={!state.hasMore} onClick={() => setPage(value => value + 1)}>{t.next}</button></div></nav>
       </>}
     </ResourcePage>

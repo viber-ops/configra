@@ -12,8 +12,10 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const project = process.env.CONFIGRA_DOCS_PROJECT ?? '';
 const mode = process.argv[2] ?? 'setup';
-if (!['setup', 'read'].includes(mode)) {
-  throw new Error('Usage: docs-smoke.mjs [setup | read .cache/docs-smoke-<run>]');
+if (!['setup', 'read', 'audit', 'rejections'].includes(mode)) {
+  throw new Error(
+    'Usage: docs-smoke.mjs [setup | audit | rejections | read .cache/docs-smoke-<run>]',
+  );
 }
 if (!/^configra-doc-check-[a-z0-9-]+$/.test(project)) {
   throw new Error(
@@ -57,7 +59,14 @@ const record = (name) => {
 
 function request(
   url,
-  { method = 'GET', body, jar = new Map(), headers = {}, tlsAgent = tls } = {},
+  {
+    method = 'GET',
+    body,
+    rawBody,
+    jar = new Map(),
+    headers = {},
+    tlsAgent = tls,
+  } = {},
 ) {
   const destination = new URL(url);
   if (!allowedOrigins.has(destination.origin))
@@ -65,7 +74,11 @@ function request(
       'Refusing an origin outside the local documentation fixture',
     );
   const data =
-    body === undefined ? undefined : Buffer.from(JSON.stringify(body));
+    rawBody !== undefined
+      ? Buffer.from(rawBody)
+      : body === undefined
+        ? undefined
+        : Buffer.from(JSON.stringify(body));
   const options = {
     method,
     agent: destination.protocol === 'https:' ? tlsAgent : undefined,
@@ -289,8 +302,186 @@ async function verifyReads(directory) {
   }
 }
 
+async function verifyCredentialAudit() {
+  const admin = await login('admin', 'configra-admin');
+  const certificates = await api(admin, '/v1/client-certificates');
+  const certificate = certificates.items.find(
+    (item) => item.display_name === 'Documentation client',
+  );
+  assert.ok(certificate, 'Run the setup smoke first');
+  const fingerprint = certificate.fingerprint_sha256;
+  assert.match(fingerprint, /^[0-9a-f]{64}$/);
+  const deadline = Date.now() + 10000;
+  while (true) {
+    const page = await api(admin, `/v1/audit?q=${fingerprint}&limit=100`);
+    const matching = page.items.filter(
+      (item) =>
+        item.action === 'client_certificate.issue' &&
+        item.resource === fingerprint,
+    );
+    if (matching.length > 0) {
+      assert.equal(
+        matching.length,
+        1,
+        'Issued client has one logical Audit Event',
+      );
+      assert.equal(matching[0].outcome, 'success');
+      record(
+        'issued client certificate is visible in Audit with its complete fingerprint',
+      );
+      return;
+    }
+    if (Date.now() >= deadline)
+      throw new Error(
+        'Issued client certificate never appeared in Management Audit',
+      );
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+}
+
+async function verifyRejectedAudit() {
+  const viewer = await login('viewer', 'configra-viewer');
+  const admin = await login('admin', 'configra-admin');
+  const marker = `never-log-${randomBytes(12).toString('hex')}`;
+  const cases = [
+    {
+      name: 'Viewer rejection',
+      jar: viewer,
+      status: 403,
+      code: 'forbidden',
+      body: { key: 'viewer_denied', display_name: marker },
+    },
+    {
+      name: 'malformed JSON',
+      rawBody: `{"display_name":"${marker}",`,
+      status: 400,
+      code: 'invalid_request',
+    },
+    {
+      name: 'unknown JSON field',
+      body: {
+        key: 'rejected',
+        display_name: 'Rejected',
+        private_value: marker,
+      },
+      status: 400,
+      code: 'invalid_request',
+    },
+    {
+      name: 'missing OperationID',
+      body: { key: 'missing_op', display_name: marker },
+      noOperation: true,
+      status: 422,
+      code: 'validation_failed',
+    },
+    {
+      name: 'invalid OperationID',
+      body: { key: 'invalid_op', display_name: marker },
+      operation: 'bad',
+      status: 422,
+      code: 'validation_failed',
+    },
+    {
+      name: 'cross-origin rejection',
+      body: { key: 'csrf_rejected', display_name: marker },
+      origin: 'https://untrusted.example',
+      status: 403,
+      code: 'csrf_rejected',
+    },
+    {
+      name: 'unsupported content type',
+      rawBody: marker,
+      contentType: 'text/plain',
+      status: 415,
+      code: 'unsupported_media_type',
+    },
+  ];
+  for (const scenario of cases) {
+    const denied = await request(`${management}/v1/environments`, {
+      method: 'POST',
+      jar: scenario.jar ?? admin,
+      body: scenario.body,
+      rawBody: scenario.rawBody,
+      headers: {
+        Origin: scenario.origin ?? management,
+        ...(scenario.noOperation
+          ? {}
+          : { 'Idempotency-Key': scenario.operation ?? randomUUID() }),
+        ...(scenario.contentType
+          ? { 'Content-Type': scenario.contentType }
+          : {}),
+      },
+    });
+    assert.equal(denied.status, scenario.status, scenario.name);
+    assert.equal(denied.json?.error?.code, scenario.code, scenario.name);
+    const id = denied.json?.error?.request_id;
+    assert.match(id, /^[0-9a-f]{24}$/);
+    const deadline = Date.now() + 10000;
+    while (true) {
+      const page = await api(admin, `/v1/audit?q=${id}&limit=100`);
+      assert.ok(
+        !JSON.stringify(page).includes(marker),
+        'Audit excludes request values',
+      );
+      const matching = page.items.filter((item) => item.request_id === id);
+      if (matching.length) {
+        assert.equal(matching.length, 1, scenario.name);
+        assert.equal(matching[0].error_code, scenario.code);
+        assert.equal(matching[0].outcome, 'validation_failed');
+        assert.equal(matching[0].operation_id, '');
+        record(
+          `${scenario.name} is searchable by its returned Request ID without values`,
+        );
+        break;
+      }
+      if (Date.now() >= deadline)
+        throw new Error(`${scenario.name} has no searchable Audit Event`);
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+  const operation = randomUUID();
+  const invalidCertificate = await request(
+    `${management}/v1/client-certificates/${marker}/revoke`,
+    {
+      method: 'POST',
+      jar: admin,
+      headers: { Origin: management, 'Idempotency-Key': operation },
+    },
+  );
+  assert.equal(invalidCertificate.status, 422);
+  const deadline = Date.now() + 10000;
+  while (true) {
+    const page = await api(admin, `/v1/audit?q=${operation}&limit=100`);
+    if (page.items.length) {
+      assert.equal(
+        page.items.length,
+        1,
+        'Domain validation is not audited twice',
+      );
+      assert.equal(page.items[0].outcome, 'validation_failed');
+      assert.equal(
+        page.items[0].resource,
+        '',
+        'Invalid credential identifiers are not logged',
+      );
+      assert.ok(!JSON.stringify(page).includes(marker));
+      record(
+        'invalid certificate input has one value-free logical Operation audit',
+      );
+      break;
+    }
+    if (Date.now() >= deadline)
+      throw new Error('Invalid certificate validation never appeared in Audit');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+}
+
 try {
-  if (mode === 'read') {
+  if (mode === 'rejections') {
+    await verifyRejectedAudit();
+  } else if (mode === 'audit') {
+    await verifyCredentialAudit();
+  } else if (mode === 'read') {
     await verifyReads(process.argv[3]);
   } else {
     assert.equal((await request(`${management}/health/ready`)).status, 204);

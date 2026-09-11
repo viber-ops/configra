@@ -1,0 +1,5 @@
+# Separate request rejections from logical Operations
+
+Authenticated requests rejected before a Mutation's audit transaction commits use a server-generated Request ID and a nullable Outbox OperationID, rather than inventing or consuming a caller's operation key. The HTTP layer persists only route-derived metadata before sending the rejection; errors marked as already audited preserve the logical Operation's single Audit identity, including replay. If the rejection receipt cannot be stored, the response is a value-free `503 audit_unavailable`, not a successful or unaudited mutation.
+
+ClickHouse adds optional request/error columns without changing existing rows. Upgrade Management replicas together for this audit-payload change: older workers reject the new fields, so do not leave mixed worker versions running. On startup the new worker scans bounded pages of prior decoder failures, requeues only payloads accepted by the current strict decoder, and preserves event IDs/attempt history; genuinely invalid payloads remain dead.

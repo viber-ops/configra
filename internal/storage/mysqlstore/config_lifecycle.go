@@ -113,7 +113,7 @@ func finishConfigLifecycleFailure(
 	if err := transaction.Commit(); err != nil {
 		return ConfigLifecycleResult{}, fmt.Errorf("commit Config lifecycle failure Audit: %w", err)
 	}
-	return result, ErrValidation
+	return result, withCommittedAudit(ErrValidation)
 }
 
 func finishConfigLifecycleOperation(

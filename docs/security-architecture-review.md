@@ -1,5 +1,10 @@
 # Security and architecture review — 2026-09-11
 
+Follow-up on 2026-09-12: authenticated request-rejection capture and an observed
+credential Audit decoding failure are addressed in
+[audit-hardening-2026-09-12.md](audit-hardening-2026-09-12.md). The findings below
+retain their original review date; the full production acceptance is still open.
+
 Scope: service and Go SDK, management interactions, certificate lifecycle, and the
 new Kubernetes adapters. Evidence combines source inspection, failing/passing
 regression tests, race-enabled tests, dependency analysis, and container/cluster
