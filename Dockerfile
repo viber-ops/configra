@@ -6,8 +6,11 @@ WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci --ignore-scripts
 COPY web/index.html ./
+COPY web/vite.config.mjs ./
+COPY web/scripts/license-plugin.mjs web/scripts/reviewed-licenses.json web/scripts/export-licenses.mjs ./scripts/
 COPY web/src ./src
 RUN npm run build
+RUN node scripts/export-licenses.mjs /src/web/dist /out/ui-licenses
 
 FROM --platform=$BUILDPLATFORM golang:1.26.7-bookworm@sha256:e8c859f5632dcfde7b32d2012b4351728f6437930887c2f6a91ea242459e5514 AS build
 
@@ -23,12 +26,17 @@ COPY cmd ./cmd
 COPY internal ./internal
 COPY web/embed.go ./web/embed.go
 COPY LICENSE NOTICE /out/licenses/
+COPY --from=web-build /out/ui-licenses /out/licenses/ui
 COPY scripts/go-notices ./scripts/go-notices
+COPY scripts/go-licenses ./scripts/go-licenses
+RUN --mount=type=cache,target=/root/.cache/go-build go build -trimpath -buildvcs=false -o /tmp/configra-go-licenses ./scripts/go-licenses
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH sh scripts/go-notices/collect.sh /out/licenses/go1.26.7
 COPY --from=web-build /src/web/dist ./web/dist
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
     GOOS=$TARGETOS GOARCH=$TARGETARCH go build -buildvcs=false -trimpath -ldflags="-s -w" -o /out/configra ./cmd/configra
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    /tmp/configra-go-licenses -binary /out/configra -out /out/licenses/configra-modules
 
 FROM scratch
 

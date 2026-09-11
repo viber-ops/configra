@@ -145,6 +145,7 @@ button { color: inherit; }
 .login-delivery footer code { border: 1px solid var(--blue-line); border-radius: 999px; padding: 3px 7px; background: var(--surface-muted); color: var(--muted); font: 650 10px ui-monospace, "SFMono-Regular", Consolas, monospace; }
 
 .login-top-actions { display: flex; align-items: center; gap: 8px; }
+.license-link { font-size: 13px; text-decoration: underline; text-underline-offset: 3px; }
 .language-button { display: inline-flex; align-items: center; gap: 8px; border: 0; padding: 8px 10px; background: transparent; cursor: pointer; font-weight: 650; }
 .language-button span { color: var(--blue); }
 .center-state { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 24px; }

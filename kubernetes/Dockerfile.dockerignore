@@ -11,4 +11,6 @@
 !scripts
 !scripts/go-notices
 !scripts/go-notices/**
+!scripts/go-licenses
+!scripts/go-licenses/**
 **/*_test.go

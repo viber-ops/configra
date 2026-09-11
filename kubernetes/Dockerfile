@@ -10,9 +10,13 @@ COPY kubernetes/internal ./internal
 COPY kubernetes/cmd ./cmd
 COPY kubernetes/LICENSE kubernetes/NOTICE /out/licenses/
 COPY scripts/go-notices ./scripts/go-notices
+COPY scripts/go-licenses ./scripts/go-licenses
+RUN --mount=type=cache,target=/root/.cache/go-build go build -trimpath -buildvcs=false -o /tmp/configra-go-licenses ./scripts/go-licenses
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH sh scripts/go-notices/collect.sh /out/licenses/go1.26.7
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     GOOS=$TARGETOS GOARCH=$TARGETARCH go build -buildvcs=false -trimpath -ldflags="-s -w" -o /out/configra-kubernetes ./cmd/configra-kubernetes
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    /tmp/configra-go-licenses -binary /out/configra-kubernetes -out /out/licenses/configra-kubernetes-modules
 FROM scratch
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /out/configra-kubernetes /configra-kubernetes

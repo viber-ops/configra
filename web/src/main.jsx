@@ -142,6 +142,7 @@ const messages = {
     noConfigurationGaps: 'Every active Config has an active Environment Revision.',
     noActiveConfigContext: 'No active Environment Revision',
     language: '中文',
+    licenses: 'Open-source licenses',
     useDarkTheme: 'Use dark theme',
     useLightTheme: 'Use light theme',
     loadFailed: 'Configra could not load this workspace.',
@@ -468,6 +469,7 @@ const messages = {
     noConfigurationGaps: '所有启用的 Config 都有可用的 Environment Revision。',
     noActiveConfigContext: '没有可用的 Environment Revision',
     language: 'EN',
+    licenses: '开源许可',
     useDarkTheme: '使用暗色主题',
     useLightTheme: '使用亮色主题',
     loadFailed: 'Configra 无法加载当前工作区。',
@@ -815,6 +817,14 @@ function Icon({ name }) {
   return <svg className="icon" viewBox="0 0 24 24" aria-hidden="true"><path d={iconPaths[name]} /></svg>;
 }
 
+function LicenseLink({ t, navigation = false }) {
+  const href = document.querySelector('link[rel="license"]')?.getAttribute('href');
+  if (!href?.startsWith('/ui/assets/')) return null;
+  return <a className={navigation ? undefined : 'license-link'} href={href} aria-label={t.licenses} title={t.licenses} target="_blank" rel="noopener noreferrer">
+    {navigation && <Icon name="configs" />}<span>{t.licenses}</span>
+  </a>;
+}
+
 function LanguageButton({ language, setLanguage, t }) {
   return (
     <button className="language-button" type="button" onClick={() => setLanguage(language === 'en' ? 'zh' : 'en')}>
@@ -852,6 +862,7 @@ function Login({ language, setLanguage, theme, setTheme, t }) {
           <div className="login-action">
             <a className="primary-action" href="/auth/login?return_to=/">{t.loginButton}<span aria-hidden="true">→</span></a>
             <small>{t.loginAuthHint}</small>
+            <small><LicenseLink t={t} /></small>
           </div>
         </div>
         <div className="login-resolution" aria-hidden="true">
@@ -946,6 +957,7 @@ function Shell({ principal, language, setLanguage, theme, setTheme, t }) {
           ].map(([label, keys]) => visibleNavigation.some(([key]) => keys.includes(key)) && <div className="sidebar-group" key={label}>
             <p>{label}</p>{visibleNavigation.filter(([key]) => keys.includes(key)).map(([key, icon]) => <a key={key} href={`#/${key}`} aria-label={t[key]} aria-current={route === key ? 'page' : undefined}><Icon name={icon} /><span>{t[key]}</span></a>)}
           </div>)}
+          <LicenseLink t={t} navigation />
         </nav>
         <div className="identity">
           <span className="avatar">{(principal.email || principal.subject).slice(0, 1).toUpperCase()}</span>

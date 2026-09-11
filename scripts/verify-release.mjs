@@ -53,6 +53,10 @@ for (const platform of ['darwin', 'linux']) {
     assert.match(read('licenses/go1.26.7/src/runtime/memmove_amd64.s.txt'), /Lucent/);
     assert.match(read('licenses/go1.26.7/src/crypto/internal/fips140/edwards25519/scalar.go.txt'), /fiat-crypto/);
     assert.match(read('licenses/go1.26.7/SOURCE.md'), /0ed24eac755105085b89fe9cabc2742b91a0ad7b94b59d3ad364918ebc8956ad/);
+    const uiNotices = read('licenses/ui/THIRD_PARTY_NOTICES.txt');
+    const uiBOMText = read('licenses/ui/sbom.cdx.json');
+    assert.match(uiNotices, /react@19\.2\.8/);
+    assert.equal(JSON.parse(uiBOMText).bomFormat, 'CycloneDX');
     const build = JSON.parse(read('BUILD.json'));
     assert.equal(build.version, version);
     assert.equal(build.platform, platform);
@@ -76,6 +80,34 @@ for (const platform of ['darwin', 'linux']) {
         assert.equal(settings.CGO_ENABLED, '0', `${name}/${binary}: static Go build`);
         assert.equal(info.GoVersion, build.go.split(/\s+/)[2], `${name}/${binary}: toolchain`);
         assert.ok(info.Deps.every((dep) => !dep.Replace), `${name}/${binary}: no local dependency replacements`);
+        const moduleBOM = JSON.parse(read(`licenses/${binary}-modules/sbom.cdx.json`));
+        assert.equal(moduleBOM.bomFormat, 'CycloneDX');
+        const executable = readFileSync(path);
+        assert.equal(moduleBOM.metadata.component.hashes[0].content, createHash('sha256').update(executable).digest('hex'));
+        if (binary === 'configra') {
+          assert.ok(executable.includes(Buffer.from(uiNotices)), 'UI notice delivery survives Go embedding');
+          assert.ok(executable.includes(Buffer.from(uiBOMText)), 'UI SBOM delivery survives Go embedding');
+        }
+        const recordedModules = moduleBOM.components.filter((entry) => entry.type === 'library');
+        assert.deepEqual(recordedModules.map((entry) => `${entry.name}@${entry.version}`).sort(),
+          info.Deps.map((entry) => `${entry.Path}@${entry.Version}`).sort(), 'Every linked module has artifact licensing evidence');
+        for (const dependency of recordedModules) {
+          const properties = Object.fromEntries(dependency.properties.map(({ name, value }) => [name, value]));
+          const files = JSON.parse(properties['configra:license-files']);
+          assert.ok(files.length > 0, `License files exist for ${dependency.name}`);
+          for (const file of files) {
+            assert.ok(entries.includes(`${name}/licenses/${binary}-modules/${file.path}`), `Missing ${file.path}`);
+          }
+        }
+        if (binary === 'configra') {
+          const source = read('licenses/configra-modules/SOURCE_ACCESS.md');
+          assert.match(source, /github\.com\/go-sql-driver\/mysql/);
+          assert.match(source, /MPL-2\.0/);
+          const zip = execFileSync('tar', ['-xOf', archive,
+            `${name}/licenses/configra-modules/sources/mysql-v1.10.0.zip`], { maxBuffer: 10 * 1024 * 1024 });
+          assert.equal(createHash('sha256').update(zip).digest('hex'),
+            'dc93f5770556406e82bf750a980d2316f882a19d883a3689eadb820708c2b651', 'Exact upstream MPL source is delivered');
+        }
         if (binary === 'configra-kubernetes') {
           const sdk = info.Deps.find((dep) => dep.Path === 'github.com/viber-ops/configra-go');
           assert.equal(sdk?.Version, expectedSDK, `${name}: SDK matches the published module pin`);
@@ -87,6 +119,6 @@ for (const platform of ['darwin', 'linux']) {
     }
     assert.ok(!entries.some((path) => /(?:^|\/)(?:\.git|\.cache|node_modules)(?:\/|$)/.test(path)));
     assert.ok(!entries.some((path) => /\.(?:key|p12|pfx)$/.test(path)), 'No private credential files');
-    console.log(`PASS ${name}: checksums, target/toolchain, pinned SDK, project and Go notice materials`);
+    console.log(`PASS ${name}: checksums, target/toolchain, SDK, runtime/module/UI materials and source/SBOM binding`);
   }
 }

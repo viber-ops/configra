@@ -45,8 +45,14 @@ const env = {
 };
 run(process.execPath, ['--test', join(root, 'scripts/go-notices/collect.test.mjs')], { env });
 run('npm', ['--prefix', 'web', 'ci', '--ignore-scripts']);
+run('npm', ['--prefix', 'web', 'run', 'test:licenses']);
 run('npm', ['--prefix', 'web', 'run', 'build']);
 mkdirSync(output, { recursive: true });
+const [hostOS, hostArch] = read('go', ['env', 'GOHOSTOS', 'GOHOSTARCH'], { env }).split(/\s+/);
+const licenseTool = join(output, '.build-tools', 'configra-go-licenses');
+run('go', ['build', '-trimpath', '-buildvcs=false', '-o', licenseTool, './scripts/go-licenses'], {
+  env: { ...env, GOOS: hostOS, GOARCH: hostArch },
+});
 const hashes = [];
 for (const platform of ['darwin', 'linux']) {
   for (const arch of ['amd64', 'arm64']) {
@@ -109,6 +115,12 @@ for (const platform of ['darwin', 'linux']) {
       cpSync(join(root, 'kubernetes', file), join(stage, 'kubernetes', file));
     }
     run('sh', [join(root, 'scripts/go-notices/collect.sh'), join(stage, 'licenses/go1.26.7')], { env: buildEnv });
+    run(process.execPath, [join(root, 'web/scripts/export-licenses.mjs'), join(root, 'web/dist'), join(stage, 'licenses/ui')]);
+    for (const binary of ['configra', 'configra-kubernetes']) {
+      run(licenseTool, ['-binary', join(stage, binary), '-out', join(stage, 'licenses', `${binary}-modules`)], {
+        cwd: binary === 'configra' ? root : join(root, 'kubernetes'), env,
+      });
+    }
     writeFileSync(
       join(stage, 'BUILD.json'),
       JSON.stringify(

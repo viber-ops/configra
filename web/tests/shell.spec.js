@@ -1,5 +1,24 @@
 import { expect, test } from '@playwright/test';
 
+test('readers can open original open-source license notices from either sign-in locale', async ({ page }) => {
+  const backgroundDownloads = [];
+  page.on('request', request => {
+    if (/third-party-notices-|ui-sbom-/.test(request.url())) backgroundDownloads.push(request.url());
+  });
+  await page.route('**/v1/me', route => route.fulfill({ status: 401, contentType: 'application/json', body: '{"error":{"code":"unauthenticated"}}' }));
+  await page.goto('/ui/');
+  const english = page.getByRole('link', { name: 'Open-source licenses' });
+  await expect(english).toBeVisible();
+  expect(backgroundDownloads).toEqual([]);
+  const href = await english.getAttribute('href');
+  const response = await page.request.get(href);
+  expect(response.status()).toBe(200);
+  expect(response.headers()['content-type']).toContain('text/plain');
+  expect(await response.text()).toContain('react@19.2.8');
+  await page.getByRole('button', { name: /中文/ }).click();
+  await expect(page.getByRole('link', { name: '开源许可' })).toHaveAttribute('href', href);
+});
+
 test('anonymous user can switch the complete sign-in experience between English and Chinese', async ({ page }) => {
   await page.route('**/v1/me', route => route.fulfill({ status: 401, contentType: 'application/json', body: '{"error":{"code":"unauthenticated"}}' }));
   await page.goto('/ui/');

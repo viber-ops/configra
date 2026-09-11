@@ -1,0 +1,909 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "type": "application",
+      "bom-ref": "configra-management-ui",
+      "name": "configra-management-ui",
+      "version": "1.1.0",
+      "description": "Browser bundle inputs only; excludes server Go code, container roots and unbundled build dependencies."
+    },
+    "properties": [
+      {
+        "name": "configra:bundle-files",
+        "value": "[{\"path\":\"assets/editors-kM5zi5Rb.js\",\"sha256\":\"c48a37213880b8f6eecd36654280d00b3ce54cc40830adc2c3af7fd1e09086d2\"},{\"path\":\"assets/index-CJWUaEy-.css\",\"sha256\":\"138dca85af782b1d62e22a38bc9203e14eb3b39006613112359d48c461b5f6b0\"},{\"path\":\"assets/index-yTXRIQSx.js\",\"sha256\":\"70a8ba7f62887dc53a4db4a24dde472a10646365287ac2386700cb6392c0f4f7\"}]"
+      },
+      {
+        "name": "configra:notices-sha256",
+        "value": "9dc7af0b03463eb5f6d7a8917ae4a2c5667ea30c6bf835b592dd94f2934c1e04"
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40codemirror/autocomplete@6.20.3",
+      "name": "@codemirror/autocomplete",
+      "version": "6.20.3",
+      "purl": "pkg:npm/%40codemirror/autocomplete@6.20.3",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@codemirror/autocomplete/-/autocomplete-6.20.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "configra:npm:integrity",
+          "value": "sha512-tlosUqb+3BbxCxZdu4tKeRghPFC+QM7q4X5YhKV2eCmPG+1r2F3f4AaSz5sCrFqUtX4Jh20VFTKecl16MgiV9g=="
+        },
+        {
+          "name": "configra:bundled-modules",
+          "value": "[\"dist/index.js\"]"
+        },
+        {
+          "name": "configra:license-files",
+          "value": "[{\"path\":\"LICENSE\",\"sha256\":\"05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07\"}]"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40codemirror/commands@6.11.0",
+      "name": "@codemirror/commands",
+      "version": "6.11.0",
+      "purl": "pkg:npm/%40codemirror/commands@6.11.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@codemirror/commands/-/commands-6.11.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "configra:npm:integrity",
+          "value": "sha512-/K4Rl5BN0OtTiPWmJCdqODu38XnDMsDxKY5rgrPnCkutPTJf2wVbkoixLfealF5Kwse/s8P8M5jAiURiwSwnFA=="
+        },
+        {
+          "name": "configra:bundled-modules",
+          "value": "[\"dist/index.js\"]"
+        },
+        {
+          "name": "configra:license-files",
+          "value": "[{\"path\":\"LICENSE\",\"sha256\":\"05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07\"}]"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40codemirror/lang-json@6.0.2",
+      "name": "@codemirror/lang-json",
+      "version": "6.0.2",
+      "purl": "pkg:npm/%40codemirror/lang-json@6.0.2",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@codemirror/lang-json/-/lang-json-6.0.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "configra:npm:integrity",
+          "value": "sha512-x2OtO+AvwEHrEwR0FyyPtfDUiloG3rnVTSZV1W8UteaLL8/MajQd8DpvUb2YVzC+/T18aSDv0H9mu+xw0EStoQ=="
+        },
+        {
+          "name": "configra:bundled-modules",
+          "value": "[\"dist/index.js\"]"
+        },
+        {
+          "name": "configra:license-files",
+          "value": "[{\"path\":\"LICENSE\",\"sha256\":\"05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07\"}]"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40codemirror/lang-yaml@6.1.3",
+      "name": "@codemirror/lang-yaml",
+      "version": "6.1.3",
+      "purl": "pkg:npm/%40codemirror/lang-yaml@6.1.3",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@codemirror/lang-yaml/-/lang-yaml-6.1.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "configra:npm:integrity",
+          "value": "sha512-AZ8DJBuXGVHybpBQhmZtgew5//4hv3tdkXnr3vDmOUMJRuB6vn/uuwtmTOTlqEaQFg3hQSVeA90NmvIQyUV6FQ=="
+        },
+        {
+          "name": "configra:bundled-modules",
+          "value": "[\"dist/index.js\"]"
+        },
+        {
+          "name": "configra:license-files",
+          "value": "[{\"path\":\"LICENSE\",\"sha256\":\"8ac9cfc9c82c397298c2139028d2474d8e0470f2092a97edddccf353bc5d4d36\"}]"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40codemirror/language@6.12.4",
+      "name": "@codemirror/language",
+      "version": "6.12.4",
+      "purl": "pkg:npm/%40codemirror/language@6.12.4",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@codemirror/language/-/language-6.12.4.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "configra:npm:integrity",
+          "value": "sha512-1q4PaT+o6PbgpkJt4Q8Fv5XJxTy4FUZ4MWETtyiDw3J0Pyr9E2vqcKL+k9wcvjNTIsauxvE7OfmWj3FRPHQ76A=="
+        },
+        {
+          "name": "configra:bundled-modules",
+          "value": "[\"dist/index.js\"]"
+        },
+        {
+          "name": "configra:license-files",
+          "value": "[{\"path\":\"LICENSE\",\"sha256\":\"05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07\"}]"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40codemirror/lint@6.9.7",
+      "name": "@codemirror/lint",
+      "version": "6.9.7",
+      "purl": "pkg:npm/%40codemirror/lint@6.9.7",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@codemirror/lint/-/lint-6.9.7.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "configra:npm:integrity",
+          "value": "sha512-28/+iWLYxKxsvGYhSYL7zaCZqLz5+FFFDq9tVsvGv9kv8RY4fFAchJ5WX9M3YrrRlTIsECjsXPqeNgnSmNP2dg=="
+        },
+        {
+          "name": "configra:bundled-modules",
+          "value": "[\"dist/index.js\"]"
+        },
+        {
+          "name": "configra:license-files",
+          "value": "[{\"path\":\"LICENSE\",\"sha256\":\"05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07\"}]"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40codemirror/merge@6.12.2",
+      "name": "@codemirror/merge",
+      "version": "6.12.2",
+      "purl": "pkg:npm/%40codemirror/merge@6.12.2",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@codemirror/merge/-/merge-6.12.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "configra:npm:integrity",
+          "value": "sha512-V8JvyAPjHbPupqP7BeMcsdsYCbyPij74jxIbaIJDORI+VZzW44zFmon8bF+oxGWvOKhcRmkiUMXd8MxHr3YA2w=="
+        },
+        {
+          "name": "configra:bundled-modules",
+          "value": "[\"dist/index.js\"]"
+        },
+        {
+          "name": "configra:license-files",
+          "value": "[{\"path\":\"LICENSE\",\"sha256\":\"7c6e3a020c1db4725560be9120b96eb2305ae7d37d155ee20e6023bb27ad144e\"}]"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40codemirror/search@6.7.1",
+      "name": "@codemirror/search",
+      "version": "6.7.1",
+      "purl": "pkg:npm/%40codemirror/search@6.7.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@codemirror/search/-/search-6.7.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "configra:npm:integrity",
+          "value": "sha512-uMe5UO6PamJtSHrXhhHOzSX3ReWtiJrva6GnPMwSOrZtiExb5X5eExhr2OUZQVvdxPsKpY3Ro2mFbQadpPWmHA=="
+        },
+        {
+          "name": "configra:bundled-modules",
+          "value": "[\"dist/index.js\"]"
+        },
+        {
+          "name": "configra:license-files",
+          "value": "[{\"path\":\"LICENSE\",\"sha256\":\"05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07\"}]"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40codemirror/state@6.7.1",
+      "name": "@codemirror/state",
+      "version": "6.7.1",
+      "purl": "pkg:npm/%40codemirror/state@6.7.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@codemirror/state/-/state-6.7.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "configra:npm:integrity",
+          "value": "sha512-9QzNDgE4EYDnAHfrTlR2lwiPciiOymLtwKK+8yHQzCc7GXhAP9xdEbEJFy2IWB1j9UGUl9BsgMmTo/ImA02T7A=="
+        },
+        {
+          "name": "configra:bundled-modules",
+          "value": "[\"dist/index.js\"]"
+        },
+        {
+          "name": "configra:license-files",
+          "value": "[{\"path\":\"LICENSE\",\"sha256\":\"05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07\"}]"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40codemirror/view@6.43.9",
+      "name": "@codemirror/view",
+      "version": "6.43.9",
+      "purl": "pkg:npm/%40codemirror/view@6.43.9",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@codemirror/view/-/view-6.43.9.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "configra:npm:integrity",
+          "value": "sha512-sTuUzTpPMFebRhg6dawChoKKgndIwfjmJgKVxBefPElcU2NwQ6AFroupk0SFqEerQyZOGRfDNnSN8Dw/lMAsXw=="
+        },
+        {
+          "name": "configra:bundled-modules",
+          "value": "[\"dist/index.js\"]"
+        },
+        {
+          "name": "configra:license-files",
+          "value": "[{\"path\":\"LICENSE\",\"sha256\":\"05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07\"}]"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40lezer/common@1.5.2",
+      "name": "@lezer/common",
+      "version": "1.5.2",
+      "purl": "pkg:npm/%40lezer/common@1.5.2",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@lezer/common/-/common-1.5.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "configra:npm:integrity",
+          "value": "sha512-sxQE460fPZyU3sdc8lafxiPwJHBzZRy/udNFynGQky1SePYBdhkBl1kOagA9uT3pxR8K09bOrmTUqA9wb/PjSQ=="
+        },
+        {
+          "name": "configra:bundled-modules",
+          "value": "[\"dist/index.js\"]"
+        },
+        {
+          "name": "configra:license-files",
+          "value": "[{\"path\":\"LICENSE\",\"sha256\":\"568902fb66eaf1f11750e966b33fd7b5d7c618e65af09f35ef843635bcf5f1ba\"}]"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40lezer/highlight@1.2.3",
+      "name": "@lezer/highlight",
+      "version": "1.2.3",
+      "purl": "pkg:npm/%40lezer/highlight@1.2.3",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@lezer/highlight/-/highlight-1.2.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "configra:npm:integrity",
+          "value": "sha512-qXdH7UqTvGfdVBINrgKhDsVTJTxactNNxLk7+UMwZhU13lMHaOBlJe9Vqp907ya56Y3+ed2tlqzys7jDkTmW0g=="
+        },
+        {
+          "name": "configra:bundled-modules",
+          "value": "[\"dist/index.js\"]"
+        },
+        {
+          "name": "configra:license-files",
+          "value": "[{\"path\":\"LICENSE\",\"sha256\":\"568902fb66eaf1f11750e966b33fd7b5d7c618e65af09f35ef843635bcf5f1ba\"}]"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40lezer/json@1.0.3",
+      "name": "@lezer/json",
+      "version": "1.0.3",
+      "purl": "pkg:npm/%40lezer/json@1.0.3",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@lezer/json/-/json-1.0.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "configra:npm:integrity",
+          "value": "sha512-BP9KzdF9Y35PDpv04r0VeSTKDeox5vVr3efE7eBbx3r4s3oNLfunchejZhjArmeieBH+nVOpgIiBJpEAv8ilqQ=="
+        },
+        {
+          "name": "configra:bundled-modules",
+          "value": "[\"dist/index.js\"]"
+        },
+        {
+          "name": "configra:license-files",
+          "value": "[{\"path\":\"LICENSE\",\"sha256\":\"7e744ae18ef84389d576469a5781172b0d50b7981111109f6da7cbc6b4188288\"}]"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40lezer/lr@1.4.10",
+      "name": "@lezer/lr",
+      "version": "1.4.10",
+      "purl": "pkg:npm/%40lezer/lr@1.4.10",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@lezer/lr/-/lr-1.4.10.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "configra:npm:integrity",
+          "value": "sha512-rnCpTIBafOx4mRp43xOxDJbFipJm/c0cia/V5TiGlhmMa+wsSdoGmUN3w5Bqrks/09Q/D4tNAmWaT8p6NRi77A=="
+        },
+        {
+          "name": "configra:bundled-modules",
+          "value": "[\"dist/index.js\"]"
+        },
+        {
+          "name": "configra:license-files",
+          "value": "[{\"path\":\"LICENSE\",\"sha256\":\"568902fb66eaf1f11750e966b33fd7b5d7c618e65af09f35ef843635bcf5f1ba\"}]"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40lezer/yaml@1.0.4",
+      "name": "@lezer/yaml",
+      "version": "1.0.4",
+      "purl": "pkg:npm/%40lezer/yaml@1.0.4",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@lezer/yaml/-/yaml-1.0.4.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "configra:npm:integrity",
+          "value": "sha512-2lrrHqxalACEbxIbsjhqGpSW8kWpUKuY6RHgnSAFZa6qK62wvnPxA8hGOwOoDbwHcOFs5M4o27mjGu+P7TvBmw=="
+        },
+        {
+          "name": "configra:bundled-modules",
+          "value": "[\"dist/index.js\"]"
+        },
+        {
+          "name": "configra:license-files",
+          "value": "[{\"path\":\"LICENSE\",\"sha256\":\"8cb910abd2a5463466b7c31958b39d6787ebf9e9f299598266b814bc90dd076b\"}]"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40marijn/find-cluster-break@1.0.4",
+      "name": "@marijn/find-cluster-break",
+      "version": "1.0.4",
+      "purl": "pkg:npm/%40marijn/find-cluster-break@1.0.4",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@marijn/find-cluster-break/-/find-cluster-break-1.0.4.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "configra:npm:integrity",
+          "value": "sha512-Wy0V7+SGUjnF9/TkiM1hKVDPj7jKXduPNboMVtHTA8dySMURWqfg/JZ9E2Sq8JgSJmkl7k7Qe9FLeMSrSraWmQ=="
+        },
+        {
+          "name": "configra:bundled-modules",
+          "value": "[\"src/index.js\"]"
+        },
+        {
+          "name": "configra:license-files",
+          "value": "[{\"path\":\"LICENSE\",\"sha256\":\"9360b00fdd091f05c783b568bdd46c679c41b72415599252de98949462ea1acb\"}]"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/codemirror@6.0.2",
+      "name": "codemirror",
+      "version": "6.0.2",
+      "purl": "pkg:npm/codemirror@6.0.2",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/codemirror/-/codemirror-6.0.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "configra:npm:integrity",
+          "value": "sha512-VhydHotNW5w1UGK0Qj96BwSk/Zqbp9WbnyK2W/eVMv4QyF41INRGpjUhFJY7/uDNuudSc33a/PKr4iDqRduvHw=="
+        },
+        {
+          "name": "configra:bundled-modules",
+          "value": "[\"dist/index.js\"]"
+        },
+        {
+          "name": "configra:license-files",
+          "value": "[{\"path\":\"LICENSE\",\"sha256\":\"05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07\"}]"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/crelt@1.0.7",
+      "name": "crelt",
+      "version": "1.0.7",
+      "purl": "pkg:npm/crelt@1.0.7",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/crelt/-/crelt-1.0.7.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "configra:npm:integrity",
+          "value": "sha512-aK6BbWfhf4U/wCcLHKPJl/xa6VkVstRaPywWtMKGwuOLc/wZTyQYuoxgvZnNsBvv7Kg3YTBQYYBCggcviQczuA=="
+        },
+        {
+          "name": "configra:bundled-modules",
+          "value": "[\"index.js\"]"
+        },
+        {
+          "name": "configra:license-files",
+          "value": "[{\"path\":\"LICENSE\",\"sha256\":\"23852ebf6aef7fadffc92514b3c5df163a8651f2c3ed0dbb494cb49d93bd5de5\"}]"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/react-dom@19.2.8",
+      "name": "react-dom",
+      "version": "19.2.8",
+      "purl": "pkg:npm/react-dom@19.2.8",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/react-dom/-/react-dom-19.2.8.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "configra:npm:integrity",
+          "value": "sha512-rVprimfGBG3DR+Tq0IQG2DT5PxKth1WIGDmj5yPmlzr4YBe7uyE+Du4oVqTDXZSHGGGXRtTJEGSSePyQCMBglQ=="
+        },
+        {
+          "name": "configra:bundled-modules",
+          "value": "[\"cjs/react-dom-client.production.js\",\"cjs/react-dom.production.js\",\"client.js\",\"index.js\"]"
+        },
+        {
+          "name": "configra:license-files",
+          "value": "[{\"path\":\"LICENSE\",\"sha256\":\"da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93\"}]"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/react@19.2.8",
+      "name": "react",
+      "version": "19.2.8",
+      "purl": "pkg:npm/react@19.2.8",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/react/-/react-19.2.8.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "configra:npm:integrity",
+          "value": "sha512-PWaYA1L/q9u2u7xYQi+Y3L3Yfnie7XyLeaJICV1MGD6LprsBxcAqGjYyr0eY3p+QdsA+x/Irkt4Qif8D63+Sbw=="
+        },
+        {
+          "name": "configra:bundled-modules",
+          "value": "[\"cjs/react-jsx-runtime.production.js\",\"cjs/react.production.js\",\"index.js\",\"jsx-runtime.js\"]"
+        },
+        {
+          "name": "configra:license-files",
+          "value": "[{\"path\":\"LICENSE\",\"sha256\":\"da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93\"}]"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/rolldown@1.2.6",
+      "name": "rolldown",
+      "version": "1.2.6",
+      "purl": "pkg:npm/rolldown@1.2.6",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/rolldown/-/rolldown-1.2.6.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "configra:npm:integrity",
+          "value": "sha512-vMM4q3aixf46GiF1Kok8jDPFsEpXgFWGjUHXNkNHNm+Y2adXAG2dbX91jkti3i0ZRsOlcmbuzAz1poObSHCmUA=="
+        },
+        {
+          "name": "configra:bundled-modules",
+          "value": "[\"virtual:rolldown/runtime.js\"]"
+        },
+        {
+          "name": "configra:license-files",
+          "value": "[{\"path\":\"LICENSE\",\"sha256\":\"23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734\"},{\"path\":\"THIRD-PARTY-LICENSE\",\"sha256\":\"a877291d800ed43692f3f9ae09d8e01cc6f7293ad39d43896059c188ffbb8b7c\"}]"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/scheduler@0.27.0",
+      "name": "scheduler",
+      "version": "0.27.0",
+      "purl": "pkg:npm/scheduler@0.27.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/scheduler/-/scheduler-0.27.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "configra:npm:integrity",
+          "value": "sha512-eNv+WrVbKu1f3vbYJT/xtiF5syA5HPIMtf9IgY/nKg0sWqzAUEvqY/xm7OcZc/qafLx/iO9FgOmeSAp4v5ti/Q=="
+        },
+        {
+          "name": "configra:bundled-modules",
+          "value": "[\"cjs/scheduler.production.js\",\"index.js\"]"
+        },
+        {
+          "name": "configra:license-files",
+          "value": "[{\"path\":\"LICENSE\",\"sha256\":\"da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93\"}]"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/style-mod@4.1.3",
+      "name": "style-mod",
+      "version": "4.1.3",
+      "purl": "pkg:npm/style-mod@4.1.3",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/style-mod/-/style-mod-4.1.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "configra:npm:integrity",
+          "value": "sha512-i/n8VsZydrugj3Iuzll8+x/00GH2vnYsk1eomD8QiRrSAeW6ItbCQDtfXCeJHd0iwiNagqjQkvpvREEPtW3IoQ=="
+        },
+        {
+          "name": "configra:bundled-modules",
+          "value": "[\"src/style-mod.js\"]"
+        },
+        {
+          "name": "configra:license-files",
+          "value": "[{\"path\":\"LICENSE\",\"sha256\":\"cb4474e26547397169061d3586c00022cda5330a1b64fa13e872319f3b63aff1\"}]"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/vite@8.2.2",
+      "name": "vite",
+      "version": "8.2.2",
+      "purl": "pkg:npm/vite@8.2.2",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/vite/-/vite-8.2.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "configra:npm:integrity",
+          "value": "sha512-cFKLV/PRgAUlIRm5WjMjJ86jrftzpqcgH+Us+DS8mI3CDNiH30Whrz8uHL3+MOLPAgqbMBAqWdAHAphOAM+z/Q=="
+        },
+        {
+          "name": "configra:bundled-modules",
+          "value": "[\"virtual:vite/modulepreload-polyfill.js\",\"virtual:vite/preload-helper.js\"]"
+        },
+        {
+          "name": "configra:license-files",
+          "value": "[{\"path\":\"LICENSE.md\",\"sha256\":\"387dd7baa307083401a27c58c362c30832f5ba1dba84f10cc22c33401523f45c\"}]"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/w3c-keyname@2.2.8",
+      "name": "w3c-keyname",
+      "version": "2.2.8",
+      "purl": "pkg:npm/w3c-keyname@2.2.8",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/w3c-keyname/-/w3c-keyname-2.2.8.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "configra:npm:integrity",
+          "value": "sha512-dpojBhNsCNN7T82Tm7k26A6G9ML3NkhDsnw9n/eoxSRlVBB4CEtIQ/KTCLI2Fwf3ataSXRhYFkQi3SlnFwPvPQ=="
+        },
+        {
+          "name": "configra:bundled-modules",
+          "value": "[\"index.js\"]"
+        },
+        {
+          "name": "configra:license-files",
+          "value": "[{\"path\":\"LICENSE\",\"sha256\":\"869c30f368eb08735e779027b9f4bc9fea2f39624351856aebe42741f0bc0884\"}]"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "configra-management-ui",
+      "dependsOn": [
+        "pkg:npm/%40codemirror/autocomplete@6.20.3",
+        "pkg:npm/%40codemirror/commands@6.11.0",
+        "pkg:npm/%40codemirror/lang-json@6.0.2",
+        "pkg:npm/%40codemirror/lang-yaml@6.1.3",
+        "pkg:npm/%40codemirror/language@6.12.4",
+        "pkg:npm/%40codemirror/lint@6.9.7",
+        "pkg:npm/%40codemirror/merge@6.12.2",
+        "pkg:npm/%40codemirror/search@6.7.1",
+        "pkg:npm/%40codemirror/state@6.7.1",
+        "pkg:npm/%40codemirror/view@6.43.9",
+        "pkg:npm/%40lezer/common@1.5.2",
+        "pkg:npm/%40lezer/highlight@1.2.3",
+        "pkg:npm/%40lezer/json@1.0.3",
+        "pkg:npm/%40lezer/lr@1.4.10",
+        "pkg:npm/%40lezer/yaml@1.0.4",
+        "pkg:npm/%40marijn/find-cluster-break@1.0.4",
+        "pkg:npm/codemirror@6.0.2",
+        "pkg:npm/crelt@1.0.7",
+        "pkg:npm/react-dom@19.2.8",
+        "pkg:npm/react@19.2.8",
+        "pkg:npm/rolldown@1.2.6",
+        "pkg:npm/scheduler@0.27.0",
+        "pkg:npm/style-mod@4.1.3",
+        "pkg:npm/vite@8.2.2",
+        "pkg:npm/w3c-keyname@2.2.8"
+      ]
+    }
+  ]
+}

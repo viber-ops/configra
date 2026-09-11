@@ -37,6 +37,7 @@ web-build:
 	npm --prefix web run build
 
 web-test: web-build
+	npm --prefix web run test:licenses
 	npm --prefix web test
 
 .PHONY: tla

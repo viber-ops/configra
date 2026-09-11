@@ -7,7 +7,8 @@
     "build": "vite build --base=/ui/",
     "dev": "vite --host 127.0.0.1",
     "preview": "vite preview --base=/ui/",
-    "test": "playwright test"
+    "test": "playwright test",
+    "test:licenses": "node --test scripts/licenses.test.mjs"
   },
   "dependencies": {
     "@codemirror/lang-json": "6.0.2",
