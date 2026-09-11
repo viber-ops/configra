@@ -91,8 +91,7 @@ local-runtime:
 			-extfile /dev/stdin -extensions client -out .cache/local-dev/client-revoked.crt)
 	@chmod 600 .cache/local-dev/master-key .cache/local-dev/server.key .cache/local-dev/client-ca.key .cache/local-dev/client-*.key
 
-local-run: local-dependencies-up local-runtime
-	npm --prefix web run build
+local-run: local-dependencies-up local-runtime web-build
 	CONFIGRA_MYSQL_DSN='$(LOCAL_MYSQL_DSN)' \
 	CONFIGRA_CLICKHOUSE_DSN='$(LOCAL_CLICKHOUSE_DSN)' \
 	CONFIGRA_OIDC_CLIENT_SECRET='$(LOCAL_OIDC_SECRET)' \

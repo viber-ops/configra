@@ -36,6 +36,9 @@ import (
 	"github.com/viber-ops/configra/kubernetes/internal/source"
 )
 
+var version = "dev"
+var commit = "unknown"
+
 func main() {
 	if err := run(); err != nil {
 		log.Print(err)
@@ -44,6 +47,14 @@ func main() {
 }
 
 func run() error {
+	if len(os.Args) == 2 && (os.Args[1] == "--version" || os.Args[1] == "version") {
+		fmt.Printf("configra-kubernetes %s (%s)\n", version, commit)
+		return nil
+	}
+	if len(os.Args) == 2 && (os.Args[1] == "--help" || os.Args[1] == "-h") {
+		fmt.Println("usage: configra-kubernetes provider|sync [flags]\n       configra-kubernetes --version")
+		return nil
+	}
 	if len(os.Args) < 2 {
 		return errors.New("usage: configra-kubernetes provider|sync [flags]")
 	}
