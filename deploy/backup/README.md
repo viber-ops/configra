@@ -26,7 +26,12 @@ user=configra_backup
 password=replace-through-secret-volume
 ```
 
+From the repository root, with `/backup` already mounted and writable and the
+matching MySQL 8.0.22 tools available:
+
 ```sh
+cd deploy/backup
+mkdir -m 700 /backup/new-point
 sh mysql-backup.sh /run/secrets/mysql.cnf configra /backup/new-point
 sh mysql-restore.sh /run/secrets/mysql.cnf /backup/new-point configra_restore_20260827
 ```
@@ -36,6 +41,11 @@ SHA-256 manifest atomically, refuses overwrite, and checks that both client and
 server are exactly 8.0.22. Do not run schema rollout concurrently with the dump.
 The restore tool verifies the manifest before creating a new database and never
 overwrites an existing database.
+
+The output directory must already exist and contain no previous backup files.
+Use a new directory and restore database name for each drill; do not remove a
+recovery point merely to make a repeated command succeed. These exact-version
+scripts are not a cross-version MySQL upgrade mechanism.
 
 After restore, start an isolated Configra process against the new database with
 the separately restored Master Key. Promote the new DSN only after `/health/ready`

@@ -11,6 +11,8 @@ TEST_DOCKER_NETWORK := configra-test_default
 LOCAL_MYSQL_DSN := configra:configra-test@tcp(127.0.0.1:33079)/configra_local?parseTime=true&charset=utf8mb4&collation=utf8mb4_0900_ai_ci
 LOCAL_CLICKHOUSE_DSN := clickhouse://configra:configra-test@127.0.0.1:9009/configra_local?dial_timeout=5s&compress=lz4
 LOCAL_OIDC_SECRET := configra-local-client-secret-2026
+LOCAL_PROJECT ?= configra-local
+LOCAL_COMPOSE := docker compose --project-name '$(LOCAL_PROJECT)' -f deploy/compose.test.yaml -f deploy/compose.local.yaml
 IMAGE ?= configra:test
 VEGETA_VERSION := v12.13.0
 VEGETA := .cache/vegeta-12.13.0/vegeta
@@ -54,14 +56,15 @@ dependencies-test-up:
 	docker compose -f deploy/compose.test.yaml up -d --wait mysql nats clickhouse
 
 .PHONY: local-dependencies-up local-runtime local-run local-seed local-screenshots local-stop
-local-dependencies-up: dependencies-test-up
-	docker compose -f deploy/compose.test.yaml exec -T mysql \
+local-dependencies-up:
+	$(LOCAL_COMPOSE) up -d --wait mysql nats clickhouse
+	$(LOCAL_COMPOSE) exec -T mysql \
 		mysql -uroot -pconfigra-test-root -e \
 		"CREATE DATABASE IF NOT EXISTS configra_local CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci; CREATE DATABASE IF NOT EXISTS casdoor CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci; GRANT ALL PRIVILEGES ON configra_local.* TO 'configra'@'%'; GRANT ALL PRIVILEGES ON casdoor.* TO 'configra'@'%';"
-	docker compose -f deploy/compose.test.yaml exec -T clickhouse \
+	$(LOCAL_COMPOSE) exec -T clickhouse \
 		clickhouse-client --user configra --password configra-test \
 		--query 'CREATE DATABASE IF NOT EXISTS configra_local'
-	docker compose -f deploy/compose.test.yaml up -d --wait casdoor
+	$(LOCAL_COMPOSE) up -d --wait casdoor
 
 local-runtime:
 	@mkdir -p .cache/local-dev
@@ -104,7 +107,7 @@ local-screenshots:
 	node web/scripts/local-ui.mjs screenshots
 
 local-stop:
-	docker compose -f deploy/compose.test.yaml stop casdoor
+	$(LOCAL_COMPOSE) stop casdoor
 
 mysql-test-down:
 	docker compose -f deploy/compose.test.yaml down -v

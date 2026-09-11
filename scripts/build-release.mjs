@@ -2,7 +2,13 @@
 // The same cross-build path is used locally and in GitHub Actions.
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -11,15 +17,32 @@ const version = process.argv[2];
 if (!/^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version ?? '')) {
   throw new Error('Usage: node scripts/build-release.mjs v0.1.0-rc.1');
 }
-const run = (command, args, options = {}) => execFileSync(command, args, { cwd: root, stdio: 'inherit', ...options });
-const read = (command, args, options = {}) => execFileSync(command, args, { cwd: root, encoding: 'utf8', ...options }).trim();
+const run = (command, args, options = {}) =>
+  execFileSync(command, args, { cwd: root, stdio: 'inherit', ...options });
+const read = (command, args, options = {}) =>
+  execFileSync(command, args, {
+    cwd: root,
+    encoding: 'utf8',
+    ...options,
+  }).trim();
 const commit = read('git', ['rev-parse', 'HEAD']);
 if (read('git', ['status', '--porcelain', '--untracked-files=normal'])) {
-  throw new Error('Release builds require a clean worktree; commit or isolate your work first.');
+  throw new Error(
+    'Release builds require a clean worktree; commit or isolate your work first.',
+  );
 }
 const output = join(root, 'dist', version);
-if (existsSync(output)) throw new Error(`Refusing to overwrite ${output}; choose a new version or move that artifact directory.`);
-const env = { ...process.env, GOTOOLCHAIN: process.env.GOTOOLCHAIN || 'go1.26.7', GOWORK: 'off', GOFLAGS: '-mod=readonly', CGO_ENABLED: '0' };
+if (existsSync(output))
+  throw new Error(
+    `Refusing to overwrite ${output}; choose a new version or move that artifact directory.`,
+  );
+const env = {
+  ...process.env,
+  GOTOOLCHAIN: process.env.GOTOOLCHAIN || 'go1.26.7',
+  GOWORK: 'off',
+  GOFLAGS: '-mod=readonly',
+  CGO_ENABLED: '0',
+};
 run('npm', ['--prefix', 'web', 'ci', '--ignore-scripts']);
 run('npm', ['--prefix', 'web', 'run', 'build']);
 mkdirSync(output, { recursive: true });
@@ -30,18 +53,82 @@ for (const platform of ['darwin', 'linux']) {
     const stage = join(output, name);
     mkdirSync(stage);
     const buildEnv = { ...env, GOOS: platform, GOARCH: arch };
-    const flags = ['-trimpath', '-buildvcs=false', '-ldflags', `-s -w -X main.version=${version} -X main.commit=${commit}`];
-    run('go', ['build', ...flags, '-o', join(stage, 'configra'), './cmd/configra'], { env: buildEnv });
-    run('go', ['-C', 'kubernetes', 'build', ...flags, '-o', join(stage, 'configra-kubernetes'), './cmd/configra-kubernetes'], { env: buildEnv });
-    cpSync(join(root, 'deploy'), join(stage, 'deploy'), { recursive: true, filter: path => !path.endsWith('management.local.yaml') && !path.endsWith('compose.test.yaml') && !path.includes('/casdoor/') });
-    cpSync(join(root, 'kubernetes', 'deploy'), join(stage, 'kubernetes', 'deploy'), { recursive: true });
-    cpSync(join(root, 'kubernetes', 'examples'), join(stage, 'kubernetes', 'examples'), { recursive: true });
-    cpSync(join(root, 'kubernetes', 'README.md'), join(stage, 'kubernetes', 'README.md'));
-    cpSync(join(root, 'docs', 'release-installation.md'), join(stage, 'README.md'));
-    writeFileSync(join(stage, 'BUILD.json'), JSON.stringify({ version, commit, platform, arch, go: read('go', ['version'], { env }), cgo: false, signed: false, notarized: false }, null, 2) + '\n');
+    const flags = [
+      '-trimpath',
+      '-buildvcs=false',
+      '-ldflags',
+      `-s -w -X main.version=${version} -X main.commit=${commit}`,
+    ];
+    run(
+      'go',
+      ['build', ...flags, '-o', join(stage, 'configra'), './cmd/configra'],
+      { env: buildEnv },
+    );
+    run(
+      'go',
+      [
+        '-C',
+        'kubernetes',
+        'build',
+        ...flags,
+        '-o',
+        join(stage, 'configra-kubernetes'),
+        './cmd/configra-kubernetes',
+      ],
+      { env: buildEnv },
+    );
+    cpSync(join(root, 'deploy'), join(stage, 'deploy'), {
+      recursive: true,
+      filter: (path) =>
+        !path.endsWith('management.local.yaml') &&
+        !path.endsWith('compose.test.yaml') &&
+        !path.endsWith('compose.local.yaml') &&
+        !path.includes('/casdoor/'),
+    });
+    cpSync(
+      join(root, 'kubernetes', 'deploy'),
+      join(stage, 'kubernetes', 'deploy'),
+      { recursive: true },
+    );
+    cpSync(
+      join(root, 'kubernetes', 'examples'),
+      join(stage, 'kubernetes', 'examples'),
+      { recursive: true },
+    );
+    cpSync(
+      join(root, 'kubernetes', 'README.md'),
+      join(stage, 'kubernetes', 'README.md'),
+    );
+    cpSync(
+      join(root, 'docs', 'release-installation.md'),
+      join(stage, 'README.md'),
+    );
+    writeFileSync(
+      join(stage, 'BUILD.json'),
+      JSON.stringify(
+        {
+          version,
+          commit,
+          platform,
+          arch,
+          go: read('go', ['version'], { env }),
+          cgo: false,
+          signed: false,
+          notarized: false,
+        },
+        null,
+        2,
+      ) + '\n',
+    );
     const archive = `${name}.tar.gz`;
-    run('tar', ['-czf', join(output, archive), '-C', output, name], { env: { ...process.env, COPYFILE_DISABLE: '1' } });
-    hashes.push(`${createHash('sha256').update(readFileSync(join(output, archive))).digest('hex')}  ${archive}`);
+    run('tar', ['-czf', join(output, archive), '-C', output, name], {
+      env: { ...process.env, COPYFILE_DISABLE: '1' },
+    });
+    hashes.push(
+      `${createHash('sha256')
+        .update(readFileSync(join(output, archive)))
+        .digest('hex')}  ${archive}`,
+    );
   }
 }
 writeFileSync(join(output, 'SHA256SUMS'), hashes.join('\n') + '\n');
