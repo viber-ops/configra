@@ -18,19 +18,18 @@ the [CSI rotation contract](https://secrets-store-csi-driver.sigs.k8s.io/topics/
 
 ## Build
 
-Clone `configra` and `configra-go` into adjacent directories. From the Configra
-repository:
+From the Configra repository (no adjacent SDK checkout is required):
 
 ```sh
 GOWORK=off go -C kubernetes test -race ./...
-docker build -f kubernetes/Dockerfile -t registry.example.com/configra-kubernetes:v0.1.0 ..
+docker build -f kubernetes/Dockerfile -t registry.example.com/configra-kubernetes:YOUR_VERSION .
 ```
 
-Private Go module downloads require GitHub authentication and a
-`github.com/viber-ops/*` entry in `GOPRIVATE`. The Docker build copies the sibling
-SDK source and applies a local replacement only inside the builder; GitHub
-credentials are not baked into the image. Its dedicated ignore file limits the
-parent build context to the required source files.
+The build downloads the public SDK version pinned in `kubernetes/go.mod` and
+verifies module checksums. It does not use a sibling checkout, a local replacement,
+or GitHub credentials. Its dedicated ignore file limits the repository build
+context to the required source and license files. Replace `YOUR_VERSION` with
+your chosen image tag before pushing it to your registry.
 
 ## Workload credentials and server trust
 

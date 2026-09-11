@@ -3,7 +3,7 @@ module github.com/viber-ops/configra/kubernetes
 go 1.25.13
 
 require (
-	github.com/viber-ops/configra-go v0.0.0-20260911101812-8e4339f8884e
+	github.com/viber-ops/configra-go v0.1.0-rc.2
 	go.yaml.in/yaml/v3 v3.0.4
 	google.golang.org/grpc v1.82.1
 	k8s.io/api v0.35.0

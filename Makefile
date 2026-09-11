@@ -25,7 +25,7 @@ kubernetes-test:
 	GOWORK=off go -C kubernetes vet ./...
 
 kubernetes-image:
-	docker build -f kubernetes/Dockerfile --tag '$(KUBERNETES_IMAGE)' ..
+	docker build -f kubernetes/Dockerfile --tag '$(KUBERNETES_IMAGE)' .
 
 web-build:
 	npm --prefix web ci --ignore-scripts

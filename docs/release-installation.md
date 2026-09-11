@@ -15,6 +15,11 @@ from the same GitHub release. On macOS use `shasum -a 256`; on Linux use
 extracting. Checksums detect corruption, not an independently compromised release
 account. `BUILD.json` records the exact source commit and target.
 
+`LICENSE` and `NOTICE` apply to original Configra source. The Kubernetes module
+also carries its own copies. Third-party dependencies retain their own terms;
+the complete third-party/runtime/CA materials and SBOM are still a stable-release
+gate, not something proved by these first-party files.
+
 ```sh
 ./configra --version
 ./configra --help
@@ -44,13 +49,13 @@ SLA is claimed. Do not use Configra to supply its own bootstrap secrets.
 ## Container images
 
 The manifests intentionally contain example registry names. Build the two images
-from the tagged `configra` source and its adjacent `configra-go` checkout, push to
+from the tagged `configra` source, push to
 your registry, and replace images/API names/OIDC settings in your overlays:
 
 ```sh
 docker build -t registry.example.com/configra:YOUR_VERSION .
 docker build -f kubernetes/Dockerfile \
-  -t registry.example.com/configra-kubernetes:YOUR_VERSION ..
+  -t registry.example.com/configra-kubernetes:YOUR_VERSION .
 ```
 
 No prebuilt container image is implied by the binary release.

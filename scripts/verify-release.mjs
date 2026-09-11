@@ -1,0 +1,84 @@
+#!/usr/bin/env node
+// Check the files recipients download, not the unpacked build staging directories.
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { basename, dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const directory = resolve(process.argv[2] ?? '');
+const version = basename(directory);
+assert.match(version, /^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/, 'Pass a release directory');
+const expectedSDK = readFileSync(join(root, 'kubernetes/go.mod'), 'utf8')
+  .match(/^\s*github\.com\/viber-ops\/configra-go\s+(\S+)$/m)?.[1];
+assert.ok(expectedSDK, 'Kubernetes declares its SDK version');
+const checksums = new Map(
+  readFileSync(join(directory, 'SHA256SUMS'), 'utf8').trim().split('\n').map((line) => {
+    const match = /^([a-f0-9]{64})  (configra_[A-Za-z0-9_.-]+\.tar\.gz)$/.exec(line);
+    assert.ok(match, `Invalid checksum entry: ${line}`);
+    return [match[2], match[1]];
+  }),
+);
+assert.equal(checksums.size, 4, 'A release contains all four platform archives');
+for (const platform of ['darwin', 'linux']) {
+  for (const arch of ['amd64', 'arm64']) {
+    const name = `configra_${version.slice(1)}_${platform}_${arch}`;
+    const archive = join(directory, `${name}.tar.gz`);
+    assert.equal(
+      createHash('sha256').update(readFileSync(archive)).digest('hex'),
+      checksums.get(`${name}.tar.gz`),
+      `${name}: archive checksum`,
+    );
+    const entries = execFileSync('tar', ['-tzf', archive], { encoding: 'utf8' }).trim().split('\n');
+    assert.equal(new Set(entries).size, entries.length, `${name}: no duplicate archive paths`);
+    assert.ok(entries.every((path) => path.startsWith(`${name}/`) &&
+      !path.includes('\\') && !path.split('/').some((part) => part === '.' || part === '..')),
+    `${name}: every file stays inside its bundle directory`);
+    const read = (path) => {
+      assert.ok(entries.includes(`${name}/${path}`), `${name}: missing ${path}`);
+      return execFileSync('tar', ['-xOf', archive, `${name}/${path}`], { encoding: 'utf8' });
+    };
+    assert.match(read('LICENSE'), /Apache License\s+Version 2\.0, January 2004/);
+    assert.match(read('NOTICE'), /Copyright 2026 The Configra Authors/);
+    assert.match(read('kubernetes/LICENSE'), /Apache License\s+Version 2\.0, January 2004/);
+    assert.match(read('kubernetes/NOTICE'), /Copyright 2026 The Configra Authors/);
+    const build = JSON.parse(read('BUILD.json'));
+    assert.equal(build.version, version);
+    assert.equal(build.platform, platform);
+    assert.equal(build.arch, arch);
+    assert.match(build.commit, /^[a-f0-9]{40}$/);
+    assert.equal(build.cgo, false);
+    for (const binary of ['configra', 'configra-kubernetes']) {
+      assert.ok(entries.includes(`${name}/${binary}`), `${name}: missing ${binary}`);
+      const temporary = mkdtempSync(join(tmpdir(), 'configra-release-check-'));
+      try {
+        const path = join(temporary, binary);
+        writeFileSync(path, execFileSync('tar', ['-xOf', archive, `${name}/${binary}`], {
+          maxBuffer: 200 * 1024 * 1024,
+        }), { mode: 0o600 });
+        const info = JSON.parse(execFileSync('go', ['version', '-m', '-json', path], {
+          encoding: 'utf8', env: { ...process.env, GOTOOLCHAIN: 'go1.26.7' },
+        }));
+        const settings = Object.fromEntries(info.Settings.map(({ Key, Value }) => [Key, Value]));
+        assert.equal(settings.GOOS, platform, `${name}/${binary}: actual binary platform`);
+        assert.equal(settings.GOARCH, arch, `${name}/${binary}: actual binary architecture`);
+        assert.equal(settings.CGO_ENABLED, '0', `${name}/${binary}: static Go build`);
+        assert.equal(info.GoVersion, build.go.split(/\s+/)[2], `${name}/${binary}: toolchain`);
+        assert.ok(info.Deps.every((dep) => !dep.Replace), `${name}/${binary}: no local dependency replacements`);
+        if (binary === 'configra-kubernetes') {
+          const sdk = info.Deps.find((dep) => dep.Path === 'github.com/viber-ops/configra-go');
+          assert.equal(sdk?.Version, expectedSDK, `${name}: SDK matches the published module pin`);
+          assert.match(sdk.Sum, /^h1:[A-Za-z0-9+/]+=*$/, `${name}: SDK source checksum is recorded`);
+        }
+      } finally {
+        rmSync(temporary, { recursive: true });
+      }
+    }
+    assert.ok(!entries.some((path) => /(?:^|\/)(?:\.git|\.cache|node_modules)(?:\/|$)/.test(path)));
+    assert.ok(!entries.some((path) => /\.(?:key|p12|pfx)$/.test(path)), 'No private credential files');
+    console.log(`PASS ${name}: checksums, target/toolchain, pinned SDK and first-party license materials`);
+  }
+}

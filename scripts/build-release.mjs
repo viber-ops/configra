@@ -103,6 +103,10 @@ for (const platform of ['darwin', 'linux']) {
       join(root, 'docs', 'release-installation.md'),
       join(stage, 'README.md'),
     );
+    for (const file of ['LICENSE', 'NOTICE']) {
+      cpSync(join(root, file), join(stage, file));
+      cpSync(join(root, 'kubernetes', file), join(stage, 'kubernetes', file));
+    }
     writeFileSync(
       join(stage, 'BUILD.json'),
       JSON.stringify(
@@ -132,4 +136,5 @@ for (const platform of ['darwin', 'linux']) {
   }
 }
 writeFileSync(join(output, 'SHA256SUMS'), hashes.join('\n') + '\n');
+run(process.execPath, [join(root, 'scripts', 'verify-release.mjs'), output]);
 console.log(`Release artifacts: ${output}`);

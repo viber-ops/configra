@@ -22,6 +22,7 @@ RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY cmd ./cmd
 COPY internal ./internal
 COPY web/embed.go ./web/embed.go
+COPY LICENSE NOTICE /out/licenses/
 COPY --from=web-build /src/web/dist ./web/dist
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
@@ -31,6 +32,7 @@ FROM scratch
 
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /out/configra /configra
+COPY --from=build /out/licenses/ /licenses/configra/
 
 USER 65532:65532
 EXPOSE 8443 9443
