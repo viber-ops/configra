@@ -1,0 +1,19 @@
+# Client CA is a cold-start trust root. Individual accepted certificates and
+# Token allowlists are managed dynamically by Configra.
+version: 1
+listen: :9443
+tls:
+  certificate_file: /run/configra/tls/server.crt
+  private_key_file: /run/configra/tls/server.key
+  client_ca_file: /run/configra/tls/client-ca.pem
+mysql:
+  dsn_env: CONFIGRA_MYSQL_DSN
+key_provider:
+  master_key_file: /run/configra/secrets/master-key
+nats:
+  urls:
+    - tls://nats.example.internal:4222
+  credentials_file: /run/configra/secrets/nats.creds
+  root_ca_file: /run/configra/tls/nats-ca.pem
+logging:
+  level: info

@@ -1,0 +1,3 @@
+# Use directional two-way Merge
+
+Merge is a deterministic two-way overlay between any selected immutable Source and Target Revisions: mappings merge recursively, Source replaces matching scalar and sequence values, and Target-only keys remain. Revision numbers are scoped to their Environment and need not match; the result becomes the Target Environment's next current Revision, while a separately captured expected current Revision provides optimistic concurrency. Configra has no shared ancestor from which to infer deletions, so editable preview handles exceptional removals, Replace handles full copying, and Management presents one fixed Source-to-Target result rather than strategy choices.

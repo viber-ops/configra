@@ -1,0 +1,3 @@
+# Archive Environments instead of deleting them
+
+Removing an Environment marks its immutable identity as Archived rather than physically deleting it. Archived Environments reject reads, resolution, and mutations while retaining names, Revision history, Vault bindings, API Token grants, Audit Events, and Access Events; relationships are not rewritten, and an explicit Unarchive restores them without creating content Revisions. Before confirmation, Unarchive shows the Tokens that will regain access. This avoids broken historical references and accidental identity reuse at the cost of permanent metadata retention.

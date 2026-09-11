@@ -1,0 +1,129 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: configra-api
+  labels:
+    app.kubernetes.io/name: configra
+    app.kubernetes.io/component: api
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: configra
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: configra
+        app.kubernetes.io/component: api
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: configra
+          image: configra
+          imagePullPolicy: IfNotPresent
+          args: [api, --config, /etc/configra/config.yaml]
+          ports:
+            - name: https
+              containerPort: 9443
+          env:
+            - name: CONFIGRA_MYSQL_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: configra-runtime
+                  key: mysql-dsn
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          startupProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /health/live
+              port: https
+            periodSeconds: 2
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /health/ready
+              port: https
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /health/live
+              port: https
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/configra/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            - name: server-tls
+              mountPath: /run/configra/server-tls
+              readOnly: true
+            - name: client-ca
+              mountPath: /run/configra/client-ca
+              readOnly: true
+            - name: master-key
+              mountPath: /run/configra/master-key
+              readOnly: true
+            - name: nats
+              mountPath: /run/configra/nats
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: configra-api-config
+        - name: server-tls
+          secret:
+            secretName: configra-api-tls
+        - name: client-ca
+          secret:
+            secretName: configra-client-ca
+        - name: master-key
+          secret:
+            secretName: configra-master-key
+        - name: nats
+          secret:
+            secretName: configra-nats
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: configra-api
+  labels:
+    app.kubernetes.io/name: configra
+    app.kubernetes.io/component: api
+spec:
+  selector:
+    app.kubernetes.io/name: configra
+    app.kubernetes.io/component: api
+  ports:
+    - name: https
+      port: 443
+      targetPort: https

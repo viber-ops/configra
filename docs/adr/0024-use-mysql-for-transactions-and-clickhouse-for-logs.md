@@ -1,0 +1,7 @@
+# Use MySQL for transactions and ClickHouse for logs
+
+Configra uses MySQL as its only Domain and transactional store, including Revisions, credentials, business settings, delivery state, and Transactional Outbox records. ClickHouse is the final query store for Configra-managed Access Events, Audit Events, and statistics derived from them; V1 targets MySQL directly instead of carrying speculative PostgreSQL compatibility. Zap emits structured application and security operational logs to stdout for the Kubernetes log collector to ship to ClickHouse, avoiding a second application-specific log transport and operator-table schema inside Configra.
+
+Audit Events reach ClickHouse at least once through a durable MySQL Transactional Outbox, preserving atomicity with successful Mutations, while Access Events retain their best-effort Core NATS path so logging cannot block Machine API reads. ClickHouse is therefore outside the synchronous content-read path: its unavailability may delay log ingestion, log views, and statistics, but must not prevent clients from receiving configuration.
+
+Production compatibility and container release tests use exactly MySQL `8.0.22`. V1 `access_events` has a 90-day TTL; `audit_events` has no automatic TTL. The Management process initializes these idempotent tables, retries ClickHouse availability in the background, inserts Access Events in bounded batches, and acknowledges Audit Outbox rows only after a successful ClickHouse batch. Audit delivery is at least once, so duplicate rows remain an accepted query-time concern.
