@@ -65,6 +65,13 @@ func (store *Store) RegisterVerifiedClientCertificate(
 	if validationErr != nil {
 		return finishCertificateFailure(ctx, transaction, request.OperationID, request.Actor, "client_certificate.register", "", validationErr)
 	}
+	authorityID, err := managedCertificateIssuer(ctx, transaction, certificate)
+	if err != nil {
+		if errors.Is(err, ErrValidation) {
+			return finishCertificateFailure(ctx, transaction, request.OperationID, request.Actor, "client_certificate.register", "", errors.New("Client Certificate Authority is revoked"))
+		}
+		return ClientCertificateResult{}, err
+	}
 	fingerprint := sha256.Sum256(certificate.Raw)
 	fingerprintHex := hex.EncodeToString(fingerprint[:])
 	subject := certificate.Subject.String()
@@ -96,10 +103,10 @@ func (store *Store) RegisterVerifiedClientCertificate(
 		}
 		if _, err := transaction.ExecContext(ctx, `
 			INSERT INTO client_certificates
-				(id, fingerprint_sha256, display_name, certificate_der, subject, serial_hex, not_before, not_after)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+				(id, fingerprint_sha256, display_name, certificate_der, subject, serial_hex, not_before, not_after, authority_id)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`, id, fingerprint[:], request.DisplayName, certificate.Raw, subject, serialHex,
-			certificate.NotBefore.UTC(), certificate.NotAfter.UTC()); err != nil {
+			certificate.NotBefore.UTC(), certificate.NotAfter.UTC(), authorityID); err != nil {
 			return ClientCertificateResult{}, fmt.Errorf("insert Client Certificate: %w", err)
 		}
 	case err != nil:

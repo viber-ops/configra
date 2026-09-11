@@ -1,13 +1,13 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { basicSetup, EditorView } from 'codemirror';
-import { EditorState } from '@codemirror/state';
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
-import { json } from '@codemirror/lang-json';
-import { yaml } from '@codemirror/lang-yaml';
-import { MergeView } from '@codemirror/merge';
-import { tags } from '@lezer/highlight';
+import { AuthorityManagement, CertificateManagement, authorityLabel } from './security/Certificates.jsx';
 import './styles.css';
+import './workspace.css';
+
+const CodeEditor = lazy(() => import('./editors.jsx').then(module => ({ default: module.ConfigCodeEditor })));
+const DiffEditor = lazy(() => import('./editors.jsx').then(module => ({ default: module.ConfigDiffEditor })));
+function ConfigCodeEditor(props) { return <Suspense fallback={<div className="editor-loading" role="status" aria-busy="true"><span className="loading-line" /></div>}><CodeEditor {...props} /></Suspense>; }
+function ConfigDiffEditor(props) { return <Suspense fallback={<div className="editor-loading" aria-busy="true"><span className="loading-line" /></div>}><DiffEditor {...props} /></Suspense>; }
 
 const messages = {
   en: {
@@ -18,7 +18,7 @@ const messages = {
     addField: 'Add field',
     addVariant: 'Add Variant',
     administration: 'Administration',
-    administrationBody: 'Business credentials and read-only runtime information. Cold-start YAML is deliberately not editable here.',
+    administrationBody: 'Manage application access, client identities, and workspace integrations.',
     allowWithoutMTLS: 'Allow this token without mTLS',
     allowedEnvironments: 'Allowed environments',
     apiTokens: 'API tokens',
@@ -706,7 +706,12 @@ async function request(path, options = {}) {
     }
     throw error;
   }
-  return response.status === 204 ? null : response.json();
+  const result = response.status === 204 ? null : await response.json();
+  if (options.method && !['GET', 'HEAD', 'OPTIONS'].includes(options.method) &&
+      /^\/v1\/(environments|configs|vault-items)(\/|$)/.test(path) && !/\/(validate|transfer-preview)$/.test(path)) {
+    window.dispatchEvent(new Event('configra:inventory-changed'));
+  }
+  return result;
 }
 
 function managementError(error, t, fallback) {
@@ -893,6 +898,9 @@ function Shell({ principal, language, setLanguage, theme, setTheme, t }) {
   const route = currentRoute.section;
   const [inventory, setInventory] = useState({ status: 'loading' });
   const [search, setSearch] = useState('');
+  const [inventoryRevision, setInventoryRevision] = useState(0);
+  const searchInput = useRef(null);
+  const [activeResult, setActiveResult] = useState(0);
   const visibleNavigation = principal.role === 'admin' ? navigation : navigation.filter(([key]) => key !== 'notifications' && key !== 'administration');
   useEffect(() => {
     let live = true;
@@ -902,6 +910,17 @@ function Shell({ principal, language, setLanguage, theme, setTheme, t }) {
       }))
       .catch(() => live && setInventory({ status: 'failed' }));
     return () => { live = false; };
+  }, [inventoryRevision]);
+  useEffect(() => {
+    const refresh = () => setInventoryRevision(value => value + 1);
+    const shortcut = event => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k' && !document.querySelector('dialog[open]')) {
+        event.preventDefault(); searchInput.current?.focus();
+      }
+    };
+    window.addEventListener('configra:inventory-changed', refresh);
+    window.addEventListener('keydown', shortcut);
+    return () => { window.removeEventListener('configra:inventory-changed', refresh); window.removeEventListener('keydown', shortcut); };
   }, []);
   const searchResults = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -918,11 +937,13 @@ function Shell({ principal, language, setLanguage, theme, setTheme, t }) {
       <aside className="sidebar">
         <a className="wordmark" href="#/overview" aria-label={`Configra ${t.overview}`}><Mark />Configra</a>
         <nav aria-label={t.primaryNavigation}>
-          {visibleNavigation.map(([key, icon]) => (
-            <a key={key} href={`#/${key}`} aria-current={route === key ? 'page' : undefined}>
-              <Icon name={icon} /><span>{t[key]}</span>
-            </a>
-          ))}
+          {[
+            [t.locale.startsWith('zh') ? '工作区' : 'Workspace', ['overview', 'environments', 'configs', 'vault']],
+            [t.locale.startsWith('zh') ? '动态与记录' : 'Activity', ['notifications', 'access', 'audit']],
+            [t.locale.startsWith('zh') ? '安全与管理' : 'Security', ['administration']],
+          ].map(([label, keys]) => visibleNavigation.some(([key]) => keys.includes(key)) && <div className="sidebar-group" key={label}>
+            <p>{label}</p>{visibleNavigation.filter(([key]) => keys.includes(key)).map(([key, icon]) => <a key={key} href={`#/${key}`} aria-label={t[key]} aria-current={route === key ? 'page' : undefined}><Icon name={icon} /><span>{t[key]}</span></a>)}
+          </div>)}
         </nav>
         <div className="identity">
           <span className="avatar">{(principal.email || principal.subject).slice(0, 1).toUpperCase()}</span>
@@ -933,9 +954,15 @@ function Shell({ principal, language, setLanguage, theme, setTheme, t }) {
         <header className="topbar">
           <div className="global-search">
             <Icon name="search" />
-            <input type="search" aria-label={t.globalSearch} placeholder={t.globalSearchPlaceholder} value={search} onChange={event => setSearch(event.target.value)} />
-            {search.trim() && <div className="global-search-results">
-              {searchResults.map(item => <a key={`${item.type}-${item.key}`} href={item.href} onClick={() => setSearch('')}><span>{item.type}</span><strong title={item.name}>{item.name}</strong><code title={item.key}>{item.key}</code></a>)}
+            <input ref={searchInput} type="search" role="combobox" aria-autocomplete="list" aria-expanded={Boolean(search.trim())} aria-controls="global-search-options" aria-activedescendant={searchResults[activeResult] ? `global-search-${activeResult}` : undefined} aria-label={t.globalSearch} placeholder={t.globalSearchPlaceholder} value={search} onChange={event => { setSearch(event.target.value); setActiveResult(0); }} onKeyDown={event => {
+              if (event.key === 'Escape') { setSearch(''); searchInput.current?.blur(); }
+              if (event.key === 'ArrowDown') { event.preventDefault(); setActiveResult(value => Math.min(value + 1, searchResults.length - 1)); }
+              if (event.key === 'ArrowUp') { event.preventDefault(); setActiveResult(value => Math.max(0, value - 1)); }
+              if (event.key === 'Enter' && searchResults[activeResult]) { event.preventDefault(); location.hash = searchResults[activeResult].href; setSearch(''); }
+            }} />
+            <kbd className="search-shortcut">⌘ K</kbd>
+            {search.trim() && <div className="global-search-results" role="listbox" id="global-search-options">
+              {searchResults.map((item, index) => <a role="option" aria-selected={activeResult === index} id={`global-search-${index}`} key={`${item.type}-${item.key}`} href={item.href} onClick={() => setSearch('')}><span>{item.type}</span><strong title={item.name}>{item.name}</strong><code title={item.key}>{item.key}</code></a>)}
               {searchResults.length === 0 && <p>{t.noResources}</p>}
             </div>}
           </div>
@@ -950,12 +977,12 @@ function Shell({ principal, language, setLanguage, theme, setTheme, t }) {
           ? <EnvironmentDetail environmentKey={currentRoute.segments[1]} t={t} />
           : route === 'environments' && <Environments principal={principal} t={t} />}
         {route === 'configs' && currentRoute.segments.length >= 3
-          ? <ConfigDetail principal={principal} configKey={currentRoute.segments[1]} environmentKey={currentRoute.segments[2]} inventory={inventory} t={t} />
+          ? <div className="resource-explorer"><ResourceRail inventory={inventory} section="configs" selected={currentRoute.segments[1]} t={t} /><div className="resource-explorer-detail"><ConfigDetail key={`${currentRoute.segments[1]}/${currentRoute.segments[2]}`} principal={principal} configKey={currentRoute.segments[1]} environmentKey={currentRoute.segments[2]} inventory={inventory} t={t} /></div></div>
           : route === 'configs' && currentRoute.segments.length === 2
             ? <ConfigHome configKey={currentRoute.segments[1]} t={t} />
             : route === 'configs' && <Configs principal={principal} filters={currentRoute.query} t={t} />}
         {route === 'vault' && currentRoute.segments.length >= 3
-          ? <VaultDetail principal={principal} namespaceKey={currentRoute.segments[1]} itemKey={currentRoute.segments[2]} t={t} />
+          ? <div className="resource-explorer"><ResourceRail inventory={inventory} section="vault" selected={`${currentRoute.segments[1]}/${currentRoute.segments[2]}`} t={t} /><div className="resource-explorer-detail"><VaultDetail key={`${currentRoute.segments[1]}/${currentRoute.segments[2]}`} principal={principal} namespaceKey={currentRoute.segments[1]} itemKey={currentRoute.segments[2]} t={t} /></div></div>
           : route === 'vault' && <VaultItems principal={principal} filters={currentRoute.query} t={t} />}
         {route === 'administration' && principal.role === 'admin' && <Administration t={t} />}
         {route === 'notifications' && principal.role === 'admin' && <Notifications t={t} />}
@@ -966,6 +993,23 @@ function Shell({ principal, language, setLanguage, theme, setTheme, t }) {
       </main>
     </div>
   );
+}
+
+function ResourceRail({ inventory, section, selected, t }) {
+  const [query, setQuery] = useState('');
+  const items = inventory.status === 'ready' ? inventory[section] || [] : [];
+  const visible = items.filter(item => `${item.display_name} ${item.key} ${item.namespace_key || ''}`.toLowerCase().includes(query.toLowerCase()));
+  return <aside className="resource-rail" aria-label={`${t[section]} ${t.search}`}>
+    <div className="resource-rail-heading"><a href={`#/${section}`}>{t[section]}</a><span>{items.length}</span></div>
+    <label><span className="visually-hidden">{t[section]} {t.search}</span><input type="search" placeholder={t.locale.startsWith('zh') ? '筛选条目…' : 'Filter items…'} value={query} onChange={event => setQuery(event.target.value)} /></label>
+    <div className="resource-rail-items">{visible.map(item => {
+      const key = section === 'vault' ? `${item.namespace_key}/${item.key}` : item.key;
+      return <a className={key === selected ? 'selected' : ''} aria-current={key === selected ? 'true' : undefined} href={`#/${section}/${key}`} key={key}>
+        <span className="resource-symbol" data-kind={section}><Icon name={section} /></span><span><strong title={item.display_name}>{item.display_name}</strong><code>{section === 'vault' ? `${item.namespace_key}.` : ''}{item.key}</code></span>
+      </a>;
+    })}{visible.length === 0 && <p className="rail-empty">{inventory.status === 'loading' ? '…' : t.noResources}</p>}</div>
+    <a className="resource-rail-footer" href={`#/${section}`}>← {t[section]}</a>
+  </aside>;
 }
 
 function Overview({ inventory, t }) {
@@ -1674,6 +1718,8 @@ function VaultDetail({ principal, namespaceKey, itemKey, t }) {
   const [notice, setNotice] = useState('');
   const [restoring, setRestoring] = useState(0);
   const [refresh, setRefresh] = useState(0);
+  const [fieldQuery, setFieldQuery] = useState('');
+  const [fieldPage, setFieldPage] = useState(0);
   const editorDirty = editor.status === 'ready' && editor.original !== JSON.stringify({ displayName: editor.displayName, snapshot: serializeVaultDraft(editor.draft) });
   const confirmDiscard = useUnsavedChanges(editorDirty, t.unsavedChanges);
   useEffect(() => {
@@ -1778,13 +1824,18 @@ function VaultDetail({ principal, namespaceKey, itemKey, t }) {
     ? values.item.snapshot.variants.find(candidate => candidate.id === variantID)
     : null;
   const inspectRevision = revision => {
+    if (editor.status === 'ready' && !confirmDiscard()) return;
+    setEditor({ status: 'idle' });
     setViewedRevision(revision);
     setInspection({ status: revision === state.item.revision ? 'idle' : 'loading', revision });
     setValues({ status: 'idle' });
     setRevealed({});
     setSelected('');
     setTab('fields');
+    setFieldPage(0);
   };
+  const filteredFields = (viewedItem?.snapshot.fields || []).filter(field => `${field.name} ${field.key} ${field.type}`.toLowerCase().includes(fieldQuery.toLowerCase()));
+  const visibleFields = filteredFields.slice(fieldPage * 25, (fieldPage + 1) * 25);
   return (
     <div className={editor.status === 'ready' ? 'page vault-detail vault-editing' : 'page vault-detail'}>
       <div className="config-detail-heading">
@@ -1826,19 +1877,22 @@ function VaultDetail({ principal, namespaceKey, itemKey, t }) {
             ))}
           </aside>
           <section className="field-panel">
+            <div className="field-panel-tools"><label><span className="visually-hidden">{t.search} {t.fields}</span><input type="search" placeholder={t.locale.startsWith('zh') ? '查找字段…' : 'Find a field…'} value={fieldQuery} onChange={event => { setFieldQuery(event.target.value); setFieldPage(0); }} /></label><span>{filteredFields.length} {t.fields}</span>{valuesReady && <button type="button" onClick={() => { setValues({ status: 'idle' }); setRevealed({}); }}>{t.locale.startsWith('zh') ? '收起敏感值' : 'Conceal values'}</button>}</div>
             {principal.role === 'admin' && !state.item.archived && !valuesReady && (
               <div className="value-gate"><p>{values.status === 'failed' && values.revision === viewedRevision ? t.operationFailed : t.valueAccessWarning}</p><button className="primary-action compact-action" type="button" disabled={values.status === 'loading' && values.revision === viewedRevision} onClick={readValues}>{t.revealItemValues}</button></div>
             )}
             <div className="field-table" role="table" aria-label={`${state.item.display_name} ${t.fields}`}>
               <div className="field-table-header" role="row"><span role="columnheader">{t.fields}</span><span role="columnheader">{t.reference}</span><span role="columnheader">{t.value}</span></div>
-              {viewedItem.snapshot.fields.map(field => <VaultField key={field.key} field={field} namespaceKey={namespaceKey} itemKey={itemKey} value={valuedVariant?.values?.[field.key]} revealed={Boolean(revealed[field.key])} setRevealed={value => setRevealed(current => ({ ...current, [field.key]: value }))} t={t} />)}
+              {visibleFields.map(field => <VaultField key={field.key} field={field} namespaceKey={namespaceKey} itemKey={itemKey} value={valuedVariant?.values?.[field.key]} revealed={Boolean(revealed[field.key])} setRevealed={value => setRevealed(current => ({ ...current, [field.key]: value }))} t={t} />)}
             </div>
+            {filteredFields.length > 25 && <div className="field-pagination"><button type="button" disabled={fieldPage === 0} onClick={() => setFieldPage(value => value - 1)}>← {t.locale.startsWith('zh') ? '上一页' : 'Previous'}</button><span>{fieldPage + 1} / {Math.ceil(filteredFields.length / 25)}</span><button type="button" disabled={(fieldPage + 1) * 25 >= filteredFields.length} onClick={() => setFieldPage(value => value + 1)}>{t.locale.startsWith('zh') ? '下一页' : 'Next'} →</button></div>}
           </section>
-          <aside className="vault-meta-rail">
+          <details className="vault-meta-rail">
+            <summary>{t.itemDetails}</summary>
             <section><h2>{t.versionIdentity}</h2><dl><div><dt>{t.namespace}</dt><dd><code>{namespaceKey}</code></dd></div><div><dt>{t.resourceKey}</dt><dd><code>{itemKey}</code></dd></div><div><dt>{t.revision}</dt><dd><strong>v{viewedRevision}</strong>{viewingCurrent && ` · ${t.current}`}</dd></div><div><dt>{t.fields}</dt><dd>{viewedItem.snapshot.fields.length}</dd></div></dl></section>
             <section><h2>{t.environmentBinding}</h2>{viewedItem.snapshot.variants.map((candidate, index) => <div className="binding-row" key={candidate.id}><span>{t.variant} {index + 1}</span><div>{candidate.environments.map(environment => <code key={environment}>{environment}</code>)}</div></div>)}</section>
             <section><h2>{t.history}</h2>{state.revisions.slice(0, 4).map(revision => <div className="history-row" key={revision.revision}><strong>v{revision.revision}</strong><time>{formatDate(revision.created_at, t.locale)}</time></div>)}</section>
-          </aside>
+          </details>
         </div>
       )}
     </div>
@@ -1850,7 +1904,7 @@ function VaultUsagePanel({ usages, t }) {
     (result[usage.field_key] ||= []).push(usage);
     return result;
   }, {});
-  return <section className="panel vault-usage-panel" aria-labelledby="vault-usage-title">
+  return <section className="panel vault-usage-panel" data-empty={usages.length === 0} aria-labelledby="vault-usage-title">
     <div className="section-heading"><div><h2 id="vault-usage-title">{t.currentReferences}</h2><p>{t.currentReferencesBody}</p></div><span>{usages.length}</span></div>
     {usages.length === 0 ? <p className="environment-empty">{t.noCurrentReferences}</p> : <div className="vault-usage-groups">{Object.entries(groups).map(([field, items]) => <section key={field}><h3><code>{field}</code><span>{items.length}</span></h3>{items.map(usage => <a href={`#/configs/${usage.config_key}/${usage.environment_key}`} aria-label={`${usage.config_name} ${usage.environment_key} v${usage.config_revision}`} key={`${usage.environment_key}-${usage.config_key}`}><strong title={usage.config_name}>{usage.config_name}</strong><code>{usage.environment_key} / {usage.config_key} @ v{usage.config_revision}</code></a>)}</section>)}</div>}
   </section>;
@@ -1895,14 +1949,15 @@ function Administration({ t }) {
   const [tab, setTab] = useState('tokens');
   return (
     <div className="page administration-page">
-      <div className="resource-heading"><div><p className="eyebrow">ADM / business settings</p><h1>{t.administration}</h1><p>{t.administrationBody}</p></div></div>
+      <div className="resource-heading"><div><p className="eyebrow">{t.locale.startsWith('zh') ? '访问与凭证' : 'Access & credentials'}</p><h1>{t.administration}</h1><p>{t.administrationBody}</p></div></div>
       <div className="tabbar" role="tablist" aria-label={t.administration}>
         <button type="button" role="tab" aria-selected={tab === 'tokens'} onClick={() => setTab('tokens')}>{t.apiTokens}</button>
         <button type="button" role="tab" aria-selected={tab === 'certificates'} onClick={() => setTab('certificates')}>{t.clientCertificates}</button>
+        <button type="button" role="tab" aria-selected={tab === 'authorities'} onClick={() => setTab('authorities')}>{authorityLabel(t)}</button>
         <button type="button" role="tab" aria-selected={tab === 'notifications'} onClick={() => setTab('notifications')}>{t.notifications}</button>
         <button type="button" role="tab" aria-selected={tab === 'deployment'} onClick={() => setTab('deployment')}>{t.deploymentStatus}</button>
       </div>
-      {tab === 'tokens' ? <TokensPanel t={t} /> : tab === 'certificates' ? <CertificatesPanel t={t} /> : tab === 'notifications' ? <Notifications t={t} embedded /> : <DeploymentPanel t={t} />}
+      {tab === 'tokens' ? <TokensPanel t={t} /> : tab === 'certificates' ? <CertificateManagement request={request} t={t} onAuthorities={() => setTab('authorities')} /> : tab === 'authorities' ? <AuthorityManagement request={request} t={t} onCertificates={() => setTab('certificates')} /> : tab === 'notifications' ? <Notifications t={t} embedded /> : <DeploymentPanel t={t} />}
     </div>
   );
 }
@@ -1910,7 +1965,7 @@ function Administration({ t }) {
 function TokensPanel({ t }) {
   const [state, setState] = useState({ status: 'loading', items: [], environments: [] });
   const [creating, setCreating] = useState(false);
-  const [neverExpires, setNeverExpires] = useState(true);
+  const [neverExpires, setNeverExpires] = useState(false);
   const [created, setCreated] = useState(null);
   const [editing, setEditing] = useState('');
   const [confirming, setConfirming] = useState('');
@@ -1933,7 +1988,7 @@ function TokensPanel({ t }) {
       allow_without_mtls: data.has('allow_without_mtls'),
       never_expires: neverExpires,
     };
-    if (!neverExpires) body.expires_at = new Date(data.get('expires_at')).toISOString();
+    if (!neverExpires && data.get('expires_at')) body.expires_at = new Date(data.get('expires_at')).toISOString();
     try {
       const result = await request('/v1/api-tokens', {
         method: 'POST',
@@ -1981,7 +2036,7 @@ function TokensPanel({ t }) {
           <fieldset><legend>{t.allowedEnvironments}</legend><div className="choice-grid">{state.environments.map(environment => <label key={environment.key}><input type="checkbox" name={`environment:${environment.key}`} /><span>{environment.display_name}<code>{environment.key}</code></span></label>)}</div></fieldset>
           <label className="check-line"><input type="checkbox" name="allow_without_mtls" />{t.allowWithoutMTLS}</label>
           <label className="check-line"><input type="checkbox" checked={neverExpires} onChange={event => setNeverExpires(event.target.checked)} />{t.neverExpires}</label>
-          {!neverExpires && <label>{t.expiresAt}<input type="datetime-local" name="expires_at" required /></label>}
+          {!neverExpires && <label>{t.expiresAt}<input type="datetime-local" name="expires_at" /><small>{t.locale.startsWith('zh') ? '留空使用默认的 90 天有效期。' : 'Leave empty for the default 90-day lifetime.'}</small></label>}
           <div className="form-actions"><span className="inline-error" role="alert">{error}</span><button className="primary-action compact-action" type="submit">{t.createAPIToken}</button></div>
         </form>
       )}
@@ -1999,64 +2054,6 @@ function TokensPanel({ t }) {
   );
 }
 
-function CertificatesPanel({ t }) {
-  const [state, setState] = useState({ status: 'loading', items: [] });
-  const [importing, setImporting] = useState(false);
-  const [confirming, setConfirming] = useState('');
-  const [error, setError] = useState('');
-  const [refresh, setRefresh] = useState(0);
-  useEffect(() => {
-    let live = true;
-    request('/v1/client-certificates?include_revoked=true')
-      .then(result => live && setState({ status: 'ready', items: result.items }))
-      .catch(() => live && setState({ status: 'failed', items: [] }));
-    return () => { live = false; };
-  }, [refresh]);
-  const register = async event => {
-    event.preventDefault();
-    setError('');
-    const data = new FormData(event.currentTarget);
-    try {
-      await request('/v1/client-certificates', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify({ display_name: data.get('display_name'), certificate_pem: data.get('certificate_pem') }),
-      });
-      setImporting(false);
-      setRefresh(value => value + 1);
-    } catch {
-      setError(t.operationFailed);
-    }
-  };
-  const revoke = async fingerprint => {
-    try {
-      await request(`/v1/client-certificates/${fingerprint}/revoke`, { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID() } });
-      setConfirming('');
-      setRefresh(value => value + 1);
-    } catch {
-      setError(t.operationFailed);
-    }
-  };
-  return (
-    <section className="admin-panel certificates-panel">
-      <div className="panel-actions"><span>{t.caVerifiedCertificates}</span><button className="primary-action compact-action" type="button" onClick={() => setImporting(value => !value)}>{t.importClientCertificate}</button></div>
-      {importing && (
-        <form className="certificate-form" onSubmit={register}>
-          <p>{t.publicCertificateOnly}</p>
-          <label>{t.certificateName}<input name="display_name" required maxLength="255" autoComplete="off" /></label>
-          <label>{t.publicCertificatePEM}<textarea name="certificate_pem" required rows="8" spellCheck="false" /></label>
-          <div className="form-actions"><span className="inline-error" role="alert">{error}</span><button className="primary-action compact-action" type="submit">{t.registerCertificate}</button></div>
-        </form>
-      )}
-      {!importing && error && <p className="inline-error" role="alert">{error}</p>}
-      <CollectionState state={state} t={t}>
-        <div className="table-frame"><table><thead><tr><th>{t.certificateName}</th><th>{t.subject}</th><th>{t.fingerprint}</th><th>{t.validUntil}</th><th>{t.status}</th><th /></tr></thead>
-          <tbody>{state.items.map(certificate => <tr key={certificate.fingerprint_sha256}><td><strong title={certificate.display_name}>{certificate.display_name}</strong><code className="row-subkey">{t.serial} {certificate.serial_hex}</code></td><td title={certificate.subject}>{certificate.subject}</td><td><code className="fingerprint" title={certificate.fingerprint_sha256}>{certificate.fingerprint_sha256}</code></td><td><time>{formatDate(certificate.not_after, t.locale)}</time></td><td><span className={certificate.revoked ? 'status archived' : 'status active'}>{certificate.revoked ? t.revoked : t.statusActive}</span></td><td>{!certificate.revoked && (confirming === certificate.fingerprint_sha256 ? <button className="danger-link" type="button" aria-label={`${t.confirmRevoke} ${certificate.display_name}`} onClick={() => revoke(certificate.fingerprint_sha256)}>{t.confirmRevoke}</button> : <button className="danger-link" type="button" aria-label={`${t.revoke} ${certificate.display_name}`} onClick={() => setConfirming(certificate.fingerprint_sha256)}>{t.revoke}</button>)}</td></tr>)}</tbody>
-        </table></div>
-      </CollectionState>
-    </section>
-  );
-}
 
 function DeploymentPanel({ t }) {
   const [ready, setReady] = useState(null);
@@ -2228,94 +2225,6 @@ function AuditPage({ principal, t }) {
   );
 }
 
-const configEditorTheme = EditorView.theme({
-  '&': { height: '100%', backgroundColor: 'var(--editor-surface)', color: 'var(--ink)' },
-  '.cm-scroller': { fontFamily: 'ui-monospace, "SFMono-Regular", Consolas, monospace', lineHeight: '1.65' },
-  '.cm-content': { padding: '14px 0' },
-  '.cm-gutters': { borderRight: '1px solid var(--line)', backgroundColor: 'var(--surface-muted)', color: 'var(--muted)' },
-  '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'var(--surface-muted)' },
-  '&.cm-focused': { outline: 'none' },
-});
-
-const configHighlightStyle = HighlightStyle.define([
-  { tag: [tags.propertyName, tags.attributeName, tags.typeName], color: 'var(--syntax-key)', fontWeight: '650' },
-  { tag: [tags.string, tags.character, tags.attributeValue], color: 'var(--syntax-string)' },
-  { tag: [tags.number, tags.integer, tags.float], color: 'var(--syntax-number)' },
-  { tag: [tags.keyword, tags.atom, tags.bool, tags.null], color: 'var(--syntax-keyword)', fontWeight: '650' },
-  { tag: [tags.comment, tags.docComment], color: 'var(--syntax-comment)', fontStyle: 'italic' },
-  { tag: [tags.punctuation, tags.bracket, tags.operator, tags.separator], color: 'var(--syntax-punctuation)' },
-  { tag: tags.invalid, color: 'var(--danger)', textDecoration: 'underline' },
-]);
-
-const configEditorNonce = document.querySelector('meta[name="csp-nonce"]')?.content;
-const configLanguage = format => format === 'json' ? json() : yaml();
-const configEditorExtensions = (format, readOnly, label) => [
-  basicSetup,
-  configLanguage(format),
-  configEditorTheme,
-  syntaxHighlighting(configHighlightStyle),
-  EditorState.tabSize.of(2),
-  EditorState.readOnly.of(readOnly),
-  EditorView.editable.of(!readOnly),
-  EditorView.contentAttributes.of({ 'aria-label': label, 'aria-readonly': String(readOnly), spellcheck: 'false' }),
-  ...(configEditorNonce ? [EditorView.cspNonce.of(configEditorNonce)] : []),
-];
-
-function ConfigCodeEditor({ value, format, label, readOnly = true, onChange, className = '' }) {
-  const host = useRef(null);
-  const view = useRef(null);
-  const change = useRef(onChange);
-  const syncing = useRef(false);
-  change.current = onChange;
-
-  useEffect(() => {
-    const update = EditorView.updateListener.of(event => {
-      if (event.docChanged && !syncing.current) change.current?.(event.state.doc.toString());
-    });
-    view.current = new EditorView({
-      doc: value,
-      extensions: [...configEditorExtensions(format, readOnly, label), update],
-      parent: host.current,
-    });
-    return () => {
-      view.current?.destroy();
-      view.current = null;
-    };
-  }, [format, label, readOnly]);
-
-  useEffect(() => {
-    if (!view.current || view.current.state.doc.toString() === value) return;
-    syncing.current = true;
-    view.current.dispatch({ changes: { from: 0, to: view.current.state.doc.length, insert: value } });
-    syncing.current = false;
-  }, [value]);
-
-  return <div className={`config-code-editor ${readOnly ? 'read-only ' : ''}${className}`} data-format={format} ref={host} />;
-}
-
-function ConfigDiffEditor({ source, target, sourceFormat, targetFormat, sourceLabel, targetLabel, t }) {
-  const host = useRef(null);
-  useEffect(() => {
-    const merge = new MergeView({
-      a: { doc: source, extensions: configEditorExtensions(sourceFormat, true, sourceLabel) },
-      b: { doc: target, extensions: configEditorExtensions(targetFormat, true, targetLabel) },
-      parent: host.current,
-      highlightChanges: true,
-      gutter: true,
-      collapseUnchanged: { margin: 3, minSize: 8 },
-    });
-    return () => merge.destroy();
-  }, [source, sourceFormat, sourceLabel, target, targetFormat, targetLabel]);
-
-  return <section className="config-diff-panel">
-    <header className="config-diff-heading">
-      <strong>{sourceLabel}<code>{sourceFormat.toUpperCase()}</code></strong>
-      <span className="diff-legend"><i className="removed" />{t.diffRemoved}<i className="added" />{t.diffAdded}</span>
-      <strong>{targetLabel}<code>{targetFormat.toUpperCase()}</code></strong>
-    </header>
-    <div className="config-diff-editor" ref={host} />
-  </section>;
-}
 
 function ConfigDetail({ principal, configKey, environmentKey, inventory, t }) {
   const [state, setState] = useState({ status: 'loading' });

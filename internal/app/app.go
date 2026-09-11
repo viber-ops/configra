@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"net"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/viber-ops/configra/internal/accessnats"
 	"github.com/viber-ops/configra/internal/bootstrap"
+	"github.com/viber-ops/configra/internal/clientcert"
 	"github.com/viber-ops/configra/internal/humanauth"
 	"github.com/viber-ops/configra/internal/logstore"
 	"github.com/viber-ops/configra/internal/logworker"
@@ -83,9 +85,12 @@ func run(ctx context.Context, mode bootstrap.Mode, configPath string) error {
 	startupContext, cancelStartup := context.WithTimeout(ctx, 30*time.Second)
 	defer cancelStartup()
 	if mode == bootstrap.Management {
-		clientCAs, err := bootstrap.LoadClientCAs(config.TLS.ClientCAFile)
-		if err != nil {
-			return err
+		clientCAs := x509.NewCertPool()
+		if config.TLS.ClientCAFile != "" {
+			clientCAs, err = bootstrap.LoadClientCAs(config.TLS.ClientCAFile)
+			if err != nil {
+				return err
+			}
 		}
 		store, err := mysqlstore.OpenManagement(startupContext, config.MySQLDSN(), provider)
 		if err != nil {
@@ -171,6 +176,18 @@ func run(ctx context.Context, mode bootstrap.Mode, configPath string) error {
 		return err
 	}
 	defer store.Close()
+	trust, err := clientcert.NewTrustManager(startupContext, tlsConfig.ClientCAs, store.ActiveCertificateAuthorities)
+	if err != nil {
+		return err
+	}
+	tlsConfig = trust.TLSConfig(tlsConfig)
+	trustContext, cancelTrust := context.WithCancel(ctx)
+	trustDone := make(chan struct{})
+	go func() {
+		defer close(trustDone)
+		trust.Run(trustContext, func() { logger.Warn("Managed Client CA trust refresh failed; retaining previous trust") })
+	}()
+	defer func() { cancelTrust(); <-trustDone }()
 	publisher, err := accessnats.Connect(accessnats.Config{
 		URLs:            config.NATS.URLs,
 		CredentialsFile: config.NATS.CredentialsFile,

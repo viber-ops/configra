@@ -31,6 +31,7 @@ import (
 const maxManagementRequestBytes = 32 << 20
 
 type ConfigRepository interface {
+	AuthorityRepository
 	ListEnvironments(context.Context, bool) ([]mysqlstore.Environment, error)
 	ApplyEnvironmentChange(context.Context, mysqlstore.EnvironmentChange) (mysqlstore.EnvironmentChangeResult, error)
 	ListConfigs(context.Context, bool) ([]mysqlstore.ConfigSummary, error)
@@ -127,6 +128,10 @@ func NewHandler(configs ConfigRepository, publisher machine.AccessPublisher, cli
 	mux.HandleFunc("PUT /v1/api-tokens/{public_id}/environments", server.setTokenEnvironments)
 	mux.HandleFunc("POST /v1/api-tokens/{public_id}/revoke", server.revokeToken)
 	mux.HandleFunc("GET /v1/client-certificates", server.listClientCertificates)
+	mux.HandleFunc("GET /v1/certificate-authorities", server.listCertificateAuthorities)
+	mux.HandleFunc("POST /v1/certificate-authorities", server.createCertificateAuthority)
+	mux.HandleFunc("POST /v1/certificate-authorities/{authority}/revoke", server.revokeCertificateAuthority)
+	mux.HandleFunc("POST /v1/client-certificates/issue", server.issueClientCertificate)
 	mux.HandleFunc("POST /v1/client-certificates", server.registerClientCertificate)
 	mux.HandleFunc("POST /v1/client-certificates/{fingerprint}/revoke", server.revokeClientCertificate)
 	mux.HandleFunc("GET /v1/notification-destinations", server.listNotificationDestinations)
@@ -894,11 +899,16 @@ func (server *server) registerClientCertificate(response http.ResponseWriter, re
 	if !decodeJSON(response, request, &body) {
 		return
 	}
-	if server.clientCAs == nil {
+	roots, err := server.clientTrust(request.Context())
+	if err != nil {
+		writeError(response, http.StatusServiceUnavailable, "service_unavailable")
+		return
+	}
+	if len(roots.Subjects()) == 0 {
 		writeError(response, http.StatusServiceUnavailable, "client_ca_unavailable")
 		return
 	}
-	certificate, err := clientcert.ParseAndVerify([]byte(body.CertificatePEM), server.clientCAs, time.Now())
+	certificate, err := clientcert.ParseAndVerify([]byte(body.CertificatePEM), roots, time.Now())
 	if err != nil {
 		writeError(response, http.StatusUnprocessableEntity, "validation_failed")
 		return

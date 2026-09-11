@@ -16,6 +16,15 @@ VEGETA_VERSION := v12.13.0
 VEGETA := .cache/vegeta-12.13.0/vegeta
 
 .PHONY: web-build web-test
+.PHONY: kubernetes-test kubernetes-image
+KUBERNETES_IMAGE ?= configra-kubernetes:test
+kubernetes-test:
+	GOWORK=off go -C kubernetes test -race ./...
+	GOWORK=off go -C kubernetes vet ./...
+
+kubernetes-image:
+	docker build -f kubernetes/Dockerfile --tag '$(KUBERNETES_IMAGE)' ..
+
 web-build:
 	npm --prefix web ci --ignore-scripts
 	npm --prefix web run build

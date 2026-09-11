@@ -238,7 +238,7 @@ test('administrator creates, archives, and restores a Config identity', async ({
 
   await page.getByRole('button', { name: 'New config' }).click();
   if (process.env.CONFIGRA_CONFIG_CREATE_SCREENSHOT) await page.screenshot({ path: process.env.CONFIGRA_CONFIG_CREATE_SCREENSHOT, fullPage: true });
-  await page.getByLabel('Environment').selectOption('production');
+  await page.getByRole('combobox', { name: /^Environment/ }).selectOption('production');
   await page.getByLabel('Resource key').fill('payment');
   await page.getByLabel('Display name').fill('Payment service');
   await page.getByLabel('Format').selectOption('yaml');
@@ -317,7 +317,7 @@ test('administrator edits canonical Config source against the visible current Re
   await page.goto('/ui/#/configs/payment/production');
 
   await expect(page.getByRole('heading', { name: 'Payment service' })).toBeVisible();
-  await expect(page.getByLabel('Environment')).toHaveValue('production');
+  await expect(page.getByRole('combobox', { name: /^Environment/ })).toHaveValue('production');
   await expect(page.getByRole('button', { name: 'v17 Current' })).toBeVisible();
   await expect(page.locator('.config-meta-panel .actor-identity')).toContainText('admin@example.com');
   await expect(page.locator('.config-meta-panel .actor-identity')).toHaveAttribute('title', 'https://id.example.com|admin-1');

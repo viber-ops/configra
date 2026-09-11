@@ -122,9 +122,6 @@ func (config *Config) validate(mode Mode) error {
 	if config.TLS.CertificateFile == "" || config.TLS.PrivateKeyFile == "" {
 		return errors.New("TLS Certificate and Private Key files are required")
 	}
-	if config.TLS.ClientCAFile == "" {
-		return errors.New("Client CA file is required")
-	}
 	if config.MySQL.DSNEnv == "" || !validEnvironmentVariable(config.MySQL.DSNEnv) {
 		return errors.New("MySQL DSN environment variable name is invalid")
 	}

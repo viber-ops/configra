@@ -64,6 +64,7 @@ func (store *Store) ListTokens(ctx context.Context, includeRevoked bool) ([]Toke
 }
 
 type ClientCertificate struct {
+	AuthorityID       string    `json:"authority_id,omitempty"`
 	FingerprintSHA256 string    `json:"fingerprint_sha256"`
 	DisplayName       string    `json:"display_name"`
 	Subject           string    `json:"subject"`
@@ -77,7 +78,7 @@ type ClientCertificate struct {
 func (store *Store) ListClientCertificates(ctx context.Context, includeRevoked bool) ([]ClientCertificate, error) {
 	rows, err := store.db.QueryContext(ctx, `
 		SELECT LOWER(HEX(fingerprint_sha256)), display_name, subject, serial_hex,
-		       not_before, not_after, revoked_at IS NOT NULL, created_at
+		       not_before, not_after, revoked_at IS NOT NULL, created_at, COALESCE(LOWER(HEX(authority_id)), '')
 		FROM client_certificates
 		WHERE revoked_at IS NULL OR ?
 		ORDER BY created_at DESC, fingerprint_sha256
@@ -92,7 +93,7 @@ func (store *Store) ListClientCertificates(ctx context.Context, includeRevoked b
 		if err := rows.Scan(
 			&certificate.FingerprintSHA256, &certificate.DisplayName, &certificate.Subject,
 			&certificate.SerialHex, &certificate.NotBefore, &certificate.NotAfter,
-			&certificate.Revoked, &certificate.CreatedAt,
+			&certificate.Revoked, &certificate.CreatedAt, &certificate.AuthorityID,
 		); err != nil {
 			return nil, fmt.Errorf("scan Client Certificate: %w", err)
 		}

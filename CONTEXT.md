@@ -92,6 +92,18 @@ _Avoid_: Human session
 An mTLS identity presented by a Machine Client and independently accepted or revoked by Configra. It never replaces the API Token, although a Token may explicitly permit a request that presents no Client Certificate.
 _Avoid_: API Token
 
+**Managed Certificate Authority**:
+A Configra-managed issuer of Client Certificates whose signing key is retained securely for continued issuance. Revoking the Authority also invalidates every Client Certificate issued by it.
+_Avoid_: Server TLS certificate, API Token issuer
+
+**Credential Export**:
+The one-time delivery of a newly generated Authority or Client Certificate's private key to its administrator. A completed export cannot be replayed; public certificates remain available for trust distribution.
+_Avoid_: Recoverable private-key download
+
+**Kubernetes Binding**:
+A mapping from selected Configra resources to mounted files or native configuration objects in one Kubernetes namespace. It uses explicitly supplied Machine Client credentials and does not extend their Environment grants.
+_Avoid_: Global cluster credential, ConfigMap storage backend
+
 **Token-only Authentication**:
 A request on the shared HTTPS API Server listener that presents no Client Certificate and is accepted only because its Active, unexpired API Token was created with `allow_without_mtls=true` and authorizes the requested Environment. Presented certificates are never ignored: an invalid, unregistered, or revoked certificate rejects the request, while a non-expiring Token-only Token is explicitly allowed.
 _Avoid_: Plain HTTP, global mTLS disablement

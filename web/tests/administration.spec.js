@@ -41,6 +41,7 @@ test('administrator creates an Environment-scoped API Token and receives its pla
   await page.getByLabel('Token name').fill('Recovery reader');
   await page.getByRole('checkbox', { name: /Recovery/ }).check();
   await page.getByLabel('Allow this token without mTLS').check();
+  await page.getByRole('checkbox', { name: 'Never expires' }).check();
   await page.getByRole('button', { name: 'Create API token' }).click();
 
   expect(mutation.body).toEqual({

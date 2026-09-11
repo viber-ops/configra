@@ -3,6 +3,7 @@ package logworker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -54,6 +55,7 @@ func TestDeliverNotificationsOnceDeadLettersInvalidPayload(t *testing.T) {
 }
 
 type fakeNotificationStore struct {
+	claimed   int
 	events    []mysqlstore.OutboxEvent
 	targets   []mysqlstore.NotificationTarget
 	records   []mysqlstore.NotificationDeliveryRecord
@@ -69,17 +71,45 @@ func (store *fakeNotificationStore) ClaimOutbox(context.Context, mysqlstore.Outb
 	return store.events, nil
 }
 
-func (store *fakeNotificationStore) ClaimNotificationTargets(context.Context, mysqlstore.OutboxID, int) ([]mysqlstore.NotificationTarget, error) {
-	return store.targets, nil
+func (store *fakeNotificationStore) ClaimNotificationTargets(_ context.Context, _ mysqlstore.OutboxID, limit int) ([]mysqlstore.NotificationTarget, error) {
+	count := min(limit, len(store.targets))
+	claimed := append([]mysqlstore.NotificationTarget(nil), store.targets[:count]...)
+	store.targets = store.targets[count:]
+	store.claimed += count
+	return claimed, nil
 }
 
-func (store *fakeNotificationStore) RecordNotificationDelivery(_ context.Context, record mysqlstore.NotificationDeliveryRecord) error {
+func (store *fakeNotificationStore) RecordNotificationDelivery(ctx context.Context, record mysqlstore.NotificationDeliveryRecord) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	store.records = append(store.records, record)
 	if record.Status == mysqlstore.NotificationDeliveryRetrying {
 		store.pending = true
 		store.next = record.NextAttempt
 	}
 	return nil
+}
+
+type cancelDuringNotification struct{ cancel context.CancelFunc }
+
+func (sender cancelDuringNotification) Send(context.Context, mysqlstore.NotificationTarget, notification.Event) notification.AttemptResult {
+	sender.cancel()
+	return notification.AttemptResult{Status: mysqlstore.NotificationDeliveryRetrying, ErrorCode: "network_error"}
+}
+
+func TestNotificationCancellationRecordsAttemptWithoutClaimingUnsentTargets(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	event := validNotificationEvent(t)
+	store := &fakeNotificationStore{events: []mysqlstore.OutboxEvent{event}, targets: []mysqlstore.NotificationTarget{
+		{OutboxID: event.ID, DestinationID: notificationDestinationID(1), DestinationKey: "first", Attempt: 1, Active: true},
+		{OutboxID: event.ID, DestinationID: notificationDestinationID(2), DestinationKey: "second", Attempt: 1, Active: true},
+	}}
+	_, err := deliverNotificationsOnce(ctx, store, cancelDuringNotification{cancel: cancel})
+	if !errors.Is(err, context.Canceled) || store.claimed != 1 || len(store.records) != 1 || len(store.targets) != 1 {
+		t.Fatalf("cancellation lost attempt accounting: claimed=%d recorded=%d remaining=%d err=%v", store.claimed, len(store.records), len(store.targets), err)
+	}
 }
 
 func (store *fakeNotificationStore) NotificationProgress(context.Context, mysqlstore.OutboxID) (mysqlstore.NotificationProgressResult, error) {

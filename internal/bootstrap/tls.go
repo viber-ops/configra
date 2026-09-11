@@ -23,12 +23,15 @@ func LoadServerTLS(files TLSConfig, mode Mode) (*tls.Config, error) {
 	if mode == Management {
 		return config, nil
 	}
-	if mode != API || files.ClientCAFile == "" {
-		return nil, errors.New("API Server Client CA file is required")
+	if mode != API {
+		return nil, errors.New("invalid Server TLS mode")
 	}
-	clientCAs, err := LoadClientCAs(files.ClientCAFile)
-	if err != nil {
-		return nil, err
+	clientCAs := x509.NewCertPool()
+	if files.ClientCAFile != "" {
+		clientCAs, err = LoadClientCAs(files.ClientCAFile)
+		if err != nil {
+			return nil, err
+		}
 	}
 	config.ClientCAs = clientCAs
 	config.ClientAuth = tls.VerifyClientCertIfGiven

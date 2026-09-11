@@ -37,8 +37,8 @@ func TestManagementBootstrapInitializesOnceAndRejectsWrongMasterKey(t *testing.T
 	if err != nil {
 		t.Fatalf("SchemaVersion: %v", err)
 	}
-	if version != 1 {
-		t.Fatalf("SchemaVersion = %d, want 1", version)
+	if version != 2 {
+		t.Fatalf("SchemaVersion = %d, want 2", version)
 	}
 	if err := first.Close(); err != nil {
 		t.Fatalf("close first store: %v", err)

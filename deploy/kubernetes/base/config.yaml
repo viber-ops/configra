@@ -9,7 +9,6 @@ data:
     tls:
       certificate_file: /run/configra/server-tls/tls.crt
       private_key_file: /run/configra/server-tls/tls.key
-      client_ca_file: /run/configra/client-ca/ca.pem
     mysql:
       dsn_env: CONFIGRA_MYSQL_DSN
     key_provider:
@@ -44,7 +43,6 @@ data:
     tls:
       certificate_file: /run/configra/server-tls/tls.crt
       private_key_file: /run/configra/server-tls/tls.key
-      client_ca_file: /run/configra/client-ca/ca.pem
     mysql:
       dsn_env: CONFIGRA_MYSQL_DSN
     key_provider:

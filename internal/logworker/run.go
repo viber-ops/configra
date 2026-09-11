@@ -32,7 +32,7 @@ func Run(
 			break
 		}
 		logger.Warn("ClickHouse unavailable; Log Worker will retry")
-		deliveryContext, cancel := context.WithTimeout(ctx, 10*time.Second)
+		deliveryContext, cancel := context.WithTimeout(ctx, 15*time.Second)
 		_, deliveryErr := DeliverNotificationsOnce(deliveryContext, outbox, sender)
 		cancel()
 		if deliveryErr != nil && ctx.Err() == nil {
@@ -70,7 +70,7 @@ func Run(
 				_ = logs.Initialize(initializeContext)
 				cancel()
 			}
-			deliveryContext, cancel = context.WithTimeout(ctx, 10*time.Second)
+			deliveryContext, cancel = context.WithTimeout(ctx, 15*time.Second)
 			_, err = DeliverNotificationsOnce(deliveryContext, outbox, sender)
 			cancel()
 			if err != nil && ctx.Err() == nil {

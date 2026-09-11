@@ -80,11 +80,14 @@ func (store *Store) IsCertificateActive(ctx context.Context, fingerprint [sha256
 	err := store.db.QueryRowContext(ctx, `
 		SELECT EXISTS (
 			SELECT 1
-			FROM client_certificates
-			WHERE fingerprint_sha256 = ?
-			  AND revoked_at IS NULL
-			  AND not_before <= UTC_TIMESTAMP(6)
-			  AND not_after > UTC_TIMESTAMP(6)
+			FROM client_certificates AS certificate
+			LEFT JOIN certificate_authorities AS authority ON authority.id = certificate.authority_id
+			WHERE certificate.fingerprint_sha256 = ?
+			  AND certificate.revoked_at IS NULL
+			  AND certificate.not_before <= UTC_TIMESTAMP(6)
+			  AND certificate.not_after > UTC_TIMESTAMP(6)
+			  AND (certificate.authority_id IS NULL OR (authority.revoked_at IS NULL
+			       AND authority.not_before <= UTC_TIMESTAMP(6) AND authority.not_after > UTC_TIMESTAMP(6)))
 		)
 	`, fingerprint[:]).Scan(&active)
 	if err != nil {

@@ -9,3 +9,5 @@ test-results/
 !web/dist/
 !web/dist/**
 states/
+kubernetes/go.work
+kubernetes/go.work.sum

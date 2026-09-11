@@ -10,7 +10,7 @@ import (
 	"github.com/viber-ops/configra/internal/storage/mysqlstore"
 )
 
-const notificationBatchSize = 100
+const notificationBatchSize = 1
 
 type notificationOutbox interface {
 	ClaimOutbox(context.Context, mysqlstore.OutboxKind, int, time.Duration) ([]mysqlstore.OutboxEvent, error)
@@ -37,6 +37,9 @@ func DeliverNotificationsOnce(
 }
 
 func deliverNotificationsOnce(ctx context.Context, outbox notificationOutbox, sender notificationAttemptSender) (int, error) {
+	// Finish before the one-minute outbox lease can be reclaimed by another replica.
+	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	defer cancel()
 	events, err := outbox.ClaimOutbox(ctx, mysqlstore.OutboxNotification, notificationBatchSize, time.Minute)
 	if err != nil || len(events) == 0 {
 		return 0, err
@@ -55,17 +58,22 @@ func deliverNotificationsOnce(ctx context.Context, outbox notificationOutbox, se
 			}
 			continue
 		}
-		targets, err := outbox.ClaimNotificationTargets(ctx, outboxEvent.ID, 1000)
-		if err != nil {
-			resultErr = errors.Join(resultErr, err)
-			continue
-		}
 		recordFailed := false
-		for _, target := range targets {
-			attempt := sender.Send(ctx, target, event)
+		for attempted := 0; attempted < 100; attempted++ {
 			if err := ctx.Err(); err != nil {
 				return completed, errors.Join(resultErr, err)
 			}
+			targets, err := outbox.ClaimNotificationTargets(ctx, outboxEvent.ID, 1)
+			if err != nil {
+				resultErr = errors.Join(resultErr, err)
+				recordFailed = true
+				break
+			}
+			if len(targets) == 0 {
+				break
+			}
+			target := targets[0]
+			attempt := sender.Send(ctx, target, event)
 			record := mysqlstore.NotificationDeliveryRecord{
 				Target: target, Status: attempt.Status, HTTPStatus: attempt.HTTPStatus,
 				LatencyMS: attempt.LatencyMS, ErrorCode: attempt.ErrorCode,
@@ -81,10 +89,17 @@ func deliverNotificationsOnce(ctx context.Context, outbox notificationOutbox, se
 					record.NextAttempt = time.Now().UTC().Add(delay)
 				}
 			}
-			if err := outbox.RecordNotificationDelivery(ctx, record); err != nil {
+			// Cancellation must not erase the outcome of a request already attempted.
+			recordContext, cancelRecord := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+			err = outbox.RecordNotificationDelivery(recordContext, record)
+			cancelRecord()
+			if err != nil {
 				resultErr = errors.Join(resultErr, err)
 				recordFailed = true
 				break
+			}
+			if err := ctx.Err(); err != nil {
+				return completed, errors.Join(resultErr, err)
 			}
 		}
 		if recordFailed {

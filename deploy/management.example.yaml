@@ -4,8 +4,9 @@ listen: :8443
 tls:
   certificate_file: /run/configra/tls/server.crt
   private_key_file: /run/configra/tls/server.key
-  # Used only to verify certificates imported in Administration; the browser TLS endpoint never requests a Client Certificate.
-  client_ca_file: /run/configra/tls/client-ca.pem
+  # Optional external Client CA for certificate imports. Managed CAs need no file.
+  # The browser TLS endpoint never requests a Client Certificate.
+  # client_ca_file: /run/configra/tls/client-ca.pem
 mysql:
   dsn_env: CONFIGRA_MYSQL_DSN
 key_provider:

@@ -77,7 +77,7 @@ func TestDeploymentExamplesMatchTheBootstrapSchema(t *testing.T) {
 	}
 }
 
-func TestLoadAPIConfigRequiresClientCAAndRejectsUnusedOIDC(t *testing.T) {
+func TestLoadAPIConfigAllowsManagedClientCAsAndRejectsUnusedOIDC(t *testing.T) {
 	t.Setenv("CONFIGRA_TEST_MYSQL_DSN", "mysql-secret-sentinel")
 	valid := `
 version: 1
@@ -103,8 +103,8 @@ nats:
 	}
 
 	withoutCA := strings.Replace(valid, "  client_ca_file: /run/configra/client-ca.pem\n", "", 1)
-	if _, err := bootstrap.Load(writeFile(t, "without-ca.yaml", withoutCA), bootstrap.API); err == nil {
-		t.Fatal("API Config without Client CA succeeded")
+	if _, err := bootstrap.Load(writeFile(t, "without-ca.yaml", withoutCA), bootstrap.API); err != nil {
+		t.Fatalf("API Config using managed Client CAs failed: %v", err)
 	}
 	withOIDC := valid + `
 oidc:
@@ -182,8 +182,8 @@ oidc:
 		})
 	}
 	withoutCA := strings.Replace(base, "  client_ca_file: client-ca.pem\n", "", 1)
-	if _, err := bootstrap.Load(writeFile(t, "without-client-ca.yaml", withoutCA), bootstrap.Management); err == nil {
-		t.Fatal("Management Config without Client CA succeeded")
+	if _, err := bootstrap.Load(writeFile(t, "without-client-ca.yaml", withoutCA), bootstrap.Management); err != nil {
+		t.Fatalf("Management Config using managed Client CAs failed: %v", err)
 	}
 
 	missingEnv := strings.Replace(base, "CONFIGRA_TEST_MYSQL_DSN", "CONFIGRA_MISSING_DSN", 1)

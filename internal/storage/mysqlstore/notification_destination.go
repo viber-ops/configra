@@ -382,7 +382,7 @@ func (store *Store) ClaimNotificationTargets(ctx context.Context, outboxID Outbo
 		JOIN outbox_events AS event ON event.id = target.outbox_event_id
 		WHERE target.outbox_event_id = ? AND event.kind = 'notification' AND event.status = 'processing'
 		  AND target.status = 'pending' AND target.next_attempt_at <= UTC_TIMESTAMP(6) AND target.attempts < 8
-		ORDER BY destination.resource_key
+		ORDER BY target.next_attempt_at, destination.resource_key
 		LIMIT ?
 		FOR UPDATE
 	`, outboxID[:], limit)

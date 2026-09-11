@@ -93,9 +93,6 @@ spec:
             - name: server-tls
               mountPath: /run/configra/server-tls
               readOnly: true
-            - name: client-ca
-              mountPath: /run/configra/client-ca
-              readOnly: true
             - name: master-key
               mountPath: /run/configra/master-key
               readOnly: true
@@ -109,9 +106,6 @@ spec:
         - name: server-tls
           secret:
             secretName: configra-management-tls
-        - name: client-ca
-          secret:
-            secretName: configra-client-ca
         - name: master-key
           secret:
             secretName: configra-master-key

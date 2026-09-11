@@ -1062,6 +1062,7 @@ func signedClientCertificate(t *testing.T, commonName string) (*x509.CertPool, s
 }
 
 type recordingConfigWriter struct {
+	management.AuthorityRepository
 	requests                       []mysqlstore.ConfigCommit
 	validations                    []mysqlstore.ConfigValidation
 	validationResult               mysqlstore.ConfigValidationResult
@@ -1276,6 +1277,10 @@ func (writer *recordingConfigWriter) RevokeToken(_ context.Context, request mysq
 func (writer *recordingConfigWriter) ListClientCertificates(_ context.Context, includeRevoked bool) ([]mysqlstore.ClientCertificate, error) {
 	writer.certificateLists = append(writer.certificateLists, includeRevoked)
 	return writer.certificates, nil
+}
+
+func (writer *recordingConfigWriter) ActiveCertificateAuthorities(context.Context) ([][]byte, error) {
+	return nil, nil
 }
 
 func (writer *recordingConfigWriter) RegisterVerifiedClientCertificate(_ context.Context, request mysqlstore.ClientCertificateRegister) (mysqlstore.ClientCertificateResult, error) {

@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: configra-sync
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: configra-sync
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: configra-sync
+    spec:
+      serviceAccountName: configra-sync
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: controller
+          image: configra-kubernetes
+          args:
+            - sync
+            - --namespace=$(POD_NAMESPACE)
+            - --configra-url=https://configra-api.configra.svc
+            - --server-ca-file=/run/configra-trust/ca.crt
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: GOMEMLIMIT
+              value: 384MiB
+          ports:
+            - name: probes
+              containerPort: 8081
+          readinessProbe:
+            httpGet: {path: /readyz, port: probes}
+          livenessProbe:
+            httpGet: {path: /healthz, port: probes}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {memory: 512Mi}
+          volumeMounts:
+            - name: server-trust
+              mountPath: /run/configra-trust
+              readOnly: true
+      volumes:
+        - name: server-trust
+          secret:
+            secretName: configra-server-trust
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: configra-sync
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: configra-sync
