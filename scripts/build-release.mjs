@@ -43,6 +43,7 @@ const env = {
   GOFLAGS: '-mod=readonly',
   CGO_ENABLED: '0',
 };
+run(process.execPath, ['--test', join(root, 'scripts/go-notices/collect.test.mjs')], { env });
 run('npm', ['--prefix', 'web', 'ci', '--ignore-scripts']);
 run('npm', ['--prefix', 'web', 'run', 'build']);
 mkdirSync(output, { recursive: true });
@@ -107,6 +108,7 @@ for (const platform of ['darwin', 'linux']) {
       cpSync(join(root, file), join(stage, file));
       cpSync(join(root, 'kubernetes', file), join(stage, 'kubernetes', file));
     }
+    run('sh', [join(root, 'scripts/go-notices/collect.sh'), join(stage, 'licenses/go1.26.7')], { env: buildEnv });
     writeFileSync(
       join(stage, 'BUILD.json'),
       JSON.stringify(

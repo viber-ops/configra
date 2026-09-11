@@ -9,6 +9,8 @@ RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY kubernetes/internal ./internal
 COPY kubernetes/cmd ./cmd
 COPY kubernetes/LICENSE kubernetes/NOTICE /out/licenses/
+COPY scripts/go-notices ./scripts/go-notices
+RUN GOOS=$TARGETOS GOARCH=$TARGETARCH sh scripts/go-notices/collect.sh /out/licenses/go1.26.7
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     GOOS=$TARGETOS GOARCH=$TARGETARCH go build -buildvcs=false -trimpath -ldflags="-s -w" -o /out/configra-kubernetes ./cmd/configra-kubernetes
 FROM scratch

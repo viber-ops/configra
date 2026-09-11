@@ -45,6 +45,14 @@ for (const platform of ['darwin', 'linux']) {
     assert.match(read('NOTICE'), /Copyright 2026 The Configra Authors/);
     assert.match(read('kubernetes/LICENSE'), /Apache License\s+Version 2\.0, January 2004/);
     assert.match(read('kubernetes/NOTICE'), /Copyright 2026 The Configra Authors/);
+    assert.match(read('licenses/go1.26.7/LICENSE'), /The Go Authors/);
+    for (const file of readFileSync(join(root, 'scripts/go-notices/files.txt'), 'utf8').trim().split('\n')) {
+      const stored = /\.(?:go|s|h)$/.test(file) ? `${file}.txt` : file;
+      assert.ok(entries.includes(`${name}/licenses/go1.26.7/${stored}`), `${name}: missing Go notice ${file}`);
+    }
+    assert.match(read('licenses/go1.26.7/src/runtime/memmove_amd64.s.txt'), /Lucent/);
+    assert.match(read('licenses/go1.26.7/src/crypto/internal/fips140/edwards25519/scalar.go.txt'), /fiat-crypto/);
+    assert.match(read('licenses/go1.26.7/SOURCE.md'), /0ed24eac755105085b89fe9cabc2742b91a0ad7b94b59d3ad364918ebc8956ad/);
     const build = JSON.parse(read('BUILD.json'));
     assert.equal(build.version, version);
     assert.equal(build.platform, platform);
@@ -79,6 +87,6 @@ for (const platform of ['darwin', 'linux']) {
     }
     assert.ok(!entries.some((path) => /(?:^|\/)(?:\.git|\.cache|node_modules)(?:\/|$)/.test(path)));
     assert.ok(!entries.some((path) => /\.(?:key|p12|pfx)$/.test(path)), 'No private credential files');
-    console.log(`PASS ${name}: checksums, target/toolchain, pinned SDK and first-party license materials`);
+    console.log(`PASS ${name}: checksums, target/toolchain, pinned SDK, project and Go notice materials`);
   }
 }

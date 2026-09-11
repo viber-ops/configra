@@ -18,7 +18,7 @@ VEGETA_VERSION := v12.13.0
 VEGETA := .cache/vegeta-12.13.0/vegeta
 
 .PHONY: web-build web-test
-.PHONY: kubernetes-test kubernetes-image
+.PHONY: kubernetes-test kubernetes-image image-license-test
 KUBERNETES_IMAGE ?= configra-kubernetes:test
 kubernetes-test:
 	GOWORK=off go -C kubernetes test -race ./...
@@ -26,6 +26,11 @@ kubernetes-test:
 
 kubernetes-image:
 	docker build -f kubernetes/Dockerfile --tag '$(KUBERNETES_IMAGE)' .
+
+# These filesystem/provenance checks do not start databases or Configra services.
+image-license-test: image kubernetes-image
+	node scripts/verify-image.mjs '$(IMAGE)' configra
+	node scripts/verify-image.mjs '$(KUBERNETES_IMAGE)' configra-kubernetes
 
 web-build:
 	npm --prefix web ci --ignore-scripts

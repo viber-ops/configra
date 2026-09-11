@@ -8,4 +8,7 @@
 !kubernetes/internal/**
 !kubernetes/cmd
 !kubernetes/cmd/**
+!scripts
+!scripts/go-notices
+!scripts/go-notices/**
 **/*_test.go

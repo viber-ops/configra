@@ -16,9 +16,11 @@ extracting. Checksums detect corruption, not an independently compromised releas
 account. `BUILD.json` records the exact source commit and target.
 
 `LICENSE` and `NOTICE` apply to original Configra source. The Kubernetes module
-also carries its own copies. Third-party dependencies retain their own terms;
-the complete third-party/runtime/CA materials and SBOM are still a stable-release
-gate, not something proved by these first-party files.
+also carries its own copies. `licenses/go1.26.7/` retains reviewed Go runtime and
+standard-library notices, including source-embedded terms; its `SOURCE.md`
+identifies the exact source and scope. Other third-party dependencies retain
+their own terms. Complete application-module/UI/CA materials and the SBOM remain
+a stable-release gate, not something proved by these files alone.
 
 ```sh
 ./configra --version
@@ -59,3 +61,9 @@ docker build -f kubernetes/Dockerfile \
 ```
 
 No prebuilt container image is implied by the binary release.
+
+From the source checkout, `make image-license-test` builds both images and checks
+their project and Go notice files, actual binary targets, the pinned SDK, and
+`--version` under a non-root, read-only, network-disabled container. It creates
+and removes only its inspection containers; it does not start dependencies or
+prove production startup, recovery, or full third-party license compliance.
