@@ -1,59 +1,119 @@
 # Configra
 
-Configra is a V1 configuration and sensitive-value service: MySQL 8.0.22 stores
-transactional state, ClickHouse stores Access/Audit logs, and machine clients read
-resolved YAML/JSON or File fields over HTTPS with an Environment-scoped Token and,
-by default, mTLS.
+**Application configuration and sensitive values, managed in one place.**
 
-Vault Items use the composite identity `(namespace, item)` and Config references use
-exactly four segments, for example `{vault.platform.mysql.password}`. Namespace is
-organizational identity only; Token authorization remains Environment-scoped.
+[Website](https://viber-ops.github.io/configra/) ·
+[Documentation](https://viber-ops.github.io/docs/configra/) ·
+[Downloads](https://github.com/viber-ops/configra/releases/tag/v0.1.0-rc.1) ·
+[Go SDK](https://github.com/viber-ops/configra-go) · [中文](README.zh-CN.md)
 
-## Verify
+Configra is a self-hosted workspace for developers and operators who are tired of
+copying configuration between repositories, deployment scripts and clusters.
+Manage versioned YAML/JSON, reference shared Vault values, and deliver resolved
+configuration through a Go SDK or Kubernetes.
 
-Go 1.25.13 or newer is required; the production image uses the digest-pinned
-Go 1.26.7 builder.
+> **Preview: v0.1.0-rc.1.** The features below are in the tagged preview, not a
+> completed production acceptance. Use the tag for these guides; the feature PR
+> remains under review. [Read the boundaries](https://viber-ops.github.io/docs/configra/security/).
 
-The integration and load suites use the sibling SDK checkout through `e2e/go.mod`.
-Clone both repositories into the same parent directory before running those suites:
+![Configra: resource navigation, Vault entries, environment variants and field details](https://viber-ops.github.io/assets/configra/vault-light.png)
 
-```sh
-git clone https://github.com/viber-ops/configra.git
-git clone https://github.com/viber-ops/configra-go.git
-cd configra
+*Actual management UI with synthetic demo data. Sensitive values are hidden.*
+
+## Is this for your team?
+
+- You maintain different configuration for development, staging and production.
+- Several applications reference the same passwords, identifiers or certificate files.
+- Developers need usable configuration; operators need change history and credential control.
+- Some workloads use Go, while others only understand files or environment variables.
+
+## What you get
+
+| Need | Configra provides |
+| --- | --- |
+| One source of configuration | Environment-specific YAML/JSON, history, comparison and cloning |
+| Shared sensitive values | Namespaced Vault Items with Text, Secret and File fields |
+| Machine access | HTTPS, Environment-scoped Tokens, mTLS and revocation checks |
+| Less certificate work | Managed client CAs, encrypted signing keys and one-time private exports |
+| Go integration | Resolved reads, file downloads and Viper snapshots with ETag polling |
+| Kubernetes integration | CSI file mounts **and** native Secret/ConfigMap synchronization |
+
+For example, a Config can reference a Vault value without copying it:
+
+```yaml
+database:
+  username: "{vault.platform.database.username}"
+  password: "{vault.platform.database.password}"
 ```
 
+Applications receive the final document for the requested environment. References
+must occupy the complete scalar; File fields are read separately.
+
+## Try the workspace
+
+With Docker Compose, Go 1.25.13+, Node.js 24, npm, Make and OpenSSL installed:
+
 ```sh
-make tla
+git clone --branch v0.1.0-rc.1 https://github.com/viber-ops/configra.git
+git clone --branch v0.1.0-rc.1 https://github.com/viber-ops/configra-go.git
+cd configra
+make local-run
+```
+
+Open **https://localhost:18088** and sign in with the local-only account
+`admin` / `configra-admin` (or `viewer` / `configra-viewer`). This command prepares
+development dependencies, certificates, OIDC and the UI. It starts Management;
+the machine API is a separate service. The local certificate is self-signed.
+**Do not expose the demo stack or use its credentials in production.**
+
+[Local walkthrough](https://viber-ops.github.io/docs/configra/quickstart/) ·
+[Download macOS / Linux binaries](https://viber-ops.github.io/docs/configra/installation/)
+
+## Connect your applications
+
+| Application reads | Use | When changes take effect |
+| --- | --- | --- |
+| Go values | [Go SDK](https://viber-ops.github.io/docs/configra/go-sdk/) | Your application validates and applies a new snapshot |
+| Files in a Pod | [CSI provider](https://viber-ops.github.io/docs/configra/kubernetes/) | Driver rotation refreshes files; the application reloads |
+| Native volume or envFrom | [Binding controller](https://viber-ops.github.io/docs/configra/kubernetes/) | Kubernetes refreshes volumes; environment variables require Pod replacement |
+
+Configra itself can run in Kubernetes as separate Management and API Deployments.
+It needs MySQL, NATS, ClickHouse, OIDC and external bootstrap secrets. It **does not
+use its own provider to obtain its Master Key or startup credentials**.
+
+[Deploy the service](https://viber-ops.github.io/docs/configra/deployment/) ·
+[Manage client certificates](https://viber-ops.github.io/docs/configra/certificates/) ·
+[Backup and recovery](https://viber-ops.github.io/docs/configra/operations/)
+
+## Know the boundaries
+
+Machine permissions are **Environment-wide**, and human Admin/Viewer roles are
+workspace-wide. Vault Namespaces organize items; they do not isolate untrusted
+tenants. Configra is not a dynamic database-credential engine, HSM/KMS, or an
+application restart controller.
+
+The current 1000 QPS gate did not pass on the shared test host. Some gateway
+rejections are not durable Audit events, inventory APIs still need bounded
+server-side pagination, and automatic Master Key rotation is not implemented.
+See the [security and architecture review](https://viber-ops.github.io/docs/configra/security/)
+before a production rollout.
+
+## Develop and verify
+
+Clone the SDK next to this repository for integration tests. The release builder
+uses Go 1.26.7 and embeds the production web build.
+
+```sh
 go test -race ./...
 go vet ./...
-go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
 make web-test
+make kubernetes-test
 make test-integration
 make image-test
 make backup-test
 make load-test
 ```
 
-Container tests pin and query-check MySQL `8.0.22`. The ten-minute load report is
-written to `.cache/load/latest.json`.
-
-## Run and deploy
-
-For the local development stack, run `make local-run`, then open
-`https://localhost:18088`. The browser is redirected to the real Casdoor container at
-`http://localhost:18080`; use `admin` / `configra-admin` or
-`viewer` / `configra-viewer`. The local TLS certificate is self-signed.
-
-- Product and protocol: [docs/design.md](docs/design.md)
-- Release gates and current evidence: [docs/production-readiness.md](docs/production-readiness.md)
-- Migration review and validation: [docs/migration-review.md](docs/migration-review.md)
-- Security and architecture review: [docs/security-architecture-review.md](docs/security-architecture-review.md)
-- Managed client certificates: [docs/managed-certificates.md](docs/managed-certificates.md)
-- Kubernetes workload provider and synchronization: [kubernetes/README.md](kubernetes/README.md)
-- Management bootstrap: [deploy/management.example.yaml](deploy/management.example.yaml)
-- API bootstrap: [deploy/api.example.yaml](deploy/api.example.yaml)
-- Kubernetes: [deploy/kubernetes/README.md](deploy/kubernetes/README.md)
-- Backup and restore: [deploy/backup/README.md](deploy/backup/README.md)
-
-The Go SDK and Viper Handler live in the sibling `configra-go` module.
+The container suites use MySQL 8.0.22. `make load-test` is an acceptance check, not
+a claim that every environment meets its target. Maintainer-level protocol,
+review and verification records remain in [docs/](docs/).
