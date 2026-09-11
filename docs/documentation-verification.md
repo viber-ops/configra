@@ -73,3 +73,9 @@ production/load configuration still uses its original server command and version
   recovery, bounded inventories and final release-distribution compliance.
 
 These remain open in [production-work.md](production-work.md).
+
+The live Management log also emitted one `Audit Event delivery did not complete`
+warning during credential setup. This run did not inspect the final outbox and
+ClickHouse delivery state, so it provides no evidence that every setup audit was
+delivered. Reproduce this with the same smoke sequence and inspect durable
+delivery/retry outcomes before closing the Audit requirement.
