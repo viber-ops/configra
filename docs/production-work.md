@@ -8,7 +8,7 @@ the [production acceptance contract](production-readiness.md).
 
 | Requirement | Required evidence | Current state |
 | --- | --- | --- |
-| Apache-2.0 distribution | License/notice in source, nested module, binaries and images; third-party license inventory | Source license and policy files added; distribution/notices audit remains |
+| Apache-2.0 distribution | License/notice in source, nested module, binaries and images; third-party license inventory | Project and reviewed Go runtime materials passed [local archive/image verification](distribution-verification-2026-09-12.md); application-module/UI/CA materials and SBOM remain |
 | Open-source maintenance | Contribution/security policies, working private disclosure, continuous checks and dependency updates | Policies added; private reporting verified enabled on service/SDK; continuous checks/dependency updates still need completion |
 | MySQL 8.0.22 support | Exact-version integration, migration and restore tests; unchanged capacity gate | Required by the user; not replaced with an 8.4-only baseline |
 | MySQL 8.4 comparison | Official compatibility/upgrade sources, separately identified runtime evidence | [Primary-source comparison](research/mysql-8.0.22-and-8.4-compatibility.md) completed; runtime evidence absent |
@@ -19,7 +19,7 @@ the [production acceptance contract](production-readiness.md).
 | 1000 QPS for ten minutes | Production image, real encrypted Vault reference, mTLS, 2 CPU/512 MiB limit, unchanged gate, leakage checks and recorded host | Last current-candidate warmup failed; not accepted |
 | Usable instructions, not slogans | Clean-environment walkthroughs of quickstart, SDK, installation, Kubernetes and backup/restore; failures fixed | [Local protocol and SDK walkthrough](documentation-verification.md) executed; startup failure fixed in development source, remaining guides still need full execution |
 | Chinese and English website | Same-page language switching, corresponding guides, locale-correct links/metadata, build and content checks | 28 pages built; type check and 32 static tests passed; published as website commit `0d42d33`; browser acceptance still open |
-| Release integrity | Clean commit/tag mapping, tests, license/notices/SBOM and downloadable multi-platform artifacts | Preview artifacts exist; stable release not approved |
+| Release integrity | Clean commit/tag mapping, tests, license/notices/SBOM and downloadable multi-platform artifacts | License-bearing SDK rc.2 published and proxy ZIP verified; newer four-platform server candidates are local only; stable release not approved |
 
 ## Working rules
 
@@ -39,8 +39,11 @@ the [production acceptance contract](production-readiness.md).
 
 [Direct-dependency research](research/direct-dependency-licenses.md) identifies
 MPL-2.0 for the MySQL driver, file-specific MIT/Apache licensing for YAML and
-required upstream notices. The old SDK module archives lack LICENSE/NOTICE files.
-Before a new release, complete the transitive inventory, retain required texts and
-source-access information in artifacts, publish a license-bearing SDK version,
-and verify what recipients actually download. Do not describe a top-level Apache
-file as completion of the distribution audit.
+required upstream notices. The old SDK module archives lack LICENSE/NOTICE files;
+the new SDK rc.2 ZIP was verified to contain them and is pinned by Kubernetes.
+Project and reviewed Go runtime notice delivery now have actual archive/image
+evidence. Before distribution approval, complete the application-module/UI/CA
+inventory, source-access materials and SBOM, address prior-artifact supplements,
+and verify what recipients actually download. The [distribution inclusion manifest](research/distribution-license-requirements.md)
+records the remaining upstream requirements. Do not describe a top-level Apache
+file or a successful scanner as completion of that audit.
