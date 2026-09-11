@@ -68,3 +68,8 @@ Token 按 **Environment** 授权，Admin / Viewer 为工作区级角色，Vault 
 本轮 1000 QPS 验收尚未通过，部分早期拒绝请求的持久审计和后端列表分页仍需改进。生产前先阅读[安全与发布状态](https://viber-ops.github.io/docs/configra/security/)，并完成自己的负载与恢复验证。
 
 [本地体验](https://viber-ops.github.io/docs/configra/quickstart/) · [服务部署](https://viber-ops.github.io/docs/configra/deployment/) · [备份与排障](https://viber-ops.github.io/docs/configra/operations/)
+
+## 许可证
+
+项目原创代码采用 [Apache-2.0](LICENSE)，第三方组件保留各自的许可证与声明。
+贡献方式见 [CONTRIBUTING.md](CONTRIBUTING.md)，安全问题请通过 [SECURITY.md](SECURITY.md) 中的私密渠道报告。
