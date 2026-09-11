@@ -44,6 +44,7 @@ const env = {
   CGO_ENABLED: '0',
 };
 run(process.execPath, ['--test', join(root, 'scripts/go-notices/collect.test.mjs')], { env });
+run(process.execPath, ['--test', join(root, 'scripts/compose-distribution.test.mjs')], { env });
 run('npm', ['--prefix', 'web', 'ci', '--ignore-scripts']);
 run('npm', ['--prefix', 'web', 'run', 'test:licenses']);
 run('npm', ['--prefix', 'web', 'run', 'build']);
@@ -138,6 +139,8 @@ for (const platform of ['darwin', 'linux']) {
         2,
       ) + '\n',
     );
+    run(process.execPath, [join(root, 'scripts/compose-distribution.mjs'), 'bundle', stage]);
+    run(process.execPath, [join(root, 'scripts/verify-distribution.mjs'), stage, 'INVENTORY.json']);
     const archive = `${name}.tar.gz`;
     run('tar', ['-czf', join(output, archive), '-C', output, name], {
       env: { ...process.env, COPYFILE_DISABLE: '1' },

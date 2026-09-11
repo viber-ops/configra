@@ -13,4 +13,7 @@
 !scripts/go-notices/**
 !scripts/go-licenses
 !scripts/go-licenses/**
+!scripts/ca-notices
+!scripts/ca-notices/**
+!scripts/compose-distribution.mjs
 **/*_test.go

@@ -18,9 +18,16 @@ account. `BUILD.json` records the exact source commit and target.
 `LICENSE` and `NOTICE` apply to original Configra source. The Kubernetes module
 also carries its own copies. `licenses/go1.26.7/` retains reviewed Go runtime and
 standard-library notices, including source-embedded terms; its `SOURCE.md`
-identifies the exact source and scope. Other third-party dependencies retain
-their own terms. Complete application-module/UI/CA materials and the SBOM remain
-a stable-release gate, not something proved by these files alone.
+identifies the exact source and scope. `licenses/configra-modules/` and
+`licenses/configra-kubernetes-modules/` retain dependency texts and source-access
+instructions; `licenses/ui/` contains the browser materials. The exact MySQL
+driver source ZIP is included under the service's module materials.
+
+`SBOM.cdx.json` combines both executables, linked modules, Go runtime and UI
+evidence. `INVENTORY.json` records every delivered file except itself, including
+the SBOM, with size, mode and SHA-256. Neither is an independent digital signature.
+Native binaries use host-supplied system trust; their archives do not pretend to
+include the host operating system's CA store.
 
 ```sh
 ./configra --version
@@ -62,8 +69,16 @@ docker build -f kubernetes/Dockerfile \
 
 No prebuilt container image is implied by the binary release.
 
+Images place their materials under `/licenses/configra/` or
+`/licenses/configra-kubernetes/`. Their system CA collection includes the exact
+Debian source archive, copyright record, MPL/GPL texts, selection configuration
+and runtime-bundle hash. GPL terms apply to retained Debian script sources, not
+to Configra's separate original code. The image's aggregate SBOM and inventory
+live at the same license root. Build tools are absent from the scratch payload.
+
 From the source checkout, `make image-license-test` builds both images and checks
-their project and Go notice files, actual binary targets, the pinned SDK, and
+their full exported payload, project/dependency/CA notice files, actual binary
+targets, component-evidence relationships, the pinned SDK, and
 `--version` under a non-root, read-only, network-disabled container. It creates
 and removes only its inspection containers; it does not start dependencies or
 prove production startup, recovery, or full third-party license compliance.

@@ -129,6 +129,13 @@ for (const platform of ['darwin', 'linux']) {
     }
     assert.ok(!entries.some((path) => /(?:^|\/)(?:\.git|\.cache|node_modules)(?:\/|$)/.test(path)));
     assert.ok(!entries.some((path) => /\.(?:key|p12|pfx)$/.test(path)), 'No private credential files');
+    const extracted = mkdtempSync(join(tmpdir(), 'configra-complete-bundle-'));
+    try {
+      execFileSync('tar', ['-xzpf', archive, '--no-same-owner', '-C', extracted]);
+      execFileSync(process.execPath, [join(root, 'scripts/verify-distribution.mjs'), join(extracted, name), 'INVENTORY.json'], { stdio: 'inherit' });
+    } finally {
+      rmSync(extracted, { recursive: true });
+    }
     console.log(`PASS ${name}: checksums, target/toolchain, SDK, runtime/module/UI materials and source/SBOM binding`);
   }
 }

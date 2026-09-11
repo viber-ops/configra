@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -55,6 +55,43 @@ try {
   assert.deepEqual(moduleBOM.components.map((entry) => `${entry.name}@${entry.version}`).sort(),
     info.Deps.map((entry) => `${entry.Path}@${entry.Version}`).sort());
   const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
+  const caDirectory = join(temporary, 'ca-certificates');
+  run(['cp', `${container}:/licenses/${binary}/ca-certificates`, caDirectory]);
+  run(['cp', `${container}:/etc/ssl/certs/ca-certificates.crt`, join(temporary, 'system-ca.crt')]);
+  const caMetadata = JSON.parse(readFileSync(join(caDirectory, 'metadata.json'), 'utf8'));
+  assert.equal(caMetadata.package, 'ca-certificates');
+  assert.equal(caMetadata.version, '20250419~deb12u1');
+  assert.equal(caMetadata.bundle.sha256, hash(readFileSync(join(temporary, 'system-ca.crt'))));
+  assert.equal(hash(readFileSync(join(caDirectory, 'source.tar.xz'))),
+    'b2a431cbab9a0ece921cffacbe238dc27a3e382ad4a1806dc8968c5eff30471d');
+  assert.match(readFileSync(join(caDirectory, 'MPL-2.0.txt'), 'utf8'), /Mozilla Public License Version 2.0/);
+  assert.match(readFileSync(join(caDirectory, 'GPL-2.0.txt'), 'utf8'), /GNU GENERAL PUBLIC LICENSE/);
+  for (const file of caMetadata.files) {
+    assert.ok(!file.path.includes('/') && file.path !== '..');
+    assert.equal(hash(readFileSync(join(caDirectory, file.path))), file.sha256);
+  }
+  run(['cp', `${container}:/licenses/${binary}/SBOM.cdx.json`, join(temporary, 'SBOM.cdx.json')]);
+  run(['cp', `${container}:/licenses/${binary}/INVENTORY.json`, join(temporary, 'INVENTORY.json')]);
+  const completeBOM = JSON.parse(readFileSync(join(temporary, 'SBOM.cdx.json'), 'utf8'));
+  const inventory = JSON.parse(readFileSync(join(temporary, 'INVENTORY.json'), 'utf8'));
+  assert.equal(completeBOM.bomFormat, 'CycloneDX');
+  for (const name of [binary, 'stdlib', 'ca-certificates']) {
+    assert.ok(completeBOM.components.some((entry) => entry.name === name), `Whole-image inventory includes ${name}`);
+  }
+  assert.ok(inventory.files.some((entry) => entry.path === 'etc/ssl/certs/ca-certificates.crt'));
+  const exported = join(temporary, 'image.tar');
+  const unpacked = join(temporary, 'rootfs');
+  run(['export', '--output', exported, container]);
+  const paths = execFileSync('tar', ['-tf', exported], { encoding: 'utf8' }).trim().split('\n');
+  assert.ok(paths.every((path) => !path.startsWith('/') && !path.includes('\\') && !path.split('/').includes('..')));
+  const kinds = execFileSync('tar', ['-tvf', exported], { encoding: 'utf8' }).trim().split('\n');
+  // Docker's init layer adds this mount-table alias; never extract its absolute target.
+  assert.deepEqual(kinds.filter((entry) => !entry.startsWith('-') && !entry.startsWith('d') &&
+    !(entry.startsWith('l') && entry.endsWith(' etc/mtab -> /proc/mounts'))), [], 'Unexpected exported file kinds');
+  mkdirSync(unpacked);
+  execFileSync('tar', ['-xpf', exported, '--no-same-owner', '--exclude=etc/mtab', '-C', unpacked]);
+  execFileSync(process.execPath, [join(root, 'scripts/verify-distribution.mjs'), unpacked,
+    `licenses/${binary}/INVENTORY.json`, '--container-export'], { stdio: 'inherit' });
   assert.equal(moduleBOM.metadata.component.hashes[0].content, hash(readFileSync(join(temporary, binary))),
     'The module SBOM describes this exact executable');
   for (const dependency of moduleBOM.components) {
