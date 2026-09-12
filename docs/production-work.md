@@ -8,7 +8,7 @@ the [production acceptance contract](production-readiness.md).
 
 | Requirement | Required evidence | Current state |
 | --- | --- | --- |
-| Apache-2.0 distribution | License/notice in source, nested module, binaries and images; third-party license inventory | Project/runtime plus [Go-module/UI material and MySQL source delivery](third-party-delivery-2026-09-12.md) verified in local artifacts; system CA material, whole-artifact reconciliation and prior-release supplements remain |
+| Apache-2.0 distribution | License/notice in source, nested module, binaries and images; third-party license inventory | Project/runtime/module/UI/MySQL source plus [system CA and complete-payload composition](complete-distribution-2026-09-12.md) verified in local candidates; prior-release supplements and final published-candidate checks remain |
 | Open-source maintenance | Contribution/security policies, working private disclosure, continuous checks and dependency updates | Policies added; private reporting verified enabled on service/SDK; continuous checks/dependency updates still need completion |
 | MySQL 8.0.22 support | Exact-version integration, migration and restore tests; unchanged capacity gate | Required by the user; not replaced with an 8.4-only baseline |
 | MySQL 8.4 comparison | Official compatibility/upgrade sources, separately identified runtime evidence | [Primary-source comparison](research/mysql-8.0.22-and-8.4-compatibility.md) completed; runtime evidence absent |
@@ -43,8 +43,9 @@ required upstream notices. The old SDK module archives lack LICENSE/NOTICE files
 the new SDK rc.2 ZIP was verified to contain them and is pinned by Kubernetes.
 Project/runtime, Go application-module and UI notice delivery now have actual
 archive/image evidence, along with MySQL covered source and scoped module/UI
-SBOMs. Before distribution approval, complete system CA material and whole-
-artifact SBOM reconciliation, address prior-artifact supplements, and verify
-what recipients actually download. The [distribution inclusion manifest](research/distribution-license-requirements.md)
+SBOMs. System CA source/materials and aggregate SBOM/file-inventory reconciliation
+now pass for the local four-platform bundles and both image architectures. Before
+distribution approval, address prior-artifact supplements and verify the final
+published candidate recipients actually download. The [distribution inclusion manifest](research/distribution-license-requirements.md)
 records the remaining upstream requirements. Do not describe a top-level Apache
 file or a successful scanner as completion of that audit.
