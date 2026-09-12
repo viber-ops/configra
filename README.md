@@ -115,7 +115,7 @@ make load-test
 
 The container suites use MySQL 8.0.22. `make load-test` is an acceptance check, not
 a claim that every environment meets its target. Maintainer-level protocol,
-review and verification records remain in [docs/](docs/).
+review and verification records are indexed in [maintainer documentation](docs/README.md).
 
 ## License
 

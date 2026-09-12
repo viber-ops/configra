@@ -1,6 +1,27 @@
-# Production readiness contract
+# Production readiness
 
 This document is the completion contract for Configra V1. A capability is complete only when its evidence below exists and passes from a clean checkout; implementation progress or a narrower test is not substitute evidence.
+
+## Current status — 2026-09-12
+
+The objective is a production-usable, Apache-2.0 open-source release. It is still
+open. This is the single current work record; the acceptance requirements below
+are unchanged. Dated results live in [verification/](verification/).
+
+| Requirement | Required evidence | Current state |
+| --- | --- | --- |
+| Apache-2.0 distribution | License/notice in source, nested module, binaries and images; third-party license inventory | Project/runtime/module/UI/MySQL source, system CA and complete-payload composition [verified in local candidates](verification/2026-09-12.md#distribution); prior-release supplements and final published-candidate checks remain |
+| Open-source maintenance | Contribution/security policies, working private disclosure, continuous checks and dependency updates | Policies added; private reporting verified enabled on service/SDK; continuous checks/dependency updates still need completion |
+| MySQL 8.0.22 support | Exact-version integration, migration and restore tests; unchanged capacity gate | Required by the user; not replaced with an 8.4-only baseline |
+| MySQL 8.4 comparison | Official compatibility/upgrade sources, separately identified runtime evidence | [Primary-source comparison](research/mysql-8.0.22-and-8.4-compatibility.md) completed; runtime evidence absent |
+| Complete authenticated mutation audit | Authenticated rejections have durable, value-free receipts; logical Operation identities survive replay; final image/failure drills pass | Gateway capture and credential-identifier repair implemented; [live HTTP, E2E and UI checks passed](verification/2026-09-12.md#audit); final image and recovery stress/fault checks remain |
+| Bounded management inventories | Server-side limits/pagination, consumer behavior and scale/query evidence | Frontend pagination exists; backend bounding remains |
+| Key recovery and lifecycle | Correct/wrong-key drills, usable rotation procedure, CA/client lifecycle checks | Existing lifecycle tests; rotation/recovery acceptance still needs review |
+| Production process and Kubernetes | Exact release images, readiness/shutdown, TLS pass-through, rollout, CSI/sync and dependency failure tests | Prior evidence exists; final candidate must be revalidated |
+| 1000 QPS for ten minutes | Production image, real encrypted Vault reference, mTLS, 2 CPU/512 MiB limit, unchanged gate, leakage checks and recorded host | Last current-candidate warmup failed; not accepted |
+| Usable instructions, not slogans | Clean-environment walkthroughs of quickstart, SDK, installation, Kubernetes and backup/restore; failures fixed | [Local protocol and SDK walkthrough](verification/2026-09-12.md#documentation) executed; startup failure fixed in development source, remaining guides still need full execution |
+| Chinese and English website | Same-page language switching, corresponding guides, locale-correct links/metadata, build and content checks | 28 pages built; type check and 32 static tests passed; published as website commit `0d42d33`; browser acceptance still open |
+| Release integrity | Clean commit/tag mapping, tests, license/notices/SBOM and downloadable multi-platform artifacts | [License-bearing SDK rc.2](verification/2026-09-12.md#sdk-release) published and proxy ZIP verified; newer four-platform server candidates are local only; stable release not approved |
 
 ## Public test seams
 
@@ -43,8 +64,9 @@ artifacts, overwrite refusal, plaintext exclusion, and Crypto Sentinel failure.
 An operator-selected RPO/RTO, durable encrypted storage, retention policy, and
 scheduled off-site drill are still deployment-specific release evidence.
 
-`make web-test` currently builds the embedded production bundle and passes 36
-Playwright flows covering both locales, Viewer/Admin boundaries, lifecycle operations,
+The latest recorded build/browser run passed
+[43 Playwright flows](verification/2026-09-12.md#distribution), covering both locales,
+Viewer/Admin boundaries, lifecycle operations,
 Environment detail and exact inventory filters, arbitrary historical Revision inspection,
 Config validate/format and same- or cross-Environment Revision compare/restore/clone,
 dirty-draft and Conflict handling, value-free current Vault usages, destructive-edit impact
@@ -89,3 +111,32 @@ Every end-to-end run uses unique sentinel values for API Token, Vault Secret, Fi
 ## Completion evidence
 
 The final audit links each row above to a runnable test, model-check output, container run, load report, or leakage report. Missing or indirect evidence keeps the production goal open.
+
+## Working rules
+
+- Keep MySQL 8.0.22 in scope. A newer compatibility target adds evidence; it does
+  not erase the requested legacy-version support.
+- Use disposable fixtures, never the user's production database or cluster.
+- A successful build, narrow smoke test or old benchmark is not evidence that
+  all acceptance requirements pass for the current candidate.
+- Do not lower resource, throughput, security or leakage thresholds to obtain a
+  green result. Record failures and investigate them.
+- Documentation commands must identify their working directory, prerequisites,
+  placeholders and expected outcome. Mark anything not yet executed as such.
+- Publish new tags for changed releases; do not rewrite already-published tags.
+- The goal stays open until each requirement has direct, current evidence.
+
+## First-party licensing versus distribution
+
+The [distribution requirements](research/distribution-license-requirements.md)
+and [Go dependency inventory](research/transitive-go-license-inventory.md) record
+MPL-2.0 for the MySQL driver, file-specific MIT/Apache licensing for YAML and
+required upstream notices. Old SDK module archives lack LICENSE/NOTICE files;
+the new SDK rc.2 ZIP contains them and is pinned by Kubernetes.
+
+Local four-platform bundles and both image architectures have passed checks for
+project/runtime, Go-module and UI notice delivery, covered MySQL source, system
+CA materials, aggregate SBOMs and complete file inventories. Before distribution
+approval, address prior-artifact supplements and verify the final published files
+recipients actually download. A top-level Apache file or a successful scanner
+does not complete that audit.

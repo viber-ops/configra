@@ -5,6 +5,10 @@ For a substantial interface, authorization or storage change, discuss the use
 case in an issue before implementing it. Report vulnerabilities privately as
 described in [SECURITY.md](SECURITY.md).
 
+Use the [documentation index](docs/README.md) for design, current acceptance status
+and historical evidence. Keep one current status record; place related verification
+runs together under `docs/verification/`. Generated screenshots stay in `.cache/`.
+
 ## Work locally
 
 Clone `configra` and `configra-go` into adjacent directories. Use the documented

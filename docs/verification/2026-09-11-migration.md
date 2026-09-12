@@ -1,5 +1,9 @@
 # Migration review — 2026-09-11
 
+Historical record: the dependency versions, README instructions, browser counts
+and bundle sizes below describe the migration snapshot, not the current release.
+See [current status](../production-readiness.md) for subsequent work.
+
 This review covers the service and SDK snapshots prepared for the `viber-ops`
 repositories. Each repository starts with its own initial commit. The source
 repositories were left unchanged, and their Git history, local caches, generated
@@ -92,5 +96,5 @@ Vite reports a 781.52 kB minified JavaScript chunk (239.11 kB gzip). This is an
 existing performance improvement opportunity; no frontend behavior was changed.
 
 The formal model suite and ten-minute production load certification were not
-rerun for this migration. Historical evidence in `production-readiness.md` retains
+rerun for this migration. Historical evidence in [production readiness](../production-readiness.md) retains
 its original date and is not presented as a new release certification.

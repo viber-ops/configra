@@ -1,14 +1,32 @@
 # Distribution license materials for Configra
 
-Research date: 2026-09-12. Scope: materials accompanying the compiled Configra and Kubernetes binaries, the embedded web UI, and the CA bundle copied into scratch containers. This is an actionable engineering inclusion manifest, not blanket legal clearance. It supplements the [direct dependency inventory](direct-dependency-licenses.md); the final release's complete dependency inventory and artifact verification remain separate work.
+Research dates: 2026-09-11–12. Scope: materials accompanying the compiled Configra
+and Kubernetes binaries, embedded web UI and scratch-image CA bundle. This is an
+engineering inclusion manifest, not legal certification. The
+[Go inventory](transitive-go-license-inventory.md) records the reviewed direct and
+transitive modules; [UI metadata](../../web/scripts/reviewed-licenses.json) records
+the collected npm materials. Later [artifact checks](../verification/2026-09-12.md#distribution)
+passed for local candidates. Final published-candidate checks and prior-release
+supplements remain open in [production readiness](../production-readiness.md).
 
 ## Observed distribution inputs
 
 The eight existing `v0.1.0-rc.1` binaries under `dist/v0.1.0-rc.1/configra_0.1.0-rc.1_{darwin,linux}_{amd64,arm64}/` were inspected with `go version -m`, without executing them. All report Go `1.26.7` and `CGO_ENABLED=0`. Each server binary lists 31 dependency modules; Kubernetes lists 67 on Darwin and 68 on Linux. The server includes `go-sql-driver/mysql v1.10.0`; Kubernetes includes several YAML modules and the older SDK pseudo-version recorded in the earlier inventory. These observations are not a claim about subsequently rebuilt binaries.
 
-At inspection time, the [server Dockerfile](../../Dockerfile) builds and embeds the Vite output, and both it and the [Kubernetes Dockerfile](../../kubernetes/Dockerfile) copy the executable plus `/etc/ssl/certs/ca-certificates.crt` into `scratch`. Neither final stage explicitly copies license materials. The three current `web/dist` JS/CSS assets had no MIT permission/disclaimer text, React/CodeMirror copyright strings, or accompanying LICENSE/NOTICE asset. A successful build therefore does not establish delivery of the notices documented below.
+At the pre-`9670636` inspection snapshot, the server Dockerfile built and embedded
+the Vite output. Both final scratch stages copied the executable and CA bundle,
+without explicit license-material copies. The three then-current `web/dist`
+JS/CSS assets had no MIT permission/disclaimer text, React/CodeMirror copyright
+strings or accompanying LICENSE/NOTICE asset. The Kubernetes build used a sibling
+SDK replacement, so its provenance differed from the version named by `go.mod`.
+These are historical findings, not descriptions of the current Dockerfiles.
 
-> **Implementation-state note:** The Dockerfile findings above describe the **pre-`9670636` snapshot**. Project commit `9670636` now copies first-party LICENSE/NOTICE into binary archives and both images, pins SDK `v0.1.0-rc.2`, and removes the Kubernetes image's sibling/local SDK replacement. The SDK rc.2 [public module archive](https://proxy.golang.org/github.com/viber-ops/configra-go/@v/v0.1.0-rc.2.zip), from commit `bddf8e91cb73ff6fddafbf11b890745a637ea014`, was checked and contains `github.com/viber-ops/configra-go@v0.1.0-rc.2/LICENSE` and `NOTICE`. **All third-party/runtime/UI/CA material inclusion and final-artifact verification obligations remain open.** This first-party implementation slice and source ZIP check are not distribution-license clearance. The research did not publish the SDK or make those packaging changes. [Archive packaging](../../scripts/build-release.mjs#L106), [Kubernetes manifest](../../kubernetes/go.mod)
+Commit `9670636` added first-party LICENSE/NOTICE packaging, pinned SDK rc.2 and
+removed the sibling replacement. Subsequent collectors added Go/runtime/UI/CA
+materials and covered source. Their local archive/image evidence is recorded
+separately; it does not certify every published artifact. Current implementation:
+[archive packaging](../../scripts/build-release.mjs), [server image](../../Dockerfile),
+[Kubernetes image](../../kubernetes/Dockerfile).
 
 | Shipped component | Materials to include with that artifact |
 | --- | --- |
@@ -18,6 +36,31 @@ At inspection time, the [server Dockerfile](../../Dockerfile) builds and embeds 
 | Source/module archives | Project and applicable dependency source notices, modification notices where required, and license-bearing first-party module versions. Adding a local LICENSE does not alter an older downloaded module zip. |
 
 Filenames and directories such as `licenses/`, `THIRD_PARTY_NOTICES`, or `SOURCE_ACCESS` are implementation choices; satisfying the applicable terms is the requirement.
+
+## Earlier direct-dependency review and SDK archive gaps
+
+The September 11 review covered every non-`indirect` Go requirement and all ten
+UI runtime npm dependencies, plus `ch-go`. All 27 cited third-party Go files
+matched pinned upstream bytes; all ten npm archives matched lockfile integrity
+and inspected license texts. The larger inventories linked above replace those
+duplicated package tables. The original [dated report](https://github.com/viber-ops/configra/blob/43ea1dddf86fa1dccc9a7f4b2102f4caa9c79b24/docs/research/direct-dependency-licenses.md)
+retains its exact inputs and citations.
+
+The review distinguished manifest directness from runtime use: `go-jose` has
+direct test imports but also ships through OIDC, and `client-go` ships through
+controller-runtime. SCS's MySQL submodule inherits the repository-root MIT text;
+Viper v1.21.0 is MIT, whereas Cobra v1.10.2 is Apache-2.0. Preserve package-specific
+texts and provenance, not a license inferred from a related package.
+
+The canonical SDK rc.1 ZIP contained 17 files, with no LICENSE, NOTICE or COPYING
+under `github.com/viber-ops/configra-go@v0.1.0-rc.1/`. The older pseudo-version ZIP
+contained nine files with the same absence. This was checked in downloaded
+archives, not inferred from local source. [rc.1 ZIP](https://proxy.golang.org/github.com/viber-ops/configra-go/@v/v0.1.0-rc.1.zip),
+[pseudo-version ZIP](https://proxy.golang.org/github.com/viber-ops/configra-go/@v/v0.0.0-20260911101812-8e4339f8884e.zip).
+The later [rc.2 ZIP verification](../verification/2026-09-12.md#sdk-release)
+confirmed LICENSE/NOTICE against commit `bddf8e91cb73ff6fddafbf11b890745a637ea014`.
+It does not change the older archives. Other historical module ZIPs were outside
+the direct review's scope.
 
 ## Application dependency materials
 
@@ -127,7 +170,10 @@ The locally available **linux/arm64** variant of the Dockerfiles' pinned Go buil
 | Copyright SHA-256 | `e85e1bcad3a915dc7e6f41412bc5bdeba275cadd817896ea0451f2140a93967c` |
 | Selection configuration SHA-256 | `/etc/ca-certificates.conf`: `ab7339d40969fb1084cb23011fbdae7cc8edb46ac7e410897bb6b7016f07ed7f` |
 
-No additional files were present in `/usr/local/share/ca-certificates`. Other builder-platform variants and later rebuilt images were not inspected; record and verify their actual bundle identities rather than assuming this hash applies universally.
+No additional files were present in `/usr/local/share/ca-certificates`. This
+research inspection covered arm64 only. Later [candidate checks](../verification/2026-09-12.md#distribution)
+verified both amd64 and arm64; future builds still need their actual bundle
+identities checked rather than assuming this hash applies universally.
 
 Debian's exact source package assigns MPL-2.0 to `mozilla/certdata.txt` and `mozilla/nssckbi.h`, with Mozilla Contributors attribution. Its package/conversion/update scripts are GPL-2-or-later. `certdata2pem.py` emits the PEM certificate bytes; `update-ca-certificates` concatenates selected certificate files. The current scratch Dockerfiles copy the resulting data, not those GPL scripts. Do not infer that Configra's executable becomes GPL-licensed merely from the package-level script label. [Exact Debian source archive](https://security.debian.org/debian-security/pool/updates/main/c/ca-certificates/ca-certificates_20250419~deb12u1.tar.xz), inner files `ca-certificates/debian/copyright`, `ca-certificates/mozilla/certdata2pem.py`, and `ca-certificates/sbin/update-ca-certificates`.
 
@@ -143,4 +189,8 @@ The verified source archive is `ca-certificates_20250419~deb12u1.tar.xz`, SHA-25
 4. Verify UI notices survive the actual Vite build and embedding and are delivered to UI recipients. Inventory the bundled runtime transitives; inspect build-generated code/assets before excluding development tools categorically.
 5. Keep unknown classifications fail-visible until individually resolved. Record the Segmentio MIT-0 review narrowly and test changed-version/hash rejection. An SBOM and a passing scanner are useful evidence, not substitutes for the license texts, notices, source access, or unresolved file-level review.
 
-Only this report was written. Existing binaries, source trees, and builder metadata were inspected; no release, Git-ref change, or packaging edit was performed. Temporary inspection containers were removed automatically. Final artifact inclusion, full transitive classification, and any stricter legal determination remain outside the completed research evidence.
+The research itself inspected existing binaries, source and builder metadata;
+it did not publish or change release refs. Temporary inspection containers were
+removed automatically. Transitive classification and artifact inclusion have
+separate evidence linked above; neither those checks nor this report constitutes
+legal certification.

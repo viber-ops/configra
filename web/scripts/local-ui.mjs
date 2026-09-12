@@ -3,7 +3,7 @@ import { mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const baseURL = process.env.CONFIGRA_URL || 'https://localhost:18088';
-const screenshotDirectory = process.env.CONFIGRA_SCREENSHOT_DIR || 'docs/ui-screenshots';
+const screenshotDirectory = process.env.CONFIGRA_SCREENSHOT_DIR || '.cache/ui-screenshots';
 const command = process.argv[2] || 'all';
 
 async function signIn(page, username = 'admin', password = 'configra-admin') {

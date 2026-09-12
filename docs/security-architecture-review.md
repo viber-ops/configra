@@ -2,8 +2,9 @@
 
 Follow-up on 2026-09-12: authenticated request-rejection capture and an observed
 credential Audit decoding failure are addressed in
-[audit-hardening-2026-09-12.md](audit-hardening-2026-09-12.md). The findings below
-retain their original review date; the full production acceptance is still open.
+[the audit verification record](verification/2026-09-12.md#audit). The findings
+below retain their original review date; see [current status](production-readiness.md)
+for remaining work. The full production acceptance is still open.
 
 Scope: service and Go SDK, management interactions, certificate lifecycle, and the
 new Kubernetes adapters. Evidence combines source inspection, failing/passing
@@ -82,7 +83,7 @@ Its initial JavaScript fell from approximately 782 kB to 353 kB (about 99 kB gzi
 by loading the 447 kB editor chunk only where needed. This improves initial-load
 cost; it is not a substitute for production latency measurement.
 
-## Remaining design limits and operational decisions
+## Design limits and follow-up
 
 1. **Environment-wide authorization is not workload isolation.** Tokens granting
    the same Environment can read the same Configs and Vault values, irrespective
@@ -91,12 +92,11 @@ cost; it is not a substitute for production latency measurement.
    untrusted applications/tenants need narrower resource grants or separate
    Configra trust domains. The Kubernetes adapter does not pretend to narrow an
    existing server grant.
-2. **Rejected HTTP attempts are not all durable Audit events.** Malformed JSON,
-   missing/invalid operation IDs, and Viewer-forbidden mutations can be rejected
-   before a storage operation writes its audit record. This is a gap relative to
-   the broad "all authenticated mutation attempts" wording. A follow-up should
-   record gateway rejections with generated Request IDs and value-free metadata,
-   without duplicating completed operation audits.
+2. **Authenticated rejection coverage was incomplete at review time.** Malformed
+   JSON, missing/invalid operation IDs and Viewer-forbidden mutations could be
+   rejected before storage wrote an audit. The September 12 follow-up added
+   value-free gateway receipts keyed by Request ID without duplicating completed
+   operation audits. See [executed checks and remaining recovery drills](verification/2026-09-12.md#audit).
 3. **Inventory APIs still return full collections.** Client-side filtering and
    pagination improve rendering, but large installations need server-side bounded
    lists/search and measured database query budgets. Avoid adding shared plaintext
@@ -121,7 +121,7 @@ Source scans can still report advisory-bearing modules for packages not imported
 by these programs (for example the unmaintained OpenPGP package in `x/crypto`).
 Stripped ELF scans conservatively report whole-module findings; they must not be
 misrepresented as proven reachable calls. See the earlier
-[migration review](migration-review.md) for that scanner limitation.
+[migration review](verification/2026-09-11-migration.md) for that scanner limitation.
 
 The historical ten-minute load evidence retains its original date. A new full
 production certification, external penetration test, and infrastructure recovery
