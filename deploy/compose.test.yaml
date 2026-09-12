@@ -1,0 +1,75 @@
+name: configra-test
+
+services:
+  mysql:
+    image: mysql:8.0.22
+    platform: linux/amd64
+    environment:
+      MYSQL_ROOT_PASSWORD: configra-test-root
+      MYSQL_DATABASE: configra
+      MYSQL_USER: configra
+      MYSQL_PASSWORD: configra-test
+    ports:
+      - "127.0.0.1:33079:3306"
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-pconfigra-test-root"]
+      interval: 2s
+      timeout: 3s
+      retries: 60
+      start_period: 10s
+
+  nats:
+    image: nats:2.14.5-alpine
+    command: ["--name=configra-test", "--http_port=8222"]
+    ports:
+      - "127.0.0.1:42229:4222"
+      - "127.0.0.1:8229:8222"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8222/healthz"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 2s
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:26.7.3.19
+    environment:
+      CLICKHOUSE_DB: configra
+      CLICKHOUSE_USER: configra
+      CLICKHOUSE_PASSWORD: configra-test
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      - "127.0.0.1:8129:8123"
+      - "127.0.0.1:9009:9000"
+    tmpfs:
+      - /var/lib/clickhouse
+      - /var/log/clickhouse-server
+      - /backups
+    volumes:
+      - ./clickhouse/backup_disk.xml:/etc/clickhouse-server/config.d/backup_disk.xml:ro
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--user", "configra", "--password", "configra-test", "--query", "SELECT 1"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+      start_period: 15s
+
+  casdoor:
+    image: casbin/casdoor:3.158.0@sha256:5783bfcc91aa038a49ee49b23432c305ba9085e7bfeb77255691d23bcc9e376c
+    command: ["--createDatabase=true"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:18080:8000"
+    volumes:
+      - ./casdoor/app.conf:/conf/app.conf:ro
+      - ./casdoor/init_data.json:/init_data.json:ro
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8000/.well-known/openid-configuration"]
+      interval: 2s
+      timeout: 3s
+      retries: 60
+      start_period: 10s

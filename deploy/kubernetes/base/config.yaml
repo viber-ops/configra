@@ -1,0 +1,55 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configra-management-config
+data:
+  config.yaml: |
+    version: 1
+    listen: :8443
+    tls:
+      certificate_file: /run/configra/server-tls/tls.crt
+      private_key_file: /run/configra/server-tls/tls.key
+    mysql:
+      dsn_env: CONFIGRA_MYSQL_DSN
+    key_provider:
+      master_key_file: /run/configra/master-key/master-key
+    clickhouse:
+      dsn_env: CONFIGRA_CLICKHOUSE_DSN
+    nats:
+      urls: [tls://nats.example.internal:4222]
+      credentials_file: /run/configra/nats/nats.creds
+      root_ca_file: /run/configra/nats/ca.pem
+    oidc:
+      issuer: https://identity.example.com
+      client_id: configra
+      client_secret_env: CONFIGRA_OIDC_CLIENT_SECRET
+      redirect_url: https://configra.example.com/auth/callback
+      scopes: [openid, profile]
+      role_source: id_token
+      role_claim: groups
+      viewer_values: [configra-viewers]
+      admin_values: [configra-admins]
+    logging:
+      level: info
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configra-api-config
+data:
+  config.yaml: |
+    version: 1
+    listen: :9443
+    tls:
+      certificate_file: /run/configra/server-tls/tls.crt
+      private_key_file: /run/configra/server-tls/tls.key
+    mysql:
+      dsn_env: CONFIGRA_MYSQL_DSN
+    key_provider:
+      master_key_file: /run/configra/master-key/master-key
+    nats:
+      urls: [tls://nats.example.internal:4222]
+      credentials_file: /run/configra/nats/nats.creds
+      root_ca_file: /run/configra/nats/ca.pem
+    logging:
+      level: info

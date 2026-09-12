@@ -1,0 +1,54 @@
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: configra-application
+  namespace: configra-app
+spec:
+  provider: configra
+  parameters:
+    fileMode: "0444"
+    objects: |
+      - type: config
+        environment: production
+        config: application
+        path: app.yaml
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: configra-file-reader
+  namespace: configra-app
+spec:
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: application
+      image: busybox:1.37.0
+      command: [sh, -c, 'while true; do test -s /etc/application/app.yaml || exit 1; sleep 30; done']
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]
+      resources:
+        requests: {cpu: 5m, memory: 8Mi}
+        limits: {memory: 32Mi}
+      volumeMounts:
+        - name: configuration
+          mountPath: /etc/application
+          readOnly: true
+  volumes:
+    - name: configuration
+      csi:
+        driver: secrets-store.csi.k8s.io
+        readOnly: true
+        volumeAttributes:
+          secretProviderClass: configra-application
+        nodePublishSecretRef:
+          name: configra-credentials

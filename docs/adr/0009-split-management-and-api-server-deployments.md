@@ -1,0 +1,3 @@
+# Split Management and API Server deployments
+
+Configra ships one codebase and Docker Image with separate Management Server and API Server entrypoints. Management Server serves Web/OIDC and mutations as a single replica; API Server serves HTTPS machine reads authenticated by an API Token and, unless that Token explicitly permits Token-only Authentication, a Client Certificate. API Server accesses MySQL and KeyProvider directly and can scale horizontally without a synchronous dependency on Management Server. V1 runs API Server and its MySQL/NATS dependencies in one datacenter while accepting Machine Clients from multiple datacenters, avoiding cross-datacenter data replication without duplicating Domain, Storage, or Crypto implementation.

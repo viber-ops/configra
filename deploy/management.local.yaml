@@ -1,0 +1,28 @@
+# Local development only. It uses the real Casdoor container from compose.test.yaml.
+version: 1
+listen: localhost:18088
+tls:
+  certificate_file: .cache/local-dev/server.crt
+  private_key_file: .cache/local-dev/server.key
+  client_ca_file: .cache/local-dev/client-ca.crt
+mysql:
+  dsn_env: CONFIGRA_MYSQL_DSN
+key_provider:
+  master_key_file: .cache/local-dev/master-key
+clickhouse:
+  dsn_env: CONFIGRA_CLICKHOUSE_DSN
+nats:
+  urls: [nats://127.0.0.1:42229]
+oidc:
+  issuer: http://localhost:18080
+  client_id: configra-local
+  client_secret_env: CONFIGRA_OIDC_CLIENT_SECRET
+  redirect_url: https://localhost:18088/auth/callback
+  scopes: [openid, profile, email]
+  role_source: id_token
+  role_claim: groups
+  viewer_values: [configra-local/configra-viewers]
+  admin_values: [configra-local/configra-admins]
+  allow_insecure_loopback: true
+logging:
+  level: info

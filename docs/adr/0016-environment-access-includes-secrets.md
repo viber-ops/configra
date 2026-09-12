@@ -1,0 +1,3 @@
+# Environment access includes Secrets
+
+An API Token may read values only when its explicit allowlist contains the requested Environment; within that Environment it may read every Config and Vault value, including every Vault Namespace and Secret or File Field. A Namespace is not an authorization boundary, and V1 has no per-Namespace grant or separate `allow_secrets` flag. Every request requires an Active, unexpired Token authorized for that Environment and, unless that Token explicitly permits Token-only Authentication, an accepted Client Certificate; V1 does not bind a particular Certificate to a particular Token.

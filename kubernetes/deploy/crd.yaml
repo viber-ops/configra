@@ -1,0 +1,144 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: configrabindings.configra.viber-ops.github.io
+spec:
+  group: configra.viber-ops.github.io
+  scope: Namespaced
+  names:
+    plural: configrabindings
+    singular: configrabinding
+    kind: ConfigraBinding
+    listKind: ConfigraBindingList
+    shortNames: [cfgbind]
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Ready
+          type: string
+          jsonPath: '.status.conditions[?(@.type=="Ready")].status'
+        - name: Target
+          type: string
+          jsonPath: .spec.target.name
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: [credentialsSecretRef, target, objects]
+              properties:
+                credentialsSecretRef:
+                  type: object
+                  required: [name]
+                  properties:
+                    name:
+                      type: string
+                      minLength: 1
+                      maxLength: 253
+                target:
+                  type: object
+                  required: [name]
+                  properties:
+                    name:
+                      type: string
+                      minLength: 1
+                      maxLength: 253
+                    kind:
+                      type: string
+                      enum: [Secret, ConfigMap]
+                      default: Secret
+                    mode:
+                      type: string
+                      enum: [files, env]
+                      default: files
+                refreshInterval:
+                  type: string
+                  default: 1m
+                  maxLength: 32
+                allowSensitiveConfigMap:
+                  type: boolean
+                  default: false
+                objects:
+                  type: array
+                  minItems: 1
+                  maxItems: 32
+                  x-kubernetes-list-type: map
+                  x-kubernetes-list-map-keys: [path]
+                  items:
+                    type: object
+                    required: [environment, path]
+                    properties:
+                      type:
+                        type: string
+                        enum: [config, file]
+                        default: config
+                      environment:
+                        type: string
+                        pattern: '^[a-z][a-z0-9_-]{0,62}$'
+                      config:
+                        type: string
+                        maxLength: 63
+                      namespace:
+                        type: string
+                        maxLength: 63
+                      item:
+                        type: string
+                        maxLength: 63
+                      field:
+                        type: string
+                        maxLength: 63
+                      path:
+                        type: string
+                        minLength: 1
+                        maxLength: 255
+            status:
+              type: object
+              properties:
+                observedGeneration:
+                  type: integer
+                  format: int64
+                version:
+                  type: string
+                lastSyncedAt:
+                  type: string
+                  format: date-time
+                target:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    kind:
+                      type: string
+                conditions:
+                  type: array
+                  x-kubernetes-list-type: map
+                  x-kubernetes-list-map-keys: [type]
+                  items:
+                    type: object
+                    required: [type, status, reason, message, lastTransitionTime]
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                        enum: ['True', 'False', Unknown]
+                      reason:
+                        type: string
+                        maxLength: 64
+                      message:
+                        type: string
+                        maxLength: 256
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      observedGeneration:
+                        type: integer
+                        format: int64

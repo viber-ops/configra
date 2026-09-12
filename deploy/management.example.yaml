@@ -1,0 +1,37 @@
+# Secret values are injected through environment variables or mounted files.
+version: 1
+listen: :8443
+tls:
+  certificate_file: /run/configra/tls/server.crt
+  private_key_file: /run/configra/tls/server.key
+  # Optional external Client CA for certificate imports. Managed CAs need no file.
+  # The browser TLS endpoint never requests a Client Certificate.
+  # client_ca_file: /run/configra/tls/client-ca.pem
+mysql:
+  dsn_env: CONFIGRA_MYSQL_DSN
+key_provider:
+  master_key_file: /run/configra/secrets/master-key
+clickhouse:
+  dsn_env: CONFIGRA_CLICKHOUSE_DSN
+nats:
+  urls:
+    - tls://nats.example.internal:4222
+  credentials_file: /run/configra/secrets/nats.creds
+  root_ca_file: /run/configra/tls/nats-ca.pem
+# Optional outbound Notification trust/network exceptions. Public HTTPS on 443 needs no entry.
+notifications:
+  allowed_internal_hosts: [hooks.example.internal]
+  allowed_cidrs: [10.20.0.0/16]
+  root_ca_file: /run/configra/tls/notification-ca.pem
+oidc:
+  issuer: https://identity.example.com
+  client_id: configra
+  client_secret_env: CONFIGRA_OIDC_CLIENT_SECRET
+  redirect_url: https://configra.example.com/auth/callback
+  scopes: [openid, profile]
+  role_source: id_token
+  role_claim: groups
+  viewer_values: [configra-viewers]
+  admin_values: [configra-admins]
+logging:
+  level: info

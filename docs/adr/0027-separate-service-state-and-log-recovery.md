@@ -1,0 +1,3 @@
+# Separate service-state and log recovery
+
+Configra restores service state from one transactionally consistent MySQL snapshot plus the independently protected Cold-start Configuration and Master Key; the backup artifact must never contain that key, and a restored server stays unready until the Crypto Sentinel verifies it. ClickHouse uses its own native backup stream because it owns retained Access/Audit logs but is not required to serve managed values, while Core NATS is transient and is never backed up. This separation keeps MySQL recovery atomic, avoids coupling availability to a cross-database snapshot, and makes loss of log-retention evidence an explicit operational failure rather than silently treating ClickHouse as reconstructable from completed MySQL Outbox rows.

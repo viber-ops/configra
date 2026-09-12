@@ -1,0 +1,91 @@
+{
+  "organizations": [
+    {
+      "owner": "admin",
+      "name": "configra-local",
+      "displayName": "Configra Local Development",
+      "passwordType": "bcrypt",
+      "passwordOptions": ["AtLeast6"],
+      "defaultApplication": "app-configra-local",
+      "defaultTokenFormat": "JWT-Custom",
+      "languages": ["en", "zh"],
+      "isProfilePublic": false,
+      "enableSoftDeletion": true
+    }
+  ],
+  "applications": [
+    {
+      "owner": "admin",
+      "name": "app-configra-local",
+      "displayName": "Configra",
+      "category": "Developer tools",
+      "type": "OIDC",
+      "organization": "configra-local",
+      "cert": "cert-built-in",
+      "enablePassword": true,
+      "enableSignUp": false,
+      "clientId": "configra-local",
+      "clientSecret": "configra-local-client-secret-2026",
+      "providers": [],
+      "signinMethods": [
+        {"name": "Password", "displayName": "Password", "rule": "All"}
+      ],
+      "signupItems": [],
+      "grantTypes": ["authorization_code", "refresh_token"],
+      "redirectUris": ["https://localhost:18088/auth/callback"],
+      "tokenFormat": "JWT-Custom",
+      "tokenFields": ["Name", "DisplayName", "Email", "Groups"],
+      "expireInHours": 8,
+      "refreshExpireInHours": 24,
+      "cookieExpireInHours": 8,
+      "failedSigninLimit": 5,
+      "failedSigninFrozenTime": 15
+    }
+  ],
+  "users": [
+    {
+      "owner": "configra-local",
+      "name": "admin",
+      "type": "normal-user",
+      "password": "configra-admin",
+      "displayName": "Configra Administrator",
+      "email": "admin@configra.local",
+      "isAdmin": true,
+      "isForbidden": false,
+      "isDeleted": false,
+      "signupApplication": "app-configra-local",
+      "createdIp": "127.0.0.1",
+      "groups": ["configra-local/configra-admins"]
+    },
+    {
+      "owner": "configra-local",
+      "name": "viewer",
+      "type": "normal-user",
+      "password": "configra-viewer",
+      "displayName": "Configra Viewer",
+      "email": "viewer@configra.local",
+      "isAdmin": false,
+      "isForbidden": false,
+      "isDeleted": false,
+      "signupApplication": "app-configra-local",
+      "createdIp": "127.0.0.1",
+      "groups": ["configra-local/configra-viewers"]
+    }
+  ],
+  "groups": [
+    {
+      "owner": "configra-local",
+      "name": "configra-admins",
+      "displayName": "Configra Administrators",
+      "isTopGroup": true,
+      "isEnabled": true
+    },
+    {
+      "owner": "configra-local",
+      "name": "configra-viewers",
+      "displayName": "Configra Viewers",
+      "isTopGroup": true,
+      "isEnabled": true
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+apiVersion: configra.viber-ops.github.io/v1alpha1
+kind: ConfigraBinding
+metadata:
+  name: application
+  namespace: configra-app
+spec:
+  credentialsSecretRef:
+    name: configra-credentials
+  target:
+    name: application-config
+    kind: Secret
+    mode: files
+  refreshInterval: 1m
+  objects:
+    - type: config
+      environment: production
+      config: application
+      path: app.yaml

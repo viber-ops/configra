@@ -1,0 +1,5 @@
+# Encrypt each Vault Revision as one Snapshot
+
+Each Vault Item Revision generates a fresh random 256-bit DEK and encrypts its complete Values Snapshot as one AES-256-GCM Blob. Namespace and Resource Keys, Resource IDs, Field types, Environment bindings, Revision metadata, timestamps, and ciphertext size remain queryable plaintext metadata; all Field values and each File's filename, MIME type, and bytes are encrypted. AES-GCM additional authenticated data binds the globally unique Item ID, Revision, algorithm, and Key Version, so Namespace metadata requires no second cryptographic identity scheme and a moved or altered database row fails authentication.
+
+LocalKeyProvider wraps each DEK with the external Master Key. V1 keeps no decrypted Vault values or DEKs in a server cache: unchanged ETag checks use metadata, while content reads decrypt on demand. Any unwrap or authentication failure aborts the whole operation with a value-free crypto-integrity error; Configra neither returns partial content nor automatically restores an older Revision.

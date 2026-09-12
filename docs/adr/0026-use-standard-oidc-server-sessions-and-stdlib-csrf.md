@@ -1,0 +1,7 @@
+# Use standard OIDC, server-side Sessions, and standard-library CSRF protection
+
+Management authenticates people with OIDC Authorization Code + PKCE through `coreos/go-oidc` and `x/oauth2`; Configra does not depend on a Casdoor-specific SDK or store user passwords. Login uses one-time State and Nonce values, verifies the discovered Issuer, signature, Audience, expiry, Nonce, and multi-Audience `azp`, then maps one configured ID Token or UserInfo Claim to the fail-closed `viewer` or `admin` Role. UserInfo is accepted only when its `sub` equals the verified ID Token subject.
+
+The browser holds only a secure `__Host-` Session Cookie. Session data is stored in MySQL through SCS, the Session ID is renewed after login, and local logout is a same-origin `POST` that destroys the Configra Session. Configra never renders or receives a user password; the configured Identity Provider decides whether to show credentials or reuse an existing SSO Session. V1 does not claim that local logout also terminates that upstream SSO Session. The fixed Redirect URI also defines the only accepted public Host. Go `http.CrossOriginProtection` protects state-changing same-origin routes, so the minimum supported Go release is 1.25.1. OIDC secrets, Token values, callback parameters, and Session Cookies never enter responses or logs.
+
+All Configra HTTP and schema contracts remain V1. Major-version suffixes in upstream Go module paths are dependency versions, not Configra API versions.

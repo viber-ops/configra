@@ -1,0 +1,7 @@
+# Development overlay, not a production/load-test configuration.
+# mysql:8.0.22 is kept for compatibility with existing installations.
+# Avoid consuming scarce Linux native-AIO slots in a shared Docker Desktop VM.
+# Databases still use the base's tmpfs and remain disposable.
+services:
+  mysql:
+    command: ["--innodb-use-native-aio=0"]
