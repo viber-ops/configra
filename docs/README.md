@@ -26,7 +26,7 @@ These repository guides describe the checked-out source:
 | What did the security review find? / 安全审查结论是什么？ | [Security and architecture review](security-architecture-review.md) |
 | How should the UI behave? / 界面如何组织？ | [UI design, routes and screenshots](ui.md) |
 | How are release materials assembled? / 如何维护发布材料？ | [Distribution tooling](../scripts/DISTRIBUTION.md) |
-| What was actually tested? / 哪些操作真正验证过？ | [2026-09-12 verification record](verification/2026-09-12.md), [migration record](verification/2026-09-11-migration.md) |
+| What was actually tested? / 哪些操作真正验证过？ | [2026-09-22 verification record](verification/2026-09-22.md), [September 12 release checks](verification/2026-09-12.md), [migration record](verification/2026-09-11-migration.md) |
 
 [Contributing](../CONTRIBUTING.md) and [private security reporting](../SECURITY.md)
 describe the contribution and disclosure process. [Research notes](research/) retain

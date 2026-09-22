@@ -44,13 +44,15 @@ func TestConfigManagementReadsListHistoryAndImmutableRevision(t *testing.T) {
 		}
 	}
 
-	configs, err := store.ListConfigs(ctx, false)
+	configPage, err := store.ListConfigs(ctx, ConfigQuery{InventoryQuery: InventoryQuery{Limit: 50}})
+	configs := configPage.Items
 	if err != nil || len(configs) != 1 || configs[0].Key != "payment" || configs[0].DisplayName != "Payment" || configs[0].Archived ||
 		len(configs[0].Environments) != 2 || configs[0].Environments[0].Key != "a" || configs[0].Environments[0].Revision != 2 ||
 		configs[0].Environments[1].Key != "b" || configs[0].Environments[1].Revision != 1 {
 		t.Fatalf("ListConfigs = %#v, %v", configs, err)
 	}
-	history, err := store.ListConfigRevisions(ctx, "a", "payment")
+	page, err := store.ListConfigRevisions(ctx, "a", "payment", RevisionQuery{Limit: 50})
+	history := page.Items
 	if err != nil || len(history) != 2 || history[0].Revision != 2 || history[1].Revision != 1 ||
 		history[0].OperationID != "config-read-a-2" || history[0].ActorID != actor.ID || history[0].CreatedAt.IsZero() {
 		t.Fatalf("ListConfigRevisions = %#v, %v", history, err)
@@ -59,21 +61,33 @@ func TestConfigManagementReadsListHistoryAndImmutableRevision(t *testing.T) {
 	if err != nil || revision.Revision != 1 || revision.Content != "port: 6379\n" || revision.Format != "yaml" {
 		t.Fatalf("ReadRawConfigRevision = %#v, %v", revision, err)
 	}
+	if _, err := store.ReplaceConfig(ctx, ConfigTransfer{
+		OperationID: "config-read-transfer", Actor: actor,
+		SourceEnvironmentKey: "a", SourceConfigKey: "payment", SourceRevision: 1,
+		TargetEnvironmentKey: "b", TargetConfigKey: "payment", TargetRevision: 1, ExpectedTargetRevision: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	transferred, err := store.ListConfigRevisions(ctx, "b", "payment", RevisionQuery{Limit: 1})
+	if err != nil || len(transferred.Items) != 1 || transferred.NextBefore != 2 || transferred.Items[0].Source == nil ||
+		*transferred.Items[0].Source != (ConfigRevisionSource{EnvironmentKey: "a", ConfigKey: "payment", Revision: 1}) {
+		t.Fatalf("paged history lost transfer origin: %#v, %v", transferred, err)
+	}
 
 	if _, err := store.ApplyConfigLifecycleChange(ctx, ConfigLifecycleChange{
 		OperationID: "config-read-archive", Actor: actor, Action: ConfigArchive, Key: "payment",
 	}); err != nil {
 		t.Fatalf("Archive Config: %v", err)
 	}
-	configs, err = store.ListConfigs(ctx, false)
-	if err != nil || len(configs) != 0 {
-		t.Fatalf("active Configs = %#v, %v", configs, err)
+	configPage, err = store.ListConfigs(ctx, ConfigQuery{InventoryQuery: InventoryQuery{Limit: 50}})
+	if err != nil || len(configPage.Items) != 0 || configPage.Total != 0 {
+		t.Fatalf("active Configs = %#v, %v", configPage, err)
 	}
-	configs, err = store.ListConfigs(ctx, true)
-	if err != nil || len(configs) != 1 || !configs[0].Archived {
-		t.Fatalf("all Configs = %#v, %v", configs, err)
+	configPage, err = store.ListConfigs(ctx, ConfigQuery{InventoryQuery: InventoryQuery{Limit: 50, IncludeInactive: true}})
+	if err != nil || len(configPage.Items) != 1 || configPage.Total != 1 || !configPage.Items[0].Archived {
+		t.Fatalf("all Configs = %#v, %v", configPage, err)
 	}
-	if history, err = store.ListConfigRevisions(ctx, "a", "payment"); err != nil || len(history) != 2 {
-		t.Fatalf("Archived Config history = %#v, %v", history, err)
+	if page, err = store.ListConfigRevisions(ctx, "a", "payment", RevisionQuery{Limit: 50}); err != nil || len(page.Items) != 2 {
+		t.Fatalf("Archived Config history = %#v, %v", page, err)
 	}
 }

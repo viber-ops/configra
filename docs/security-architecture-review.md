@@ -6,6 +6,95 @@ credential Audit decoding failure are addressed in
 below retain their original review date; see [current status](production-readiness.md)
 for remaining work. The full production acceptance is still open.
 
+## Follow-up — 2026-09-22
+
+This pass concentrates on the API process, Kubernetes adapters and Go SDK. Changes
+are based on the published server rc.2 and prepared for v1.0.0; they are not in rc.2.
+The [verification record](verification/2026-09-22.md) distinguishes unit,
+real-dependency, container and cluster checks.
+
+| Priority | Confirmed problem | Change |
+| --- | --- | --- |
+| Availability / error contract | The Machine File read treated a database failure while reading field metadata as a missing File and returned HTTP 404. Clients could mistake an outage for a deleted resource. | Propagate the storage error at the shared File read; the HTTP layer returns the existing value-free 503 envelope. A real-MySQL table-unavailability regression fails on the original source and passes after the fix, including recovery and genuine 404 cases. [Evidence](verification/2026-09-22.md#file-metadata-failure-classification). |
+| Medium, availability | JSON/YAML checked the 5 MiB result limit only after full encoding. Small templates repeating large Vault values could allocate much more than the limit before rejection; JSON formatting also amplified indentation. | Bound substituted text early, preflight JSON's formatted size and bound YAML writes in the shared canonicalize/resolve/Merge paths. The original-source regression fails; current dual-toolchain checks, exact boundaries, fuzzing and real-MySQL HTTP rejection/recovery pass. [Allocation evidence](verification/2026-09-22.md#document-encoding-limits) is separate from earlier image capacity results. |
+| Compatibility / availability | Enabling the MySQL driver's parameter interpolation made Management mutations and rejected-request Audit receipts fail: JSON columns received binary literals. A read-only capacity test did not detect it. | Bind JSON as text at the three shared SQL write sites. Prepared/interpolated and default/NO_BACKSLASH_ESCAPES regressions preserve mutation replay and quoted/Unicode Audit metadata; the interpolation-profile storage and SDK E2E suites pass. [Evidence](verification/2026-09-22.md#mysql-json-parameter-types); defaults remain unchanged. |
+| Medium, data integrity | SDK `Snapshot.Unmarshal` could expose shared nested slices/maps through `any` values. Mutating one result changed another reader's result and the supposedly immutable snapshot. | Copy parsed mutable values for each decode. The public Load/Unmarshal regression failed before the fix and passes afterward. No extra parser or dependency. |
+| Medium, data loss | Native target cleanup checked ownership and then issued an unconditional Delete. A replacement or ownership change between those requests could remove another writer's object. | Require the observed UID and resource version on Delete. Both Secret and ConfigMap regressions reproduce the race and retain the unrelated object on retry. |
+| Medium, data integrity | An older in-flight native fetch could load a newer target's resource version after the fetch, then overwrite that newer delivery. Leader election alone does not fence every overlapping request. | Observe the target before fetching and retain that version for Create/Update. Secret/ConfigMap regressions fail on the old source for both missing and existing targets and pass after the fix; no extra lock or dependency. |
+| Medium, availability | Kubernetes credential/spec requests had no per-reconciliation deadline; the 30-second limit covered only Configra reads. | Bound the complete reconcile to 45 seconds, honoring shorter caller deadlines and retaining the 30-second fetch limit. The deadline regression, dual-toolchain race/vet and rebuilt-adapter three-node acceptance pass. |
+| Medium, availability | The HTTP socket write timeout did not bound database work. SCS's MySQL adapter used non-context SQL, including cleanup that could delay shutdown. | Give requests a 20-second context deadline; implement SCS's existing context-store interface with five-second SQL bounds and cancellable, batched cleanup. Keep the same MySQL 8.0.22 table and session security settings. |
+| Medium, availability | Every Machine Config/File request loaded and sorted all of its Token's Environment grants, including conditional reads. Cost grew with the grant count before checking the secret. | Use one indexed existence check for the requested Environment in the existing Token query. Keep digest, expiry, revocation and certificate checks; add no permission cache. Real MySQL tests compare one and 1,005 grants; SDK tests cover grant removal/restoration, archive/unarchive and Token revocation with unchanged ETags. |
+| Medium, error-path disclosure | Session failure logging included the raw request path before routing/validation. A real MySQL-stall drill placed a private sentinel in a malformed resource path and found it in the Management image's log. | Remove the unvalidated path field at the shared session error callback. Preserve the generic error and HTTP method. The image regression keeps logs from both sides of container recreation and checks that the sentinel is absent after the fix. |
+| Medium, rollout availability | A real Kubernetes API rollout failed a machine read when an old Pod stopped. The base had no endpoint-drain delay; `maxUnavailable: 0` did not prevent listener shutdown racing Service routing updates. | Add kubelet's native five-second `preStop.sleep` to both service Deployments, within the existing termination budget. Three complete local API rollouts pass 97 sampled mTLS reads without retries. Kubernetes version requirements and ingress-specific limits are documented; this is not a general zero-downtime guarantee. |
+| Medium, availability | Config/Vault history reads returned every revision. Long-lived resources caused ever-growing SQL results, JSON responses and browser state. Later MySQL 8.0.22 runs also exposed an index-intersection/filesort plan in the first paged Config query. | Query by the existing resource/revision primary key, with an exclusive revision cursor and at most 101 rows for a 100-item page. Keep Config history on that primary key with a query-local index hint. Update history, comparison and transfer consumers; never fetch all pages automatically. Real HTTPS/MySQL tests cover concurrent writes, isolation, archive visibility and value-free responses; expanded storage counters guard against the observed scan. |
+| Medium, availability | Environment, Config, Vault and Token inventories returned all parents and associations; client-side pages did not bound SQL results or browser memory. | Page parents in SQL, cap association previews at three and expose complete counts/scoped Environment pages. Search, overview, detail lookup, selectors and resource rails use the new contract. MySQL 8.0.22 tests exercise 1,005 of each resource and a 1,005-environment association set. Counts/search remain potentially linear, not constant-time queries. |
+| Pagination interaction risk | Feeding one page of checkboxes or a three-item summary into the existing Token grant replacement would remove unseen grants. | Add an Admin-only, atomic, audited grant PATCH; preserve legacy PUT operation digests. The UI tracks explicit additions/removals across pages. HTTP/storage/browser tests retain untouched grants and reject revoked Tokens, archived additions and overlapping edits. |
+| Correctness | CSI accepted both `database` and `database/client.pem` in one mount, although one path cannot be both file and directory. | Reject prefix collisions in the shared validator, in either order, before contacting Configra. |
+| Input validation | SDK initialization accepted `https://:443`, which has a port but no hostname. | Validate the parsed hostname in the common constructor. A regression first reproduced the acceptance; environment/file helpers share the corrected check. |
+| Recovery correctness | The ADR named a `doctor --verify-vault` command that did not exist. Readiness and the Sentinel did not detect corrupt historical Vault revisions, CA keys or inactive notification credentials. | Add an actual read-only CLI using a consistent snapshot and shared crypto/schema checks. The real MySQL 8.0.22 restore drill runs it with SELECT-only permissions, proves failure without initialization on an empty target, detects historical corruption, and issues a client with the restored CA. Doctor does not rotate keys or prove backup completeness; offline rotation is a separate command. |
+| Error disclosure / stored-input validation | Bootstrap YAML decoder errors could echo malformed values. Notification credential decoding was duplicated and accepted a trailing JSON document. | Bound YAML reads and omit decoder values from errors; share the credential decoder across mutations, delivery and recovery, require EOF, and validate the stored URL/secret limits. Add malformed-input and value-exclusion regressions. |
+| Key lifecycle / data integrity | Replacing the bootstrap key stranded existing data, and already-running writers could create records with the old key. A lost COMMIT reply could be mistaken for rollback. | Add an offline, audited InnoDB rewrap transaction and database-name/offline confirmations. Current-code encrypted writers verify and lock the Sentinel; readiness rejects a stale key. Real MySQL tests cover history/content retention, partial-write rollback, queued writers, nontransactional storage and a dropped COMMIT acknowledgment. The local image/cluster drills below now pass too; this is not online rotation or final-release acceptance. |
+| Dependency security | Newly published gRPC advisories affect the pinned version. | Upgrade to 1.83.2 and review the five changed shipped module versions. Current Kubernetes source scanning reports no findings. |
+
+The gRPC [HTTP/2 fragmentation advisory](https://pkg.go.dev/vuln/GO-2026-6348)
+applies to a transport used by the provider. Its listener is a root-owned `0600`
+Unix socket for the trusted CSI driver, not a public TCP endpoint. The separate
+[missing-authority panic advisory](https://pkg.go.dev/vuln/GO-2026-6443) requires
+xDS routing, which this program does not enable. A scanner call path alone does
+not prove that panic is exploitable here. Version 1.83.2 covers both advisories.
+
+The Snapshot mutation finding is distinct from September 11's non-reproducing
+decoder-error disclosure suspicion; it is not a claim that error messages leaked
+configuration. SDK certificate-rotation guidance also now distinguishes closing
+idle connections from replacing an identity on active HTTP/2 connections.
+
+CI and weekly dependency-update configurations were added for service and SDK.
+They use pinned actions, read-only checkout credentials, race/vet checks and
+vulnerability scanning; service CI also includes real dependency and UI tests.
+SDK CI has passed on Linux and macOS. The server's manual CI run also exercises
+the ten-minute capacity gate and three-node Kubernetes recovery drill. Passing
+ordinary unit/UI jobs alone does not replace those acceptance checks.
+The integration recipe also omitted NATS/ClickHouse settings from its E2E process,
+silently skipping the durable rejection/replay Audit test. It now passes all
+three dependencies; a Make dry-run regression checks this, and the actual Audit
+test has passed with the disposable services.
+
+Credential/notification/usage pagination and their cross-page safety checks now
+pass locally; see the [September 22 evidence](verification/2026-09-22.md#security-inventories-and-vault-impact).
+The [read-only recovery check](verification/2026-09-22.md#encrypted-state-recovery)
+and [offline key rotation](verification/2026-09-22.md#offline-master-key-rotation)
+also pass locally. [Actual service-image checks](verification/2026-09-22.md#actual-service-images-and-dependency-faults)
+now cover real HTTPS OIDC, dependency stalls, Audit recovery, encrypted restore,
+rotation and post-recovery SDK/CA behavior. [Real Configra Pods](verification/2026-09-22.md#actual-configra-services-in-kubernetes)
+also pass both adapters, credential revocation/rotation, API outage retention,
+controller failover and three API rollouts. A subsequent
+[offline cluster rotation drill](verification/2026-09-22.md#offline-key-rotation-in-kubernetes)
+also passes: complete service shutdown, backup, same-image maintenance Pods,
+old-key rejection/new-key verification, bootstrap Secret replacement and fresh
+SDK/CA/Audit/native/CSI reads. Current-candidate capacity, production
+ingress/independent-host failure, deployment-specific maintenance controls and
+final-release replay remain open.
+The current server image also passes a [three-node worker-loss drill](verification/2026-09-22.md#three-node-provider-and-service-failover):
+native/CSI reads on both workers, cross-node sync leadership, existing and fresh
+mounts on the survivor, recovery and three API rollouts. Requests are checked
+after failed-node endpoint removal; this does not claim uninterrupted reads
+during failure detection. All test nodes share one Docker host.
+The later [reconciliation ordering and deadline fixes](verification/2026-09-22.md#native-reconciliation-ordering-and-request-bounds)
+have separate failing/passing regressions and a rebuilt-adapter cluster replay,
+including 79 no-retry rollout reads and fresh native/CSI delivery after rotation.
+The [new capacity record](verification/2026-09-22.md#capacity-and-leak-detection)
+includes both a passing baseline and subsequent failing runs. It also corrects
+a test-only leakage scan that put fixture secrets into ClickHouse query logs,
+adds direct NATS payload checks and retains private diagnostics on failure.
+These changes do not establish production capacity or a production data leak.
+The subsequent [API query review](verification/2026-09-22.md#api-authorization-and-bounded-history-queries)
+records the per-request grant fix and the reproduced MySQL history-plan failure,
+including the unsuccessful first fix. Both query regressions, full core/E2E
+integration, the rebuilt image's service/recovery drill and its short mTLS/leak
+smoke now pass. The prior long-run capacity failures remain open.
+The following September 11 review
+is historical evidence, not a statement that those requirements have passed.
+
 Scope: service and Go SDK, management interactions, certificate lifecycle, and the
 new Kubernetes adapters. Evidence combines source inspection, failing/passing
 regression tests, race-enabled tests, dependency analysis, and container/cluster
@@ -97,10 +186,14 @@ cost; it is not a substitute for production latency measurement.
    rejected before storage wrote an audit. The September 12 follow-up added
    value-free gateway receipts keyed by Request ID without duplicating completed
    operation audits. See [executed checks and remaining recovery drills](verification/2026-09-12.md#audit).
-3. **Inventory APIs still return full collections.** Client-side filtering and
-   pagination improve rendering, but large installations need server-side bounded
-   lists/search and measured database query budgets. Avoid adding shared plaintext
-   caches merely to hide this cost.
+3. **Bounded responses do not imply constant-time queries.** Config/Vault history
+   and all seven management resource inventories now have SQL/UI paging, as do
+   notification subscriptions and current Vault usages. CA trust loading is a
+   separate complete read; Vault edit impact uses a complete count, not a visible
+   page. Resource counts, substring searches and deep offsets can still scan many
+   rows. The thousand-row checks are not a capacity result. Avoid shared plaintext
+   caches to hide query cost. Vault impact is a live UI warning, not a write-side
+   lock against concurrent Config reference changes or a requirement on direct API writes.
 4. **Management's repository facade and main UI file remain broad.** Authority
    handling and editors have been separated, but Config/Vault/Token workflows
    still share substantial orchestration. Further extraction should follow real

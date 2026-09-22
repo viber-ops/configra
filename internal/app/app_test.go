@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"go.uber.org/zap"
@@ -17,7 +18,7 @@ import (
 	"github.com/viber-ops/configra/internal/bootstrap"
 )
 
-func TestCommandHasOnlyManagementAndAPIServerModes(t *testing.T) {
+func TestCommandHasTwoServerModesAndMaintenanceCommands(t *testing.T) {
 	command := NewCommand()
 	command.SetOut(io.Discard)
 	command.SetErr(io.Discard)
@@ -28,7 +29,7 @@ func TestCommandHasOnlyManagementAndAPIServerModes(t *testing.T) {
 		}
 	}
 	slices.Sort(names)
-	if !slices.Equal(names, []string{"api", "management"}) {
+	if !slices.Equal(names, []string{"api", "doctor", "management", "rotate-master-key"}) {
 		t.Fatalf("commands = %v", names)
 	}
 
@@ -36,6 +37,43 @@ func TestCommandHasOnlyManagementAndAPIServerModes(t *testing.T) {
 	err := command.ExecuteContext(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "config") {
 		t.Fatalf("management without --config error = %v", err)
+	}
+}
+
+func TestKeyRotationRequiresTargetAndOfflineConfirmation(t *testing.T) {
+	for _, args := range [][]string{
+		{"rotate-master-key"},
+		{"rotate-master-key", "--config=missing.yaml", "--new-key-file=new-key", "--confirm-offline"},
+		{"rotate-master-key", "--config=missing.yaml", "--new-key-file=new-key", "--confirm-database=test"},
+		{"rotate-master-key", "--config=missing.yaml", "--new-key-file=new-key", "--confirm-database=", "--confirm-offline"},
+		{"rotate-master-key", "--config=missing.yaml", "--new-key-file=new-key", "--confirm-database=test", "--confirm-offline", "--timeout=0s"},
+	} {
+		command := NewCommand()
+		command.SetOut(io.Discard)
+		command.SetErr(io.Discard)
+		command.SetArgs(args)
+		if err := command.ExecuteContext(context.Background()); err == nil || strings.Contains(err.Error(), "read bootstrap") {
+			t.Fatalf("rotation confirmation was not checked before accessing configuration: %v", err)
+		}
+	}
+}
+
+func TestDoctorRequiresExplicitScanAndPositiveTimeout(t *testing.T) {
+	for _, args := range [][]string{
+		{"doctor", "--verify-vault"},
+		{"doctor", "--config=missing.yaml"},
+		{"doctor", "--config=missing.yaml", "--verify-vault=false"},
+		{"doctor", "--config=missing.yaml", "--verify-vault", "--timeout=0s"},
+		{"doctor", "--config=missing.yaml", "--verify-vault", "--timeout=-1s"},
+		{"doctor", "--config=missing.yaml", "--verify-vault", "unexpected"},
+	} {
+		command := NewCommand()
+		command.SetOut(io.Discard)
+		command.SetErr(io.Discard)
+		command.SetArgs(args)
+		if err := command.ExecuteContext(context.Background()); err == nil {
+			t.Fatalf("accepted %v", args)
+		}
 	}
 }
 
@@ -88,4 +126,28 @@ func TestHealthEndpointsExposeNoDependencyErrorDetails(t *testing.T) {
 	if other.Code != http.StatusNotFound {
 		t.Fatalf("other status = %d", other.Code)
 	}
+}
+
+func TestRequestDeadlineBoundsWorkAndPreservesEarlierCancellation(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		for _, parentLimit := range []time.Duration{time.Minute, time.Second} {
+			ctx, cancel := context.WithTimeout(context.Background(), parentLimit)
+			started := time.Now()
+			var workContext context.Context
+			handler := withRequestDeadline(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+				workContext = request.Context()
+				<-workContext.Done()
+				if !errors.Is(workContext.Err(), context.DeadlineExceeded) {
+					t.Errorf("work cancellation = %v", workContext.Err())
+				}
+				response.WriteHeader(http.StatusServiceUnavailable)
+			}))
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/v1/configs", nil).WithContext(ctx))
+			cancel()
+			if elapsed := time.Since(started); elapsed != min(parentLimit, 20*time.Second) || response.Code != http.StatusServiceUnavailable {
+				t.Fatalf("work ran for %s and returned %d", elapsed, response.Code)
+			}
+		}
+	})
 }

@@ -54,13 +54,9 @@ func canonicalizeJSON(source []byte) (Document, error) {
 	if err := findJSONReferences(value, references); err != nil {
 		return Document{}, err
 	}
-	content, err := json.MarshalIndent(value, "", "  ")
+	content, err := encodeJSON(value)
 	if err != nil {
 		return Document{}, fmt.Errorf("format JSON: %w", err)
-	}
-	content = append(content, '\n')
-	if len(content) > maxConfigBytes {
-		return Document{}, ErrTooLarge
 	}
 	return Document{Content: content, References: sortedReferences(references)}, nil
 }
@@ -96,22 +92,112 @@ func canonicalizeYAML(source []byte) (Document, error) {
 	if err != nil {
 		return Document{}, err
 	}
-	var output bytes.Buffer
-	encoder := yaml.NewEncoder(&output)
-	encoder.SetIndent(2)
-	if err := encoder.Encode(&document); err != nil {
+	output, err := encodeYAML(&document)
+	if err != nil {
 		return Document{}, fmt.Errorf("format YAML: %w", err)
 	}
-	if err := encoder.Close(); err != nil {
-		return Document{}, fmt.Errorf("close YAML formatter: %w", err)
-	}
-	if output.Len() > maxConfigBytes {
-		return Document{}, ErrTooLarge
-	}
-	if _, _, err := parseYAML(output.Bytes()); err != nil {
+	if _, _, err := parseYAML(output); err != nil {
 		return Document{}, fmt.Errorf("validate formatted YAML: %w", err)
 	}
-	return Document{Content: output.Bytes(), References: sortedReferences(references)}, nil
+	return Document{Content: output, References: sortedReferences(references)}, nil
+}
+
+// JSON's encoder buffers the whole result internally, even with a bounded
+// Writer. Check its exact formatted size first, including escaping/indentation.
+func encodeJSON(value any) ([]byte, error) {
+	remaining := maxConfigBytes - 1 // Final newline.
+	if err := checkJSONBudget(value, 0, &remaining); err != nil {
+		return nil, err
+	}
+	content, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return append(content, '\n'), nil
+}
+
+func checkJSONBudget(value any, indent int, remaining *int) error {
+	if *remaining < 0 {
+		return ErrTooLarge
+	}
+	switch current := value.(type) {
+	case map[string]any:
+		if current == nil {
+			*remaining -= 4 // null
+			break
+		}
+		*remaining -= 2 // Braces.
+		if len(current) > 0 {
+			*remaining -= indent + len(current) // Opening newline, closing indent, commas.
+		}
+		for key, child := range current {
+			*remaining -= indent + 5 // Entry indent, colon/space and newline.
+			if err := checkJSONBudget(key, 0, remaining); err != nil {
+				return err
+			}
+			if err := checkJSONBudget(child, indent+2, remaining); err != nil {
+				return err
+			}
+		}
+	case []any:
+		if current == nil {
+			*remaining -= 4
+			break
+		}
+		*remaining -= 2 // Brackets.
+		if len(current) > 0 {
+			*remaining -= indent + len(current)
+		}
+		for _, child := range current {
+			*remaining -= indent + 3 // Entry indent and newline.
+			if err := checkJSONBudget(child, indent+2, remaining); err != nil {
+				return err
+			}
+		}
+	default:
+		if text, ok := current.(string); ok && len(text) > *remaining-2 {
+			return ErrTooLarge
+		}
+		encoded, err := json.Marshal(current)
+		if err != nil {
+			return err
+		}
+		*remaining -= len(encoded)
+	}
+	if *remaining < 0 {
+		return ErrTooLarge
+	}
+	return nil
+}
+
+type configBuffer struct {
+	bytes.Buffer
+	exceeded bool
+}
+
+func (buffer *configBuffer) Write(content []byte) (int, error) {
+	if len(content) > maxConfigBytes-buffer.Len() {
+		buffer.exceeded = true
+		return 0, ErrTooLarge
+	}
+	return buffer.Buffer.Write(content)
+}
+
+func encodeYAML(document *yaml.Node) ([]byte, error) {
+	var output configBuffer
+	encoder := yaml.NewEncoder(&output)
+	encoder.SetIndent(2)
+	err := encoder.Encode(document)
+	if err == nil {
+		err = encoder.Close()
+	}
+	if output.exceeded {
+		return nil, ErrTooLarge // yaml does not preserve the Writer error's identity.
+	}
+	if err != nil {
+		return nil, err
+	}
+	return output.Bytes(), nil
 }
 
 func parseYAML(source []byte) (yaml.Node, map[Reference]struct{}, error) {

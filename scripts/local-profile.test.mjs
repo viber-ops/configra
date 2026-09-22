@@ -64,3 +64,22 @@ test('local startup and stop use an explicit separate project', () => {
     }
   }
 });
+
+test('integration passes every external dependency to the E2E process', () => {
+  const output = execFileSync(
+    'make',
+    ['-n', '-o', 'dependencies-test-up', 'test-integration',
+      'TEST_MYSQL_ROOT_DSN=mysql-fixture', 'TEST_NATS_URL=nats-fixture',
+      'TEST_CLICKHOUSE_DSN=clickhouse-fixture'],
+    { cwd: root, encoding: 'utf8' },
+  );
+  const command = output.replace(/\\\n\s*/g, ' ').split('\n')
+    .find((line) => line.includes('go -C e2e test'));
+  assert.ok(command, 'E2E tests must run, not just the root module');
+  for (const [name, value] of Object.entries({
+    MYSQL_ROOT_DSN: 'mysql-fixture', NATS_URL: 'nats-fixture',
+    CLICKHOUSE_DSN: 'clickhouse-fixture',
+  })) {
+    assert.ok(command.includes(`CONFIGRA_TEST_${name}='${value}'`), name);
+  }
+});

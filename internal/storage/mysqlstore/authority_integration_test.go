@@ -309,8 +309,8 @@ func TestSchemaV2PreservesExistingDataAndChecksMasterKeyBeforeMigration(t *testi
 	if version, err := store.SchemaVersion(ctx); err != nil || version != 2 {
 		t.Fatal("schema v2 was not recorded")
 	}
-	items, err := store.ListEnvironments(ctx, false)
-	if err != nil || len(items) != 1 || items[0].Key != "legacy" {
+	items, err := store.ListEnvironments(ctx, EnvironmentQuery{InventoryQuery: InventoryQuery{Limit: 50}})
+	if err != nil || len(items.Items) != 1 || items.Total != 1 || items.Items[0].Key != "legacy" {
 		t.Fatal("migration lost existing data")
 	}
 }

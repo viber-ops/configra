@@ -103,6 +103,9 @@ func (reconciler *Reconciler) Reconcile(ctx context.Context, request ctrl.Reques
 	if request.Namespace != reconciler.Namespace {
 		return ctrl.Result{}, nil
 	}
+	// Bound Kubernetes work too, leaving time to report a 30-second fetch failure.
+	ctx, stop := context.WithTimeout(ctx, 45*time.Second)
+	defer stop()
 	object := NewObject()
 	if err := reconciler.Client.Get(ctx, request.NamespacedName, object); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -121,6 +124,17 @@ func (reconciler *Reconciler) Reconcile(ctx context.Context, request ctrl.Reques
 	var credential corev1.Secret
 	if err := reader.Get(ctx, types.NamespacedName{Namespace: request.Namespace, Name: spec.CredentialsSecretRef.Name}, &credential); err != nil {
 		return reconciler.failure(ctx, object, "CredentialsUnavailable", "The workload credential Secret could not be read.")
+	}
+	// Keep the pre-fetch version: a replaced leader's late response must not
+	// overwrite a target delivered by another reconcile while this read ran.
+	var target client.Object = &corev1.Secret{}
+	if spec.Target.Kind == "ConfigMap" {
+		target = &corev1.ConfigMap{}
+	}
+	err = reconciler.Client.Get(ctx, types.NamespacedName{Namespace: request.Namespace, Name: spec.Target.Name}, target)
+	missing := apierrors.IsNotFound(err)
+	if err != nil && !missing {
+		return reconciler.failure(ctx, object, "TargetWriteFailed", "The target could not be read; the previous target is retained.")
 	}
 	readContext, cancel := context.WithTimeout(ctx, 30*time.Second)
 	materials, err := reconciler.Source.Read(readContext, spec.Objects, credential.Data)
@@ -172,7 +186,7 @@ func (reconciler *Reconciler) Reconcile(ctx context.Context, request ctrl.Reques
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 	digest := hex.EncodeToString(versions.Sum(nil))
-	if err := reconciler.writeTarget(ctx, object, spec, data, digest); err != nil {
+	if err := reconciler.writeTarget(ctx, object, spec, target, missing, data, digest); err != nil {
 		if errors.Is(err, errUnowned) {
 			return reconciler.failure(ctx, object, "TargetCollision", "The target is owned by another resource or is not managed by this binding.")
 		}
@@ -189,25 +203,13 @@ func (reconciler *Reconciler) Reconcile(ctx context.Context, request ctrl.Reques
 
 var errUnowned = errors.New("target is not owned by this binding")
 
-func (reconciler *Reconciler) writeTarget(ctx context.Context, binding *unstructured.Unstructured, spec Spec, data map[string][]byte, version string) error {
-	key := types.NamespacedName{Namespace: binding.GetNamespace(), Name: spec.Target.Name}
-	var target client.Object
-	if spec.Target.Kind == "ConfigMap" {
-		target = &corev1.ConfigMap{}
-	} else {
-		target = &corev1.Secret{}
-	}
-	err := reconciler.Client.Get(ctx, key, target)
-	missing := apierrors.IsNotFound(err)
-	if err != nil && !missing {
-		return err
-	}
+func (reconciler *Reconciler) writeTarget(ctx context.Context, binding *unstructured.Unstructured, spec Spec, target client.Object, missing bool, data map[string][]byte, version string) error {
 	if !missing && !metav1.IsControlledBy(target, binding) {
 		return errUnowned
 	}
 	before := target.DeepCopyObject()
-	target.SetNamespace(key.Namespace)
-	target.SetName(key.Name)
+	target.SetNamespace(binding.GetNamespace())
+	target.SetName(spec.Target.Name)
 	controller := true
 	if missing {
 		target.SetOwnerReferences([]metav1.OwnerReference{{APIVersion: GVK.GroupVersion().String(), Kind: GVK.Kind, Name: binding.GetName(), UID: binding.GetUID(), Controller: &controller}})
@@ -277,7 +279,9 @@ func (reconciler *Reconciler) cleanupPreviousTarget(ctx context.Context, binding
 	if !metav1.IsControlledBy(target, binding) {
 		return nil
 	}
-	return client.IgnoreNotFound(reconciler.Client.Delete(ctx, target))
+	// Ownership can change, or the name can be reused, between Get and Delete.
+	uid, version := target.GetUID(), target.GetResourceVersion()
+	return client.IgnoreNotFound(reconciler.Client.Delete(ctx, target, client.Preconditions{UID: &uid, ResourceVersion: &version}))
 }
 
 func (reconciler *Reconciler) failure(ctx context.Context, object *unstructured.Unstructured, reason, message string) (ctrl.Result, error) {

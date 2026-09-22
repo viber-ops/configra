@@ -62,7 +62,7 @@ func (store *Store) RecordRejectedMutation(ctx context.Context, rejected Rejecte
 		return err
 	}
 	_, err = store.db.ExecContext(ctx, `INSERT INTO outbox_events
-		(id, kind, event_type, operation_id, payload) VALUES (?, 'audit', 'management.request_rejected', NULL, ?)`, eventID, encoded)
+		(id, kind, event_type, operation_id, payload) VALUES (?, 'audit', 'management.request_rejected', NULL, ?)`, eventID, string(encoded))
 	return err
 }
 

@@ -37,11 +37,23 @@ func Resolve(format Format, canonical []byte, lookup Lookup) ([]byte, error) {
 	if lookup == nil {
 		return nil, errors.New("Vault Reference lookup is required")
 	}
+	remaining := maxConfigBytes
+	boundedLookup := func(reference Reference) (string, error) {
+		value, err := lookup(reference)
+		if err != nil {
+			return "", err
+		}
+		if len(value) > remaining {
+			return "", ErrTooLarge
+		}
+		remaining -= len(value)
+		return value, nil
+	}
 	switch format {
 	case YAML:
-		return resolveYAML(canonical, lookup)
+		return resolveYAML(canonical, boundedLookup)
 	case JSON:
-		return resolveJSON(canonical, lookup)
+		return resolveJSON(canonical, boundedLookup)
 	default:
 		return nil, fmt.Errorf("unsupported Config format %q", format)
 	}
@@ -64,13 +76,9 @@ func resolveJSON(canonical []byte, lookup Lookup) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	output, err := json.MarshalIndent(resolved, "", "  ")
+	output, err := encodeJSON(resolved)
 	if err != nil {
 		return nil, fmt.Errorf("encode resolved JSON: %w", err)
-	}
-	output = append(output, '\n')
-	if len(output) > maxConfigBytes {
-		return nil, ErrTooLarge
 	}
 	return output, nil
 }
@@ -194,19 +202,11 @@ func resolveYAML(canonical []byte, lookup Lookup) ([]byte, error) {
 	if err := resolveYAMLNode(&document, lookup, make(map[*yaml.Node]yamlVisitState)); err != nil {
 		return nil, err
 	}
-	var output bytes.Buffer
-	encoder := yaml.NewEncoder(&output)
-	encoder.SetIndent(2)
-	if err := encoder.Encode(&document); err != nil {
+	output, err := encodeYAML(&document)
+	if err != nil {
 		return nil, fmt.Errorf("encode resolved YAML: %w", err)
 	}
-	if err := encoder.Close(); err != nil {
-		return nil, fmt.Errorf("close resolved YAML encoder: %w", err)
-	}
-	if output.Len() > maxConfigBytes {
-		return nil, ErrTooLarge
-	}
-	return output.Bytes(), nil
+	return output, nil
 }
 
 func resolveYAMLNode(node *yaml.Node, lookup Lookup, visits map[*yaml.Node]yamlVisitState) error {

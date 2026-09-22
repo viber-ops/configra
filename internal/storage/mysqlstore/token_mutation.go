@@ -39,6 +39,10 @@ type TokenEnvironmentChange struct {
 	Actor           Actor
 	PublicID        string
 	EnvironmentKeys []string
+	// Omit new fields from legacy PUT digests so existing operations still replay.
+	Patch  bool     `json:",omitempty"`
+	Add    []string `json:",omitempty"`
+	Remove []string `json:",omitempty"`
 }
 
 type TokenEnvironmentResult struct {
@@ -166,6 +170,22 @@ func (store *Store) SetTokenEnvironments(ctx context.Context, request TokenEnvir
 	if !validTokenPublicID(request.PublicID) {
 		validationErr = errors.New("invalid API Token public ID")
 	}
+	if request.Patch {
+		seen := make(map[string]bool, len(request.Add)+len(request.Remove))
+		for _, keys := range [][]string{request.Add, request.Remove} {
+			for _, key := range keys {
+				if !validResourceKey(key) || seen[key] {
+					validationErr = errors.New("invalid, duplicate or overlapping Environment key")
+				}
+				seen[key] = true
+			}
+		}
+		if len(request.EnvironmentKeys) != 0 {
+			validationErr = errors.New("cannot combine replacement and incremental grants")
+		}
+	} else if len(request.Add)+len(request.Remove) != 0 {
+		validationErr = errors.New("incremental grants require Patch")
+	}
 	transaction, err := store.db.BeginTx(ctx, nil)
 	if err != nil {
 		return TokenEnvironmentResult{}, fmt.Errorf("begin API Token Environment change: %w", err)
@@ -196,31 +216,66 @@ func (store *Store) SetTokenEnvironments(ctx context.Context, request TokenEnvir
 	if err != nil {
 		return TokenEnvironmentResult{}, fmt.Errorf("lock API Token: %w", err)
 	}
-	keys, ids, err := activeEnvironmentIDs(ctx, transaction, request.EnvironmentKeys)
+	requested := request.EnvironmentKeys
+	if request.Patch {
+		requested = request.Add
+	}
+	keys, ids, err := activeEnvironmentIDs(ctx, transaction, requested)
 	if errors.Is(err, ErrValidation) {
 		return finishTokenEnvironmentFailure(ctx, transaction, request, err)
 	}
 	if err != nil {
 		return TokenEnvironmentResult{}, err
 	}
-	current, err := tokenEnvironmentKeys(ctx, transaction, tokenID)
-	if err != nil {
-		return TokenEnvironmentResult{}, err
-	}
-	result := TokenEnvironmentResult{Outcome: OutcomeNoChange, PublicID: request.PublicID, EnvironmentKeys: keys}
-	if !slices.Equal(current, keys) {
-		if _, err := transaction.ExecContext(ctx, `DELETE FROM api_token_environments WHERE token_id = ?`, tokenID); err != nil {
-			return TokenEnvironmentResult{}, fmt.Errorf("clear API Token Environment grants: %w", err)
-		}
+	result := TokenEnvironmentResult{Outcome: OutcomeNoChange, PublicID: request.PublicID}
+	if request.Patch {
+		// The token row lock serializes replacement, patch and revocation. Only
+		// explicitly named grants are touched; no full grant set is read or returned.
 		for _, key := range keys {
-			if _, err := transaction.ExecContext(ctx, `INSERT INTO api_token_environments (token_id, environment_id) VALUES (?, ?)`, tokenID, ids[key]); err != nil {
-				return TokenEnvironmentResult{}, fmt.Errorf("replace API Token Environment grant: %w", err)
+			changed, err := transaction.ExecContext(ctx, `INSERT INTO api_token_environments (token_id, environment_id)
+				SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM api_token_environments WHERE token_id = ? AND environment_id = ?)`, tokenID, ids[key], tokenID, ids[key])
+			if err != nil {
+				return TokenEnvironmentResult{}, fmt.Errorf("add API Token Environment grant: %w", err)
+			}
+			if count, err := changed.RowsAffected(); err != nil {
+				return TokenEnvironmentResult{}, err
+			} else if count > 0 {
+				result.Outcome = OutcomeSuccess
 			}
 		}
-		result.Outcome = OutcomeSuccess
+		for _, key := range request.Remove {
+			changed, err := transaction.ExecContext(ctx, `DELETE grant_record FROM api_token_environments AS grant_record
+				JOIN environments AS environment ON environment.id = grant_record.environment_id
+				WHERE grant_record.token_id = ? AND environment.resource_key = ?`, tokenID, key)
+			if err != nil {
+				return TokenEnvironmentResult{}, fmt.Errorf("remove API Token Environment grant: %w", err)
+			}
+			if count, err := changed.RowsAffected(); err != nil {
+				return TokenEnvironmentResult{}, err
+			} else if count > 0 {
+				result.Outcome = OutcomeSuccess
+			}
+		}
+	} else {
+		current, err := tokenEnvironmentKeys(ctx, transaction, tokenID)
+		if err != nil {
+			return TokenEnvironmentResult{}, err
+		}
+		result.EnvironmentKeys = keys
+		if !slices.Equal(current, keys) {
+			if _, err := transaction.ExecContext(ctx, `DELETE FROM api_token_environments WHERE token_id = ?`, tokenID); err != nil {
+				return TokenEnvironmentResult{}, fmt.Errorf("clear API Token Environment grants: %w", err)
+			}
+			for _, key := range keys {
+				if _, err := transaction.ExecContext(ctx, `INSERT INTO api_token_environments (token_id, environment_id) VALUES (?, ?)`, tokenID, ids[key]); err != nil {
+					return TokenEnvironmentResult{}, fmt.Errorf("replace API Token Environment grant: %w", err)
+				}
+			}
+			result.Outcome = OutcomeSuccess
+		}
 	}
 	if err := finishOperation(ctx, transaction, request.OperationID, request.Actor, result.Outcome, 0, result, mutationEvent{
-		Type: "token.environments_updated", Action: "token.set_environments", ResourceType: "api_token", ResourceKey: request.PublicID,
+		Type: "token.environments_updated", Action: request.action(), ResourceType: "api_token", ResourceKey: request.PublicID,
 	}, result.Outcome == OutcomeSuccess); err != nil {
 		return TokenEnvironmentResult{}, err
 	}
@@ -362,7 +417,7 @@ func (store *Store) finishTokenCreateFailure(ctx context.Context, transaction *s
 func finishTokenEnvironmentFailure(ctx context.Context, transaction *sql.Tx, request TokenEnvironmentChange, cause error) (TokenEnvironmentResult, error) {
 	result := TokenEnvironmentResult{Outcome: OutcomeValidationFailed, PublicID: request.PublicID}
 	if err := finishOperation(ctx, transaction, request.OperationID, request.Actor, result.Outcome, 0, result, mutationEvent{
-		Type: "token.validation_failed", Action: "token.set_environments", ResourceType: "api_token", ResourceKey: request.PublicID,
+		Type: "token.validation_failed", Action: request.action(), ResourceType: "api_token", ResourceKey: request.PublicID,
 	}, false); err != nil {
 		return TokenEnvironmentResult{}, err
 	}
@@ -370,6 +425,13 @@ func finishTokenEnvironmentFailure(ctx context.Context, transaction *sql.Tx, req
 		return TokenEnvironmentResult{}, fmt.Errorf("commit API Token Environment validation Audit: %w", err)
 	}
 	return result, withCommittedAudit(fmt.Errorf("%w: %v", ErrValidation, cause))
+}
+
+func (request TokenEnvironmentChange) action() string {
+	if request.Patch {
+		return "token.patch_environments"
+	}
+	return "token.set_environments"
 }
 
 func finishTokenRevokeFailure(ctx context.Context, transaction *sql.Tx, request TokenRevoke, cause error) (TokenRevokeResult, error) {

@@ -61,7 +61,8 @@ func TestVaultManagementReadsPreserveHistoricalNamesStructureAndValues(t *testin
 		t.Fatalf("update Vault Item: %v", err)
 	}
 
-	items, err := store.ListVaultItems(ctx, false)
+	itemPage, err := store.ListVaultItems(ctx, VaultQuery{InventoryQuery: InventoryQuery{Limit: 50}})
+	items := itemPage.Items
 	if err != nil || len(items) != 1 || items[0].Key != "redis" || items[0].DisplayName != "Redis Two" || items[0].Revision != 2 || items[0].Archived ||
 		len(items[0].EnvironmentKeys) != 1 || items[0].EnvironmentKeys[0] != "a" {
 		t.Fatalf("ListVaultItems = %#v, %v", items, err)
@@ -82,7 +83,8 @@ func TestVaultManagementReadsPreserveHistoricalNamesStructureAndValues(t *testin
 	if err != nil || metadata.Snapshot.Variants[0].Values != nil {
 		t.Fatalf("Vault metadata = %#v, %v", metadata, err)
 	}
-	history, err := store.ListVaultRevisions(ctx, "platform", "redis")
+	page, err := store.ListVaultRevisions(ctx, "platform", "redis", RevisionQuery{Limit: 50})
+	history := page.Items
 	if err != nil || len(history) != 2 || history[0].Revision != 2 || history[1].Revision != 1 ||
 		history[0].OperationID != "vault-management-update" || history[0].ActorID != actor.ID {
 		t.Fatalf("ListVaultRevisions = %#v, %v", history, err)
@@ -100,7 +102,8 @@ func TestVaultManagementReadsPreserveHistoricalNamesStructureAndValues(t *testin
 		*current.Snapshot.Variants[0].Values["password"].Text != "secret-one" {
 		t.Fatalf("restored Vault Item = %#v, %v", current, err)
 	}
-	history, err = store.ListVaultRevisions(ctx, "platform", "redis")
+	page, err = store.ListVaultRevisions(ctx, "platform", "redis", RevisionQuery{Limit: 50})
+	history = page.Items
 	if err != nil || len(history) != 3 || history[0].RestoredFromRevision == nil || *history[0].RestoredFromRevision != 1 {
 		t.Fatalf("restored Vault history = %#v, %v", history, err)
 	}
@@ -111,10 +114,10 @@ func TestVaultManagementReadsPreserveHistoricalNamesStructureAndValues(t *testin
 	if err != nil || !archived.Archived {
 		t.Fatalf("Archive Vault Item = %#v, %v", archived, err)
 	}
-	if active, err := store.ListVaultItems(ctx, false); err != nil || len(active) != 0 {
+	if active, err := store.ListVaultItems(ctx, VaultQuery{InventoryQuery: InventoryQuery{Limit: 50}}); err != nil || len(active.Items) != 0 || active.Total != 0 {
 		t.Fatalf("active Vault Items = %#v, %v", active, err)
 	}
-	if all, err := store.ListVaultItems(ctx, true); err != nil || len(all) != 1 || !all[0].Archived {
+	if all, err := store.ListVaultItems(ctx, VaultQuery{InventoryQuery: InventoryQuery{Limit: 50, IncludeInactive: true}}); err != nil || len(all.Items) != 1 || all.Total != 1 || !all.Items[0].Archived {
 		t.Fatalf("all Vault Items = %#v, %v", all, err)
 	}
 	if _, err := store.ReadVaultItem(ctx, "platform", "redis", 0, true); !errors.Is(err, ErrNotFound) {
@@ -186,12 +189,12 @@ func TestListVaultUsagesReturnsOnlyActiveCurrentConfigReferences(t *testing.T) {
 	}
 	commit("vault-usage-other-namespace", "a", "billing", "Billing", "password: '{vault.cloud.redis.password}'\n", 0)
 
-	usages, err := store.ListVaultUsages(ctx, "platform", "redis")
-	if err != nil || len(usages) != 1 || usages[0].FieldKey != "username" || usages[0].EnvironmentKey != "a" ||
-		usages[0].ConfigKey != "payment" || usages[0].ConfigName != "Payment" || usages[0].ConfigRevision != 2 {
+	usages, err := store.ListVaultUsages(ctx, "platform", "redis", VaultUsageQuery{InventoryQuery: InventoryQuery{Limit: 50}})
+	if err != nil || usages.Total != 1 || len(usages.Items) != 1 || usages.Items[0].FieldKey != "username" || usages.Items[0].EnvironmentKey != "a" ||
+		usages.Items[0].ConfigKey != "payment" || usages.Items[0].ConfigName != "Payment" || usages.Items[0].ConfigRevision != 2 {
 		t.Fatalf("ListVaultUsages = %#v, %v", usages, err)
 	}
-	if _, err := store.ListVaultUsages(ctx, "platform", "missing"); !errors.Is(err, ErrNotFound) {
+	if _, err := store.ListVaultUsages(ctx, "platform", "missing", VaultUsageQuery{InventoryQuery: InventoryQuery{Limit: 50}}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("missing Vault Item = %v, want ErrNotFound", err)
 	}
 }

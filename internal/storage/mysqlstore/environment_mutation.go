@@ -40,33 +40,73 @@ type Environment struct {
 	Archived    bool      `json:"archived"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
+	Revision    uint64    `json:"revision,omitempty"`
+	Granted     bool      `json:"granted,omitempty"`
 }
 
-func (store *Store) ListEnvironments(ctx context.Context, includeArchived bool) ([]Environment, error) {
+type EnvironmentQuery struct {
+	InventoryQuery
+	Config        string
+	Namespace     string
+	Item          string
+	TokenPublicID string
+}
+
+func (store *Store) ListEnvironments(ctx context.Context, query EnvironmentQuery) (InventoryPage[Environment], error) {
+	page := InventoryPage[Environment]{Items: make([]Environment, 0)}
+	if !query.valid() || (query.Config != "" && !validResourceKey(query.Config)) ||
+		(query.Namespace != "" && !validResourceKey(query.Namespace)) || (query.Item != "" && !validResourceKey(query.Item)) ||
+		(query.Namespace == "") != (query.Item == "") || (query.TokenPublicID != "" && !validTokenPublicID(query.TokenPublicID)) {
+		return page, ErrValidation
+	}
+	where, arguments := query.filter("environment.resource_key", "environment.archived_at", "environment.resource_key", "environment.display_name")
+	if query.Config != "" {
+		where += ` AND EXISTS (SELECT 1 FROM config_env_states AS state JOIN configs AS config ON config.id = state.config_id
+			WHERE state.environment_id = environment.id AND config.resource_key = ?)`
+		arguments = append(arguments, query.Config)
+	}
+	if query.Item != "" {
+		where += ` AND EXISTS (SELECT 1 FROM vault_revision_variant_environments AS binding
+			JOIN vault_items AS item ON item.id = binding.item_id AND item.current_revision = binding.revision
+			WHERE binding.environment_id = environment.id AND item.namespace_key = ? AND item.resource_key = ?)`
+		arguments = append(arguments, query.Namespace, query.Item)
+	}
+	var tokenID []byte
+	if query.TokenPublicID != "" {
+		if err := store.db.QueryRowContext(ctx, `SELECT id FROM api_tokens WHERE public_id = ?`, query.TokenPublicID).Scan(&tokenID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return page, ErrNotFound
+			}
+			return page, fmt.Errorf("read API Token grant identity: %w", err)
+		}
+	}
+	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM environments AS environment WHERE `+where, arguments...).Scan(&page.Total); err != nil {
+		return page, fmt.Errorf("count Environments: %w", err)
+	}
 	rows, err := store.db.QueryContext(ctx, `
-		SELECT resource_key, display_name, archived_at IS NOT NULL, created_at, updated_at
-		FROM environments
-		WHERE archived_at IS NULL OR ?
-		ORDER BY resource_key
-	`, includeArchived)
+		SELECT environment.resource_key, environment.display_name, environment.archived_at IS NOT NULL, environment.created_at, environment.updated_at,
+		       COALESCE((SELECT state.current_revision FROM config_env_states AS state JOIN configs AS config ON config.id = state.config_id
+		          WHERE state.environment_id = environment.id AND config.resource_key = ?), 0),
+		       EXISTS (SELECT 1 FROM api_token_environments AS grant_record WHERE grant_record.environment_id = environment.id AND grant_record.token_id = ?)
+		FROM environments AS environment WHERE `+where+` ORDER BY environment.resource_key LIMIT ? OFFSET ?`,
+		append(append([]any{query.Config, tokenID}, arguments...), query.Limit, query.Offset)...)
 	if err != nil {
-		return nil, fmt.Errorf("list Environments: %w", err)
+		return page, fmt.Errorf("list Environments: %w", err)
 	}
 	defer rows.Close()
-	result := make([]Environment, 0)
 	for rows.Next() {
 		var environment Environment
-		if err := rows.Scan(&environment.Key, &environment.DisplayName, &environment.Archived, &environment.CreatedAt, &environment.UpdatedAt); err != nil {
-			return nil, fmt.Errorf("scan Environment: %w", err)
+		if err := rows.Scan(&environment.Key, &environment.DisplayName, &environment.Archived, &environment.CreatedAt, &environment.UpdatedAt, &environment.Revision, &environment.Granted); err != nil {
+			return page, fmt.Errorf("scan Environment: %w", err)
 		}
 		environment.CreatedAt = environment.CreatedAt.UTC()
 		environment.UpdatedAt = environment.UpdatedAt.UTC()
-		result = append(result, environment)
+		page.Items = append(page.Items, environment)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate Environments: %w", err)
+		return page, fmt.Errorf("iterate Environments: %w", err)
 	}
-	return result, nil
+	return page, nil
 }
 
 func (store *Store) ApplyEnvironmentChange(ctx context.Context, request EnvironmentChange) (EnvironmentChangeResult, error) {

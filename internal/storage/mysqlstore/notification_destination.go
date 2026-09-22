@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"slices"
 	"strings"
@@ -24,16 +25,17 @@ const (
 )
 
 type NotificationDestination struct {
-	Key          string               `json:"key"`
-	DisplayName  string               `json:"display_name"`
-	Provider     NotificationProvider `json:"provider"`
-	SafeHost     string               `json:"safe_host"`
-	MaskedSuffix string               `json:"masked_suffix"`
-	Enabled      bool                 `json:"enabled"`
-	EventTypes   []string             `json:"event_types"`
-	Archived     bool                 `json:"archived"`
-	CreatedAt    time.Time            `json:"created_at"`
-	UpdatedAt    time.Time            `json:"updated_at"`
+	Key            string               `json:"key"`
+	DisplayName    string               `json:"display_name"`
+	Provider       NotificationProvider `json:"provider"`
+	SafeHost       string               `json:"safe_host"`
+	MaskedSuffix   string               `json:"masked_suffix"`
+	Enabled        bool                 `json:"enabled"`
+	EventTypes     []string             `json:"event_types"`
+	EventTypeCount uint64               `json:"event_type_count"`
+	Archived       bool                 `json:"archived"`
+	CreatedAt      time.Time            `json:"created_at"`
+	UpdatedAt      time.Time            `json:"updated_at"`
 }
 
 type NotificationDestinationCommit struct {
@@ -79,6 +81,9 @@ func (store *Store) CommitNotificationDestination(
 		return NotificationDestinationResult{}, fmt.Errorf("begin Notification Destination commit: %w", err)
 	}
 	defer transaction.Rollback()
+	if err := store.lockMasterKey(ctx, transaction, false); err != nil {
+		return NotificationDestinationResult{}, err
+	}
 	replayed, replay, err := beginOperation(ctx, transaction, request.OperationID, digest, request.Actor)
 	if err != nil {
 		return NotificationDestinationResult{}, err
@@ -127,18 +132,11 @@ func (store *Store) CommitNotificationDestination(
 
 	credentials := notificationCredentials{}
 	if found {
-		plaintext, err := store.provider.DecryptSecret(notificationCredentialIdentity(id), vaultcrypto.EncryptedSecret{
+		credentials, err = store.decryptNotificationCredentials(id, vaultcrypto.EncryptedSecret{
 			Algorithm: algorithm, KeyVersion: keyVersion, Nonce: nonce, Ciphertext: ciphertext, EncryptedDEK: dek,
 		})
 		if err != nil {
 			return NotificationDestinationResult{}, fmt.Errorf("decrypt Notification Destination credentials: %w", err)
-		}
-		decoder := json.NewDecoder(bytes.NewReader(plaintext))
-		decoder.DisallowUnknownFields()
-		decodeErr := decoder.Decode(&credentials)
-		clear(plaintext)
-		if decodeErr != nil || credentials.URL == "" {
-			return NotificationDestinationResult{}, fmt.Errorf("decode Notification Destination credentials: %w", vaultcrypto.ErrIntegrity)
 		}
 	}
 	if request.URL != nil {
@@ -220,19 +218,28 @@ func (store *Store) CommitNotificationDestination(
 	return result, nil
 }
 
-func (store *Store) ListNotificationDestinations(ctx context.Context, includeArchived bool) ([]NotificationDestination, error) {
+func (store *Store) ListNotificationDestinations(ctx context.Context, query InventoryQuery) (InventoryPage[NotificationDestination], error) {
+	page := InventoryPage[NotificationDestination]{Items: make([]NotificationDestination, 0)}
+	if !query.valid() {
+		return page, ErrValidation
+	}
+	where, arguments := query.filter("destination.resource_key", "destination.archived_at", "destination.resource_key", "destination.display_name", "destination.safe_host")
+	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM notification_destinations AS destination WHERE `+where, arguments...).Scan(&page.Total); err != nil {
+		return page, fmt.Errorf("count Notification Destinations: %w", err)
+	}
 	rows, err := store.db.QueryContext(ctx, `
 		SELECT destination.resource_key, destination.display_name, destination.provider,
 		       destination.safe_host, destination.masked_suffix, destination.enabled,
 		       destination.archived_at IS NOT NULL, destination.created_at, destination.updated_at,
-		       subscription.event_type
-		FROM notification_destinations AS destination
-		LEFT JOIN notification_subscriptions AS subscription ON subscription.destination_id = destination.id
-		WHERE destination.archived_at IS NULL OR ?
+		       (SELECT COUNT(*) FROM notification_subscriptions AS subscription WHERE subscription.destination_id = destination.id), subscription.event_type
+		FROM (SELECT destination.id, destination.resource_key, destination.display_name, destination.provider, destination.safe_host,
+		             destination.masked_suffix, destination.enabled, destination.archived_at, destination.created_at, destination.updated_at
+		      FROM notification_destinations AS destination WHERE `+where+` ORDER BY destination.resource_key LIMIT ? OFFSET ?) AS destination
+		LEFT JOIN LATERAL (SELECT event_type FROM notification_subscriptions WHERE destination_id = destination.id ORDER BY event_type LIMIT 3) AS subscription ON TRUE
 		ORDER BY destination.resource_key, subscription.event_type
-	`, includeArchived)
+	`, append(arguments, query.Limit, query.Offset)...)
 	if err != nil {
-		return nil, fmt.Errorf("list Notification Destinations: %w", err)
+		return page, fmt.Errorf("list Notification Destinations: %w", err)
 	}
 	defer rows.Close()
 	result := make([]NotificationDestination, 0)
@@ -242,9 +249,9 @@ func (store *Store) ListNotificationDestinations(ctx context.Context, includeArc
 		if err := rows.Scan(
 			&destination.Key, &destination.DisplayName, &destination.Provider, &destination.SafeHost,
 			&destination.MaskedSuffix, &destination.Enabled, &destination.Archived,
-			&destination.CreatedAt, &destination.UpdatedAt, &eventType,
+			&destination.CreatedAt, &destination.UpdatedAt, &destination.EventTypeCount, &eventType,
 		); err != nil {
-			return nil, fmt.Errorf("scan Notification Destination: %w", err)
+			return page, fmt.Errorf("scan Notification Destination: %w", err)
 		}
 		if len(result) == 0 || result[len(result)-1].Key != destination.Key {
 			destination.EventTypes = make([]string, 0)
@@ -258,9 +265,41 @@ func (store *Store) ListNotificationDestinations(ctx context.Context, includeArc
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate Notification Destinations: %w", err)
+		return page, fmt.Errorf("iterate Notification Destinations: %w", err)
 	}
-	return result, nil
+	page.Items = result
+	return page, nil
+}
+
+func (store *Store) ListNotificationEventTypes(ctx context.Context, key string, query InventoryQuery) (InventoryPage[string], error) {
+	page := InventoryPage[string]{Items: make([]string, 0)}
+	if !query.valid() || !validResourceKey(key) || query.Key != "" || query.IncludeInactive || query.OnlyInactive {
+		return page, ErrValidation
+	}
+	var id []byte
+	if err := store.db.QueryRowContext(ctx, `SELECT id FROM notification_destinations WHERE resource_key = ?`, key).Scan(&id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return page, ErrNotFound
+		}
+		return page, fmt.Errorf("read Notification Destination identity: %w", err)
+	}
+	where := ` WHERE destination_id = ? AND LOCATE(LOWER(?), LOWER(CONVERT(event_type USING utf8mb4))) > 0`
+	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM notification_subscriptions`+where, id, query.Search).Scan(&page.Total); err != nil {
+		return page, fmt.Errorf("count Notification subscriptions: %w", err)
+	}
+	rows, err := store.db.QueryContext(ctx, `SELECT event_type FROM notification_subscriptions`+where+` ORDER BY event_type LIMIT ? OFFSET ?`, id, query.Search, query.Limit, query.Offset)
+	if err != nil {
+		return page, fmt.Errorf("list Notification subscriptions: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var eventType string
+		if err := rows.Scan(&eventType); err != nil {
+			return page, fmt.Errorf("read Notification subscription: %w", err)
+		}
+		page.Items = append(page.Items, eventType)
+	}
+	return page, rows.Err()
 }
 
 type NotificationDestinationLifecycleAction string
@@ -413,23 +452,14 @@ func (store *Store) ClaimNotificationTargets(ctx context.Context, outboxID Outbo
 		copy(target.DestinationID[:], destinationID)
 		target.Attempt = attempts + 1
 		if target.Active {
-			plaintext, err := store.provider.DecryptSecret(notificationCredentialIdentity(destinationID), vaultcrypto.EncryptedSecret{
+			credentials, err := store.decryptNotificationCredentials(destinationID, vaultcrypto.EncryptedSecret{
 				Algorithm: algorithm, KeyVersion: keyVersion, Nonce: nonce, Ciphertext: ciphertext, EncryptedDEK: dek,
 			})
 			if err != nil {
 				target.ErrorCode = "credential_integrity_failure"
 			} else {
-				var credentials notificationCredentials
-				decoder := json.NewDecoder(bytes.NewReader(plaintext))
-				decoder.DisallowUnknownFields()
-				decodeErr := decoder.Decode(&credentials)
-				clear(plaintext)
-				if decodeErr != nil || credentials.URL == "" {
-					target.ErrorCode = "credential_integrity_failure"
-				} else {
-					target.URL = credentials.URL
-					target.Secret = credentials.Secret
-				}
+				target.URL = credentials.URL
+				target.Secret = credentials.Secret
 			}
 		}
 		targets = append(targets, target)
@@ -536,6 +566,27 @@ func validNotificationEventType(value string) bool {
 
 func notificationCredentialIdentity(id []byte) string {
 	return "notification-destination:" + hex.EncodeToString(id)
+}
+
+func (store *Store) decryptNotificationCredentials(id []byte, encrypted vaultcrypto.EncryptedSecret) (notificationCredentials, error) {
+	plaintext, err := store.provider.DecryptSecret(notificationCredentialIdentity(id), encrypted)
+	if err != nil {
+		return notificationCredentials{}, vaultcrypto.ErrIntegrity
+	}
+	defer clear(plaintext)
+	var credentials notificationCredentials
+	decoder := json.NewDecoder(bytes.NewReader(plaintext))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&credentials); err != nil {
+		return notificationCredentials{}, vaultcrypto.ErrIntegrity
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return notificationCredentials{}, vaultcrypto.ErrIntegrity
+	}
+	if _, err := parseNotificationURL(credentials.URL); err != nil || len(credentials.Secret) > 16<<10 {
+		return notificationCredentials{}, vaultcrypto.ErrIntegrity
+	}
+	return credentials, nil
 }
 
 func notificationEventTypes(ctx context.Context, transaction *sql.Tx, id []byte) ([]string, error) {

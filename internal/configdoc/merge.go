@@ -28,11 +28,11 @@ func Merge(format Format, source, target []byte) (Document, error) {
 			return Document{}, err
 		}
 		merged := mergeJSONValue(sourceValue, targetValue)
-		content, err := json.MarshalIndent(merged, "", "  ")
+		content, err := encodeJSON(merged)
 		if err != nil {
 			return Document{}, fmt.Errorf("format merged JSON: %w", err)
 		}
-		return Canonicalize(JSON, append(content, '\n'))
+		return Canonicalize(JSON, content)
 	case YAML:
 		sourceDocument, _, err := parseYAML(canonicalSource.Content)
 		if err != nil {
@@ -43,16 +43,11 @@ func Merge(format Format, source, target []byte) (Document, error) {
 			return Document{}, err
 		}
 		targetDocument.Content[0] = mergeYAMLNode(sourceDocument.Content[0], targetDocument.Content[0])
-		var output bytes.Buffer
-		encoder := yaml.NewEncoder(&output)
-		encoder.SetIndent(2)
-		if err := encoder.Encode(&targetDocument); err != nil {
+		output, err := encodeYAML(&targetDocument)
+		if err != nil {
 			return Document{}, fmt.Errorf("format merged YAML: %w", err)
 		}
-		if err := encoder.Close(); err != nil {
-			return Document{}, fmt.Errorf("close merged YAML formatter: %w", err)
-		}
-		return Canonicalize(YAML, output.Bytes())
+		return Canonicalize(YAML, output)
 	default:
 		return Document{}, fmt.Errorf("unsupported Config format %q", format)
 	}

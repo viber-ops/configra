@@ -99,12 +99,10 @@ func (provider *LocalKeyProvider) encrypt(plaintext, aad []byte) (EncryptedSnaps
 	}
 	ciphertext := dataAEAD.Seal(nil, nonce, plaintext, aad)
 
-	wrapNonce, err := randomBytes(provider.master.NonceSize())
+	encryptedDEK, err := provider.wrapDEK(dek, aad)
 	if err != nil {
-		return EncryptedSnapshot{}, fmt.Errorf("generate key-wrapping nonce: %w", err)
+		return EncryptedSnapshot{}, err
 	}
-	wrappedDEK := provider.master.Seal(nil, wrapNonce, dek, append(aad, []byte("\x00wrapped-dek")...))
-	encryptedDEK := append(wrapNonce, wrappedDEK...)
 
 	return EncryptedSnapshot{
 		Algorithm:    AlgorithmAES256GCM,
@@ -130,6 +128,15 @@ func (provider *LocalKeyProvider) DecryptSecret(identity string, encrypted Encry
 }
 
 func (provider *LocalKeyProvider) decrypt(encrypted EncryptedSnapshot, aad []byte) ([]byte, error) {
+	dek, err := provider.unwrapDEK(encrypted, aad)
+	if err != nil {
+		return nil, err
+	}
+	defer clear(dek)
+	return decryptPayload(encrypted, aad, dek)
+}
+
+func (provider *LocalKeyProvider) unwrapDEK(encrypted EncryptedSnapshot, aad []byte) ([]byte, error) {
 	if encrypted.Algorithm != AlgorithmAES256GCM ||
 		encrypted.KeyVersion != LocalKeyVersion ||
 		len(encrypted.EncryptedDEK) <= provider.master.NonceSize() {
@@ -142,8 +149,10 @@ func (provider *LocalKeyProvider) decrypt(encrypted EncryptedSnapshot, aad []byt
 		clear(dek)
 		return nil, ErrIntegrity
 	}
-	defer clear(dek)
+	return dek, nil
+}
 
+func decryptPayload(encrypted EncryptedSnapshot, aad, dek []byte) ([]byte, error) {
 	block, err := aes.NewCipher(dek)
 	if err != nil {
 		return nil, ErrIntegrity
@@ -157,6 +166,49 @@ func (provider *LocalKeyProvider) decrypt(encrypted EncryptedSnapshot, aad []byt
 		return nil, ErrIntegrity
 	}
 	return plaintext, nil
+}
+
+func (provider *LocalKeyProvider) wrapDEK(dek, aad []byte) ([]byte, error) {
+	nonce, err := randomBytes(provider.master.NonceSize())
+	if err != nil {
+		return nil, fmt.Errorf("generate key-wrapping nonce: %w", err)
+	}
+	return append(nonce, provider.master.Seal(nil, nonce, dek, append(aad, []byte("\x00wrapped-dek")...))...), nil
+}
+
+// RewrapSnapshot authenticates the complete record and returns only the new
+// EncryptedDEK. The data key, payload, nonce, AAD and revision do not change.
+func (provider *LocalKeyProvider) RewrapSnapshot(identity SnapshotIdentity, encrypted EncryptedSnapshot, next *LocalKeyProvider) ([]byte, error) {
+	if validateIdentity(identity) != nil {
+		return nil, ErrIntegrity
+	}
+	return provider.rewrap(encrypted, snapshotAAD(identity, encrypted.Algorithm, encrypted.KeyVersion), next)
+}
+
+// RewrapSecret is the equivalent operation for CA and notification credentials.
+func (provider *LocalKeyProvider) RewrapSecret(identity string, encrypted EncryptedSecret, next *LocalKeyProvider) ([]byte, error) {
+	if identity == "" || len(identity) > 255 {
+		return nil, ErrIntegrity
+	}
+	return provider.rewrap(encrypted, secretAAD(identity, encrypted.Algorithm, encrypted.KeyVersion), next)
+}
+
+func (provider *LocalKeyProvider) rewrap(encrypted EncryptedSnapshot, aad []byte, next *LocalKeyProvider) ([]byte, error) {
+	if next == nil {
+		return nil, ErrIntegrity
+	}
+	dek, err := provider.unwrapDEK(encrypted, aad)
+	if err != nil {
+		return nil, err
+	}
+	defer clear(dek)
+	// Rewrapping a DEK alone would silently preserve corrupt payloads.
+	plaintext, err := decryptPayload(encrypted, aad, dek)
+	clear(plaintext)
+	if err != nil {
+		return nil, err
+	}
+	return next.wrapDEK(dek, aad)
 }
 
 var sentinelPlaintext = []byte("configra-crypto-sentinel-v1")

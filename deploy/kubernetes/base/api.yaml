@@ -35,6 +35,11 @@ spec:
           image: configra
           imagePullPolicy: IfNotPresent
           args: [api, --config, /etc/configra/config.yaml]
+          lifecycle:
+            preStop:
+              # Keep serving while removal from Service endpoints propagates.
+              sleep:
+                seconds: 5
           ports:
             - name: https
               containerPort: 9443

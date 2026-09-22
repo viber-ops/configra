@@ -48,12 +48,18 @@ Release binaries are not Apple-signed or notarized. Do not disable Gatekeeper
 globally; inspect and approve a trusted binary using macOS system controls, or
 build from the tagged source under your organization's software policy.
 
-## Preview status
+## Deployment checks
 
-Versions containing `-rc` are prereleases, not a completed production acceptance.
-Review the documented security boundaries and run an environment-specific rollout,
-backup/restore drill, and load test before production. No availability or throughput
-SLA is claimed. Do not use Configra to supply its own bootstrap secrets.
+v1.0.0 is the first stable release. Review the documented security boundaries and
+run an environment-specific rollout, backup/restore drill and load test before
+production. The tested hardware and Kubernetes topology do not establish an
+availability or throughput SLA for another deployment. Do not use Configra to
+supply its own bootstrap secrets. Older versions containing `-rc` remain prereleases.
+
+When upgrading from rc.2, custom Management clients must follow inventory and
+revision-history pagination. Machine read endpoints and SDK calls are unchanged.
+Master Key rotation is offline and requires the maintenance procedure in
+`deploy/backup/README.md`; do not just replace the bootstrap key.
 
 ## Container images
 

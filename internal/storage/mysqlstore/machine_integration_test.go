@@ -136,6 +136,70 @@ func TestMachineHTTPReadsResolvedConfigFromOneMySQLSnapshot(t *testing.T) {
 	}
 }
 
+func TestMachineHTTPFileMetadataFailureIsUnavailableNotMissing(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	dsn, database, provider := pkiTestDatabase(t)
+	store, err := OpenManagement(ctx, dsn, provider)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	actor := Actor{Type: "user", ID: "file-metadata-test"}
+	if _, err := store.ApplyEnvironmentChange(ctx, EnvironmentChange{OperationID: "metadata-env", Actor: actor,
+		Action: EnvironmentCreate, Key: "prod", DisplayName: "Production"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CommitVault(ctx, VaultCommit{OperationID: "metadata-vault", Actor: actor,
+		NamespaceKey: "ops", ItemKey: "db", ItemName: "Database",
+		Snapshot: testVaultSnapshot("", []string{"prod"}, "user", "protected-metadata-password")}); err != nil {
+		t.Fatal(err)
+	}
+	token, err := store.CreateToken(ctx, TokenCreate{OperationID: "metadata-token", Actor: actor,
+		DisplayName: "Metadata test", EnvironmentKeys: []string{"prod"}, AllowWithoutMTLS: true, NeverExpires: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := machine.NewHandler(store, nil)
+	read := func(field string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodGet,
+			"https://configra.test/v1/environments/prod/vault-items/ops/db/fields/"+field+"/content", nil).WithContext(ctx)
+		request.Header.Set("Authorization", "Bearer "+token.Token)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		return response
+	}
+	healthy := read("tls_cert")
+	if healthy.Code != http.StatusOK || healthy.Body.String() != "sentinel-private-file-bytes" {
+		t.Fatal("initial File read failed")
+	}
+	// Fault only this disposable database's metadata table, not Configra's modules.
+	if _, err := database.ExecContext(ctx, "RENAME TABLE vault_revision_fields TO unavailable_vault_revision_fields"); err != nil {
+		t.Fatal(err)
+	}
+	failed := read("tls_cert")
+	if _, err := database.ExecContext(ctx, "RENAME TABLE unavailable_vault_revision_fields TO vault_revision_fields"); err != nil {
+		t.Fatal(err)
+	}
+	if failed.Code != http.StatusServiceUnavailable || !strings.Contains(failed.Body.String(), `"code":"service_unavailable"`) {
+		t.Errorf("metadata failure status = %d, want value-free service_unavailable/503", failed.Code)
+	}
+	for _, value := range []string{token.Token, "protected-metadata-password", "sentinel-private-file-bytes", "vault_revision_fields"} {
+		if strings.Contains(failed.Body.String(), value) {
+			t.Error("metadata failure exposed protected values or storage details")
+		}
+	}
+	recovered := read("tls_cert")
+	if recovered.Code != http.StatusOK || recovered.Body.String() != healthy.Body.String() || recovered.Header().Get("ETag") != healthy.Header().Get("ETag") {
+		t.Error("File read did not recover with the same bytes and ETag")
+	}
+	for _, field := range []string{"missing", "password"} {
+		if response := read(field); response.Code != http.StatusNotFound {
+			t.Errorf("missing/non-File field status = %d, want 404", response.Code)
+		}
+	}
+}
+
 func TestMachineHTTPReadsConcurrently(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -179,6 +243,79 @@ func TestMachineHTTPReadsConcurrently(t *testing.T) {
 	close(errorsByReader)
 	for readErr := range errorsByReader {
 		t.Fatal(readErr)
+	}
+}
+
+// Count real database reads across the HTTP seam, not elapsed time on a shared
+// host. Existing mutation/E2E tests cover the public credential lifecycle.
+func TestMachineHTTPAuthorizationDoesNotScanAllEnvironmentGrants(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	dsn := createIntegrationDatabase(t, ctx, "configra_machine_grant_budget")
+	provider, err := vaultcrypto.NewLocalKeyProvider([]byte("0123456789abcdef0123456789abcdef"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := OpenManagement(ctx, dsn, provider)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	store.db.SetMaxOpenConns(1)
+	store.db.SetMaxIdleConns(1)
+	secret := []byte("fedcba9876543210fedcba9876543210")
+	certificateDER := []byte("registered-client-certificate")
+	seedMachineReadFixture(t, ctx, store.db, provider, secret, certificateDER, []byte("private-file"))
+	handler := machine.NewHandler(store, nil)
+	baseline := make(map[string]uint64)
+	for _, grants := range []int{1, 1005} {
+		if grants > 1 {
+			transaction, err := store.db.BeginTx(ctx, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer transaction.Rollback()
+			for index := 1; index < grants; index++ {
+				key := fmt.Sprintf("grant-%04d", index)
+				id := sha256.Sum256([]byte(key))
+				if _, err := transaction.ExecContext(ctx, `INSERT INTO environments (id, resource_key, display_name) VALUES (?, ?, ?)`, id[:16], key, key); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := transaction.ExecContext(ctx, `INSERT INTO api_token_environments (token_id, environment_id) VALUES (?, ?)`, repeatedID(7), id[:16]); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := transaction.Commit(); err != nil {
+				t.Fatal(err)
+			}
+		}
+		for _, test := range []struct {
+			path   string
+			status int
+		}{
+			{"a/configs/payment", http.StatusOK},
+			{"a/vault-items/platform/redis/fields/tls_cert/content", http.StatusOK},
+			{"ungranted/configs/payment", http.StatusForbidden},
+			{"ungranted/vault-items/platform/redis/fields/tls_cert/content", http.StatusForbidden},
+		} {
+			request := httptest.NewRequest(http.MethodGet, "https://configra.test/v1/environments/"+test.path, nil).WithContext(ctx)
+			request.Header.Set("Authorization", "Bearer cfg_token1_"+base64.RawURLEncoding.EncodeToString(secret))
+			request.TLS = &tls.ConnectionState{PeerCertificates: []*x509.Certificate{{Raw: certificateDER}}}
+			response := httptest.NewRecorder()
+			start := handlerReadCount(t, ctx, store.db)
+			handler.ServeHTTP(response, request)
+			used := handlerReadCount(t, ctx, store.db) - start
+			if grants == 1 {
+				baseline[test.path] = used
+			}
+			// Includes resource reads, decryption metadata and SHOW STATUS's own
+			// overhead. Allow small fixed plan differences, not work per grant.
+			budget := baseline[test.path] + 16
+			if response.Code != test.status || used > budget {
+				t.Fatalf("%d grants, %s: status=%d, reads=%d; want status=%d and at most %d reads", grants, test.path, response.Code, used, test.status, budget)
+			}
+			t.Logf("%d grants, %s: status=%d, handler reads=%d", grants, test.path, response.Code, used)
+		}
 	}
 }
 

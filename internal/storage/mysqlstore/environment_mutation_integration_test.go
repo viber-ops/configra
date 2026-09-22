@@ -70,13 +70,13 @@ func TestApplyEnvironmentChangeCreatesRenamesArchivesAndUnarchives(t *testing.T)
 	}); !errors.Is(err, ErrValidation) {
 		t.Fatalf("CommitConfig in Archived Environment = %v, want ErrValidation", err)
 	}
-	active, err := store.ListEnvironments(ctx, false)
-	if err != nil || len(active) != 0 {
+	active, err := store.ListEnvironments(ctx, EnvironmentQuery{InventoryQuery: InventoryQuery{Limit: 50}})
+	if err != nil || len(active.Items) != 0 || active.Total != 0 {
 		t.Fatalf("active Environments = %#v, %v", active, err)
 	}
-	all, err := store.ListEnvironments(ctx, true)
-	if err != nil || len(all) != 1 || all[0].Key != "a" || all[0].DisplayName != "Primary" || !all[0].Archived ||
-		all[0].CreatedAt.IsZero() || all[0].UpdatedAt.IsZero() {
+	all, err := store.ListEnvironments(ctx, EnvironmentQuery{InventoryQuery: InventoryQuery{Limit: 50, IncludeInactive: true}})
+	if err != nil || len(all.Items) != 1 || all.Total != 1 || all.Items[0].Key != "a" || all.Items[0].DisplayName != "Primary" || !all.Items[0].Archived ||
+		all.Items[0].CreatedAt.IsZero() || all.Items[0].UpdatedAt.IsZero() {
 		t.Fatalf("all Environments = %#v, %v", all, err)
 	}
 
@@ -89,8 +89,8 @@ func TestApplyEnvironmentChangeCreatesRenamesArchivesAndUnarchives(t *testing.T)
 	if err != nil || resolved.ConfigRevision != 1 || resolved.Content != "port: 6379\n" {
 		t.Fatalf("restored Environment content = %#v, %v", resolved, err)
 	}
-	active, err = store.ListEnvironments(ctx, false)
-	if err != nil || len(active) != 1 || active[0].Archived {
+	active, err = store.ListEnvironments(ctx, EnvironmentQuery{InventoryQuery: InventoryQuery{Limit: 50}})
+	if err != nil || len(active.Items) != 1 || active.Total != 1 || active.Items[0].Archived {
 		t.Fatalf("unarchived Environments = %#v, %v", active, err)
 	}
 

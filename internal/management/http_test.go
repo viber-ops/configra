@@ -1077,6 +1077,9 @@ type recordingConfigWriter struct {
 	mergeErr                       error
 	environments                   []mysqlstore.Environment
 	environmentLists               []bool
+	inventoryQueries               []mysqlstore.InventoryQuery
+	environmentQueries             []mysqlstore.EnvironmentQuery
+	rejectedMutations              []mysqlstore.RejectedMutation
 	environmentChanges             []mysqlstore.EnvironmentChange
 	environmentResult              mysqlstore.EnvironmentChangeResult
 	environmentErr                 error
@@ -1084,6 +1087,7 @@ type recordingConfigWriter struct {
 	configLists                    []bool
 	revisions                      []mysqlstore.ConfigRevision
 	historyReads                   [][2]string
+	revisionQueries                []mysqlstore.RevisionQuery
 	rawRevision                    mysqlstore.RawConfig
 	rawRevisions                   map[configRevisionRead]mysqlstore.RawConfig
 	revisionReads                  []configRevisionRead
@@ -1096,6 +1100,7 @@ type recordingConfigWriter struct {
 	vaultLists                     []bool
 	vaultUsages                    []mysqlstore.VaultUsage
 	vaultUsageReads                [][2]string
+	vaultUsageQueries              []mysqlstore.VaultUsageQuery
 	vaultItem                      mysqlstore.VaultItem
 	vaultReadErr                   error
 	vaultReads                     []vaultRead
@@ -1171,9 +1176,11 @@ type vaultRead struct {
 	includeValues bool
 }
 
-func (writer *recordingConfigWriter) ListEnvironments(_ context.Context, includeArchived bool) ([]mysqlstore.Environment, error) {
-	writer.environmentLists = append(writer.environmentLists, includeArchived)
-	return writer.environments, writer.environmentErr
+func (writer *recordingConfigWriter) ListEnvironments(_ context.Context, query mysqlstore.EnvironmentQuery) (mysqlstore.InventoryPage[mysqlstore.Environment], error) {
+	writer.inventoryQueries = append(writer.inventoryQueries, query.InventoryQuery)
+	writer.environmentQueries = append(writer.environmentQueries, query)
+	writer.environmentLists = append(writer.environmentLists, query.IncludeInactive)
+	return mysqlstore.InventoryPage[mysqlstore.Environment]{Items: writer.environments, Total: uint64(len(writer.environments))}, writer.environmentErr
 }
 
 func (writer *recordingConfigWriter) ApplyEnvironmentChange(_ context.Context, request mysqlstore.EnvironmentChange) (mysqlstore.EnvironmentChangeResult, error) {
@@ -1181,14 +1188,16 @@ func (writer *recordingConfigWriter) ApplyEnvironmentChange(_ context.Context, r
 	return writer.environmentResult, writer.environmentErr
 }
 
-func (writer *recordingConfigWriter) ListConfigs(_ context.Context, includeArchived bool) ([]mysqlstore.ConfigSummary, error) {
-	writer.configLists = append(writer.configLists, includeArchived)
-	return writer.configs, nil
+func (writer *recordingConfigWriter) ListConfigs(_ context.Context, query mysqlstore.ConfigQuery) (mysqlstore.InventoryPage[mysqlstore.ConfigSummary], error) {
+	writer.inventoryQueries = append(writer.inventoryQueries, query.InventoryQuery)
+	writer.configLists = append(writer.configLists, query.IncludeInactive)
+	return mysqlstore.InventoryPage[mysqlstore.ConfigSummary]{Items: writer.configs, Total: uint64(len(writer.configs))}, nil
 }
 
-func (writer *recordingConfigWriter) ListConfigRevisions(_ context.Context, environment, config string) ([]mysqlstore.ConfigRevision, error) {
+func (writer *recordingConfigWriter) ListConfigRevisions(_ context.Context, environment, config string, query mysqlstore.RevisionQuery) (mysqlstore.RevisionPage[mysqlstore.ConfigRevision], error) {
 	writer.historyReads = append(writer.historyReads, [2]string{environment, config})
-	return writer.revisions, nil
+	writer.revisionQueries = append(writer.revisionQueries, query)
+	return mysqlstore.RevisionPage[mysqlstore.ConfigRevision]{Items: writer.revisions}, nil
 }
 
 func (writer *recordingConfigWriter) ReadRawConfigRevision(_ context.Context, environment, config string, revision uint64) (mysqlstore.RawConfig, error) {
@@ -1220,14 +1229,17 @@ func (writer *recordingConfigWriter) ApplyConfigLifecycleChange(_ context.Contex
 	return writer.lifecycleResult, writer.mergeErr
 }
 
-func (writer *recordingConfigWriter) ListVaultItems(_ context.Context, includeArchived bool) ([]mysqlstore.VaultItemSummary, error) {
-	writer.vaultLists = append(writer.vaultLists, includeArchived)
-	return writer.vaultItems, nil
+func (writer *recordingConfigWriter) ListVaultItems(_ context.Context, query mysqlstore.VaultQuery) (mysqlstore.InventoryPage[mysqlstore.VaultItemSummary], error) {
+	writer.inventoryQueries = append(writer.inventoryQueries, query.InventoryQuery)
+	writer.vaultLists = append(writer.vaultLists, query.IncludeInactive)
+	return mysqlstore.InventoryPage[mysqlstore.VaultItemSummary]{Items: writer.vaultItems, Total: uint64(len(writer.vaultItems))}, nil
 }
 
-func (writer *recordingConfigWriter) ListVaultUsages(_ context.Context, namespace, item string) ([]mysqlstore.VaultUsage, error) {
+func (writer *recordingConfigWriter) ListVaultUsages(_ context.Context, namespace, item string, query mysqlstore.VaultUsageQuery) (mysqlstore.InventoryPage[mysqlstore.VaultUsage], error) {
+	writer.vaultUsageQueries = append(writer.vaultUsageQueries, query)
+	writer.inventoryQueries = append(writer.inventoryQueries, query.InventoryQuery)
 	writer.vaultUsageReads = append(writer.vaultUsageReads, [2]string{namespace, item})
-	return writer.vaultUsages, nil
+	return mysqlstore.InventoryPage[mysqlstore.VaultUsage]{Items: writer.vaultUsages, Total: uint64(len(writer.vaultUsages))}, nil
 }
 
 func (writer *recordingConfigWriter) ReadVaultItem(_ context.Context, namespace, item string, revision uint64, includeValues bool) (mysqlstore.VaultItem, error) {
@@ -1235,8 +1247,9 @@ func (writer *recordingConfigWriter) ReadVaultItem(_ context.Context, namespace,
 	return writer.vaultItem, writer.vaultReadErr
 }
 
-func (writer *recordingConfigWriter) ListVaultRevisions(context.Context, string, string) ([]mysqlstore.VaultRevision, error) {
-	return writer.vaultRevisions, nil
+func (writer *recordingConfigWriter) ListVaultRevisions(_ context.Context, _, _ string, query mysqlstore.RevisionQuery) (mysqlstore.RevisionPage[mysqlstore.VaultRevision], error) {
+	writer.revisionQueries = append(writer.revisionQueries, query)
+	return mysqlstore.RevisionPage[mysqlstore.VaultRevision]{Items: writer.vaultRevisions}, nil
 }
 
 func (writer *recordingConfigWriter) CommitVault(_ context.Context, request mysqlstore.VaultCommit) (mysqlstore.VaultCommitResult, error) {
@@ -1254,9 +1267,10 @@ func (writer *recordingConfigWriter) ApplyVaultLifecycleChange(_ context.Context
 	return writer.vaultLifecycleResult, nil
 }
 
-func (writer *recordingConfigWriter) ListTokens(_ context.Context, includeRevoked bool) ([]mysqlstore.TokenSummary, error) {
-	writer.tokenLists = append(writer.tokenLists, includeRevoked)
-	return writer.tokens, nil
+func (writer *recordingConfigWriter) ListTokens(_ context.Context, query mysqlstore.InventoryQuery) (mysqlstore.InventoryPage[mysqlstore.TokenSummary], error) {
+	writer.inventoryQueries = append(writer.inventoryQueries, query)
+	writer.tokenLists = append(writer.tokenLists, query.IncludeInactive)
+	return mysqlstore.InventoryPage[mysqlstore.TokenSummary]{Items: writer.tokens, Total: uint64(len(writer.tokens))}, nil
 }
 
 func (writer *recordingConfigWriter) CreateToken(_ context.Context, request mysqlstore.TokenCreate) (mysqlstore.TokenCreateResult, error) {
@@ -1274,9 +1288,15 @@ func (writer *recordingConfigWriter) RevokeToken(_ context.Context, request mysq
 	return writer.tokenRevokeResult, nil
 }
 
-func (writer *recordingConfigWriter) ListClientCertificates(_ context.Context, includeRevoked bool) ([]mysqlstore.ClientCertificate, error) {
-	writer.certificateLists = append(writer.certificateLists, includeRevoked)
-	return writer.certificates, nil
+func (writer *recordingConfigWriter) ListClientCertificates(_ context.Context, query mysqlstore.InventoryQuery) (mysqlstore.InventoryPage[mysqlstore.ClientCertificate], error) {
+	writer.inventoryQueries = append(writer.inventoryQueries, query)
+	writer.certificateLists = append(writer.certificateLists, query.IncludeInactive)
+	return mysqlstore.InventoryPage[mysqlstore.ClientCertificate]{Items: writer.certificates, Total: uint64(len(writer.certificates))}, nil
+}
+
+func (writer *recordingConfigWriter) ListCertificateAuthorities(_ context.Context, query mysqlstore.AuthorityQuery) (mysqlstore.InventoryPage[mysqlstore.CertificateAuthority], error) {
+	writer.inventoryQueries = append(writer.inventoryQueries, query.InventoryQuery)
+	return mysqlstore.InventoryPage[mysqlstore.CertificateAuthority]{Items: []mysqlstore.CertificateAuthority{}}, nil
 }
 
 func (writer *recordingConfigWriter) ActiveCertificateAuthorities(context.Context) ([][]byte, error) {
@@ -1293,9 +1313,15 @@ func (writer *recordingConfigWriter) RevokeClientCertificate(_ context.Context, 
 	return writer.certificateRevokeResult, nil
 }
 
-func (writer *recordingConfigWriter) ListNotificationDestinations(_ context.Context, includeArchived bool) ([]mysqlstore.NotificationDestination, error) {
-	writer.notificationDestinationLists = append(writer.notificationDestinationLists, includeArchived)
-	return writer.notificationDestinations, nil
+func (writer *recordingConfigWriter) ListNotificationDestinations(_ context.Context, query mysqlstore.InventoryQuery) (mysqlstore.InventoryPage[mysqlstore.NotificationDestination], error) {
+	writer.inventoryQueries = append(writer.inventoryQueries, query)
+	writer.notificationDestinationLists = append(writer.notificationDestinationLists, query.IncludeInactive)
+	return mysqlstore.InventoryPage[mysqlstore.NotificationDestination]{Items: writer.notificationDestinations, Total: uint64(len(writer.notificationDestinations))}, nil
+}
+
+func (writer *recordingConfigWriter) ListNotificationEventTypes(_ context.Context, _ string, query mysqlstore.InventoryQuery) (mysqlstore.InventoryPage[string], error) {
+	writer.inventoryQueries = append(writer.inventoryQueries, query)
+	return mysqlstore.InventoryPage[string]{Items: []string{}}, nil
 }
 
 func (writer *recordingConfigWriter) CommitNotificationDestination(_ context.Context, request mysqlstore.NotificationDestinationCommit) (mysqlstore.NotificationDestinationResult, error) {
@@ -1358,6 +1384,7 @@ func (writer *recordingConfigWriter) ReadResolvedConfig(_ context.Context, envir
 	writer.resolvedReads = append(writer.resolvedReads, [2]string{environment, config})
 	return writer.resolved, writer.resolvedErr
 }
-func (writer *recordingConfigWriter) RecordRejectedMutation(context.Context, mysqlstore.RejectedMutation) error {
+func (writer *recordingConfigWriter) RecordRejectedMutation(_ context.Context, request mysqlstore.RejectedMutation) error {
+	writer.rejectedMutations = append(writer.rejectedMutations, request)
 	return nil
 }

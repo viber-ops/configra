@@ -76,7 +76,7 @@ func TestConcurrentBootstrapInitializesOnceAndMissingSentinelFailsClosed(t *test
 	if err != nil {
 		t.Fatalf("open root MySQL: %v", err)
 	}
-	defer admin.Close()
+	t.Cleanup(func() { _ = admin.Close() })
 	const database = "configra_concurrent_bootstrap"
 	if _, err := admin.ExecContext(ctx, "DROP DATABASE IF EXISTS "+database); err != nil {
 		t.Fatalf("drop stale test database: %v", err)

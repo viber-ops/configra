@@ -3,18 +3,20 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { lookup } from 'node:dns';
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { verifyKubernetesConsumers } from './kubernetes-smoke.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const project = process.env.CONFIGRA_DOCS_PROJECT ?? '';
 const mode = process.argv[2] ?? 'setup';
-if (!['setup', 'read', 'audit', 'rejections'].includes(mode)) {
+if (!['setup', 'read', 'audit', 'rejections', 'faults', 'recovery', 'kubernetes', 'kubernetes-after-rotation'].includes(mode)) {
   throw new Error(
-    'Usage: docs-smoke.mjs [setup | audit | rejections | read .cache/docs-smoke-<run>]',
+    'Usage: docs-smoke.mjs [setup | audit | rejections | read|faults|recovery|kubernetes|kubernetes-after-rotation .cache/docs-smoke-<run>]',
   );
 }
 if (!/^configra-doc-check-[a-z0-9-]+$/.test(project)) {
@@ -44,12 +46,20 @@ for (const service of ['mysql', 'nats', 'clickhouse', 'casdoor']) {
 }
 
 const management = 'https://localhost:18088';
-const identity = 'http://localhost:18080';
+const identity = process.env.CONFIGRA_DOCS_IDENTITY ?? 'http://localhost:18080';
+assert.ok(['http://localhost:18080', 'https://casdoor:18080'].includes(identity));
 const machine = 'https://localhost:18089';
 const allowedOrigins = new Set([management, identity, machine]);
+const tlsCertificate = process.env.CONFIGRA_DOCS_TLS_CERT ?? join(root, '.cache/local-dev/server.crt');
 const tls = new https.Agent({
-  ca: readFileSync(join(root, '.cache/local-dev/server.crt')),
+  ca: readFileSync(tlsCertificate),
   keepAlive: true,
+  // The image fixture uses Docker's casdoor name internally. Only the test
+  // client maps it to the published loopback port; TLS verification stays on.
+  lookup(hostname, options, callback) {
+    if (hostname === 'casdoor') callback(null, options.all ? [{ address: '127.0.0.1', family: 4 }] : '127.0.0.1', 4);
+    else lookup(hostname, options, callback);
+  },
 });
 const results = [];
 const record = (name) => {
@@ -66,6 +76,7 @@ function request(
     jar = new Map(),
     headers = {},
     tlsAgent = tls,
+    timeout = 15000,
   } = {},
 ) {
   const destination = new URL(url);
@@ -132,17 +143,18 @@ function request(
             status: response.statusCode,
             headers: response.headers,
             json,
+            raw,
           });
         });
       },
     );
-    outgoing.setTimeout(15000, () =>
+    outgoing.setTimeout(timeout, () =>
       outgoing.destroy(new Error('Documentation request timed out')),
     );
-    outgoing.on('error', () =>
+    outgoing.on('error', (error) =>
       reject(
         new Error(
-          `Local documentation request failed (${destination.origin}${destination.pathname})`,
+          `Local documentation request failed (${destination.origin}${destination.pathname}; ${/^[A-Z0-9_]{1,64}$/.test(error.code ?? '') ? error.code : 'transport_error'})`,
         ),
       ),
     );
@@ -150,7 +162,7 @@ function request(
   });
 }
 
-async function login(username, password) {
+async function login(username, password, beforeCallback) {
   const jar = new Map();
   const start = await request(`${management}/auth/login`, { jar });
   assert.ok(
@@ -199,7 +211,14 @@ async function login(username, password) {
   const callback = new URL(`${management}/auth/callback`);
   callback.searchParams.set('code', signedIn.json.data);
   callback.searchParams.set('state', query.get('state'));
+  beforeCallback?.();
   const finish = await request(callback, { jar });
+  if (beforeCallback) {
+    assert.equal(finish.status, 503, 'unavailable OIDC exchange fails closed');
+    assert.equal(finish.json?.error?.code, 'authentication_unavailable');
+    assert.equal((await request(`${management}/v1/environments`, { jar })).status, 401);
+    return;
+  }
   assert.ok(
     finish.status === 302 || finish.status === 303,
     'Configra callback must establish a session',
@@ -224,7 +243,7 @@ async function api(jar, path, method = 'GET', body) {
   return response.json;
 }
 
-async function verifyReads(directory) {
+async function verifyReads(directory, unavailable = false) {
   const output = resolve(directory ?? '');
   if (
     !output.startsWith(join(root, '.cache') + '/') ||
@@ -240,7 +259,7 @@ async function verifyReads(directory) {
   const token = readFileSync(join(output, 'token'), 'utf8').trim();
   const expected = readFileSync(join(output, 'expected-password'), 'utf8');
   const clientTLS = new https.Agent({
-    ca: readFileSync(join(root, '.cache/local-dev/server.crt')),
+    ca: readFileSync(tlsCertificate),
     cert: readFileSync(join(output, 'client.crt')),
     key: readFileSync(join(output, 'client.key')),
     keepAlive: true,
@@ -249,9 +268,17 @@ async function verifyReads(directory) {
   const options = {
     tlsAgent: clientTLS,
     headers: { Authorization: `Bearer ${token}` },
+    timeout: 25000,
   };
   try {
     const resolved = await request(endpoint, options);
+    if (unavailable) {
+      assert.equal(resolved.status, 503);
+      assert.equal(resolved.json?.error?.code, 'service_unavailable');
+      assert.ok(!resolved.raw.includes(token) && !resolved.raw.includes(expected));
+      record('MySQL stall returns a bounded, value-free Machine read failure');
+      return;
+    }
     assert.equal(resolved.status, 200);
     assert.equal(resolved.json?.config_revision, 1);
     assert.equal(resolved.json?.vault_revisions?.['platform.database'], 1);
@@ -267,12 +294,17 @@ async function verifyReads(directory) {
       'verified mTLS returns the documented Config and resolved Vault value',
     );
     assert.ok(resolved.headers.etag);
+    if (prior.configETag) assert.equal(resolved.headers.etag, prior.configETag, 'unchanged Config/Vault revisions keep their ETag across recovery and key rotation');
     const unchanged = await request(endpoint, {
       ...options,
       headers: { ...options.headers, 'If-None-Match': resolved.headers.etag },
     });
     assert.equal(unchanged.status, 304);
     record('the returned ETag produces an unchanged 304 read');
+    const file = await request(`${machine}/v1/environments/development/vault-items/platform/database/fields/credentials/content`, options);
+    assert.equal(file.status, 200);
+    assert.ok(file.raw.equals(readFileSync(join(output, 'expected-file'))), 'File bytes survive the real API path');
+    record('authenticated File bytes match without printing their content');
     const missingCertificate = await request(endpoint, {
       headers: options.headers,
     });
@@ -289,6 +321,7 @@ async function verifyReads(directory) {
       JSON.stringify(
         {
           ...prior,
+          configETag: resolved.headers.etag,
           readCheckedAt: new Date().toISOString(),
           checks: [...prior.checks, ...results],
         },
@@ -337,6 +370,51 @@ async function verifyCredentialAudit() {
       );
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
+}
+
+async function verifyRecoveredAuthority(directory) {
+  await verifyReads(directory); // Validates fixture ownership before any writes.
+  const admin = await login('admin', 'configra-admin');
+  const rotation = readFileSync(join(directory, 'rotation-operation'), 'utf8');
+  assert.match(rotation, /^key-rotation-[0-9a-f]{32}$/);
+  const deadline = Date.now() + 30000;
+  while (true) {
+    const page = await api(admin, `/v1/audit?q=${rotation}&limit=100`);
+    if (page.items.length) {
+      assert.equal(page.items.length, 1);
+      assert.equal(page.items[0].action, 'master_key.rotate');
+      assert.equal(page.items[0].outcome, 'success');
+      assert.equal(page.items[0].actor_type, 'system');
+      record('offline rotation Audit Event arrives after the worker restarts');
+      break;
+    }
+    assert.ok(Date.now() < deadline, 'rotation Audit Event is available after restart');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  const authorities = await api(admin, '/v1/certificate-authorities?limit=100');
+  const authority = authorities.items.find((item) => item.display_name === 'Documentation CA');
+  assert.ok(authority);
+  const issued = await api(admin, '/v1/client-certificates/issue', 'POST', {
+    authority_id: authority.id, display_name: 'After database/key recovery', valid_days: 1,
+  });
+  assert.ok(issued.export_bundle && issued.certificate?.fingerprint_sha256);
+  const bundle = join(directory, 'recovered-client.zip');
+  writeFileSync(bundle, Buffer.from(issued.export_bundle, 'base64'), { mode: 0o600 });
+  const cert = execFileSync('unzip', ['-p', bundle, 'client.crt']);
+  const key = execFileSync('unzip', ['-p', bundle, 'client.key']);
+  writeFileSync(join(directory, 'recovered-client.key'), key, { mode: 0o600 });
+  const clientTLS = new https.Agent({ ca: readFileSync(tlsCertificate), cert, key, keepAlive: true });
+  const options = { tlsAgent: clientTLS, headers: { Authorization: `Bearer ${readFileSync(join(directory, 'token'), 'utf8').trim()}` } };
+  const endpoint = `${machine}/v1/environments/development/configs/payment`;
+  try {
+    assert.equal((await request(endpoint, options)).status, 200);
+    await api(admin, `/v1/client-certificates/${issued.certificate.fingerprint_sha256}/revoke`, 'POST');
+    assert.equal((await request(endpoint, options)).status, 401);
+    record('restored CA issues a usable client; revocation rejects the same client/HTTP agent');
+  } finally {
+    clientTLS.destroy();
+  }
+  await verifyReads(directory);
 }
 
 async function verifyRejectedAudit() {
@@ -476,8 +554,107 @@ async function verifyRejectedAudit() {
   }
 }
 
+async function verifyDependencies(directory) {
+  for (const service of ['management', 'api']) {
+    const [container] = JSON.parse(execFileSync('docker', ['inspect', `${project}-${service}-1`], { encoding: 'utf8' }));
+    assert.equal(container.Config.Labels['com.docker.compose.project'], project);
+    assert.equal(container.Config.User, '65532:65532');
+    assert.equal(container.HostConfig.ReadonlyRootfs, true);
+    assert.equal(container.State.Running, true);
+  }
+  const paused = new Set();
+  const pause = (service) => {
+    assert.ok(['mysql', 'nats', 'clickhouse', 'casdoor', 'management'].includes(service));
+    execFileSync('docker', ['pause', `${project}-${service}-1`], { timeout: 15000 });
+    paused.add(service);
+  };
+  const resume = (service) => {
+    execFileSync('docker', ['unpause', `${project}-${service}-1`], { timeout: 15000 });
+    paused.delete(service);
+  };
+  const admin = await login('admin', 'configra-admin');
+  try {
+    for (const service of ['management', 'nats']) {
+      pause(service);
+      await verifyReads(directory);
+      resume(service);
+      record(`Machine reads survive ${service} unavailability`);
+    }
+    await login('admin', 'configra-admin', () => pause('casdoor'));
+    assert.equal((await request(`${management}/v1/environments`, { jar: admin })).status, 200);
+    await verifyReads(directory);
+    resume('casdoor');
+    record('OIDC outage rejects new login without breaking existing sessions or Machine reads');
+
+    pause('clickhouse');
+    const operations = [];
+    for (let index = 0; index < 3; index++) {
+      const operation = randomUUID();
+      const response = await request(`${management}/v1/environments`, {
+        method: 'POST', jar: admin, headers: { Origin: management, 'Idempotency-Key': operation },
+        body: { key: `recovery_${randomBytes(6).toString('hex')}`, display_name: 'Audit recovery fixture' },
+      });
+      assert.equal(response.status, 200, 'mutation succeeds with ClickHouse unavailable');
+      operations.push(operation);
+    }
+    await verifyReads(directory);
+    resume('clickhouse');
+    for (const operation of operations) {
+      const deadline = Date.now() + 30000;
+      while (true) {
+        const page = await api(admin, `/v1/audit?q=${operation}&limit=100`);
+        if (page.items.length) {
+          assert.equal(page.items.length, 1, 'one logical Audit Event after recovery');
+          assert.equal(page.items[0].operation_id, operation);
+          assert.equal(page.items[0].outcome, 'success');
+          break;
+        }
+        assert.ok(Date.now() < deadline, 'durable Audit Event delivered after ClickHouse recovery');
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+    }
+    record('three successful mutations retain and deliver Audit Events after ClickHouse recovery');
+    pause('mysql');
+    assert.equal((await request(`${machine}/health/ready`)).status, 503);
+    assert.equal((await request(`${machine}/health/live`)).status, 204);
+    assert.equal((await request(`${management}/health/ready`)).status, 503);
+    await verifyReads(directory, true);
+    // Even a malformed resource path can contain a secret; session failure
+    // logging must not echo arbitrary URLs before routing/validation runs.
+    const privatePath = readFileSync(join(directory, 'expected-password'), 'utf8');
+    const failedSession = await request(`${management}/v1/client-certificates/${privatePath}/revoke`, { jar: admin });
+    assert.equal(failedSession.status, 500);
+    assert.equal(failedSession.json?.error?.code, 'session_unavailable');
+    resume('mysql');
+    await verifyReads(directory);
+    assert.equal((await request(`${management}/v1/environments`, { jar: admin })).status, 200);
+    record('MySQL stall removes readiness, rejects session work, preserves liveness and recovers');
+  } finally {
+    for (const service of paused) resume(service);
+  }
+}
+
 try {
-  if (mode === 'rejections') {
+  if (mode === 'kubernetes' || mode === 'kubernetes-after-rotation') {
+    const directory = process.argv[3];
+    await verifyReads(directory);
+    const admin = await login('admin', 'configra-admin');
+    const clientTLS = new https.Agent({ ca: readFileSync(tlsCertificate), cert: readFileSync(join(directory, 'client.crt')), key: readFileSync(join(directory, 'client.key')), keepAlive: false });
+    try {
+      await verifyKubernetesConsumers({ root, directory, kubeconfig: process.env.CONFIGRA_DOCS_KUBECONFIG,
+        afterRotation: mode === 'kubernetes-after-rotation',
+        api: (...args) => api(admin, ...args),
+        read: async () => (await request(`${machine}/v1/environments/development/configs/payment`, { tlsAgent: clientTLS, headers: { Authorization: `Bearer ${readFileSync(join(directory, 'token'), 'utf8').trim()}` } })).status,
+      });
+    } finally {
+      clientTLS.destroy();
+    }
+    await verifyReads(directory);
+  } else if (mode === 'recovery') {
+    await verifyRecoveredAuthority(process.argv[3]);
+  } else if (mode === 'faults') {
+    await verifyDependencies(process.argv[3]);
+  } else if (mode === 'rejections') {
     await verifyRejectedAudit();
   } else if (mode === 'audit') {
     await verifyCredentialAudit();
@@ -512,6 +689,7 @@ try {
       display_name: 'Development',
     });
     const password = `docs-${randomBytes(18).toString('hex')}`;
+    const fileBytes = Buffer.concat([Buffer.from([0, 255, 13, 10]), Buffer.from(`docs-file-${randomBytes(18).toString('hex')}`)]);
     await api(admin, '/v1/vault-items/platform/database', 'PUT', {
       display_name: 'Application database',
       expected_revision: 0,
@@ -519,6 +697,7 @@ try {
         fields: [
           { key: 'username', name: 'Username', type: 'text' },
           { key: 'password', name: 'Password', type: 'secret' },
+          { key: 'credentials', name: 'Credentials file', type: 'file' },
         ],
         variants: [
           {
@@ -527,6 +706,7 @@ try {
             values: {
               username: { text: 'payment' },
               password: { text: password },
+              credentials: { file: { filename: 'credentials.bin', content_type: 'application/octet-stream', bytes: fileBytes.toString('base64') } },
             },
           },
         ],
@@ -562,9 +742,16 @@ try {
     });
     assert.ok(token.token?.startsWith('cfg_'));
     record('managed CA, one-time client export and mTLS-required Token issued');
+    const notificationSecret = `docs-notification-${randomBytes(18).toString('hex')}`;
+    await api(admin, '/v1/notification-destinations/recovery', 'PUT', {
+      display_name: 'Disabled recovery fixture', provider: 'generic_webhook',
+      url: `https://hooks.example.test/${notificationSecret}`, secret: notificationSecret,
+      enabled: false, event_types: [],
+    });
 
     const output = join(root, '.cache', `docs-smoke-${Date.now()}`);
-    mkdirSync(output, { recursive: true, mode: 0o700 });
+    mkdirSync(output, { mode: 0o700 });
+    writeFileSync(join(output, 'ca.zip'), Buffer.from(ca.export_bundle, 'base64'), { mode: 0o600 });
     writeFileSync(
       join(output, 'client.zip'),
       Buffer.from(client.export_bundle, 'base64'),
@@ -580,6 +767,8 @@ try {
     }
     writeFileSync(join(output, 'token'), token.token, { mode: 0o600 });
     writeFileSync(join(output, 'expected-password'), password, { mode: 0o600 });
+    writeFileSync(join(output, 'expected-file'), fileBytes, { mode: 0o600 });
+    writeFileSync(join(output, 'notification-secret'), notificationSecret, { mode: 0o600 });
     writeFileSync(
       join(output, 'result.json'),
       JSON.stringify(

@@ -13,6 +13,7 @@ import (
 	"crypto/x509/pkix"
 	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
@@ -28,12 +29,13 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
-	"unicode/utf8"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/go-sql-driver/mysql"
+	"github.com/nats-io/nats.go"
 	configrago "github.com/viber-ops/configra-go"
 	"go.uber.org/zap"
 
@@ -125,6 +127,9 @@ func TestProductionImageSustainsConfiguredLoadWithoutLeak(t *testing.T) {
 	if err := database.store.Close(); err != nil {
 		t.Fatalf("close load Management Store: %v", err)
 	}
+	privateValues := append([][]byte{[]byte(token.Token), []byte(vaultSecret), []byte(fileSecret), masterKey[:]}, tlsMaterial.privateKeyMaterial...)
+	sentinels := loadSecretForms(privateValues...)
+	finishCapture := captureLoadAccess(t, required["nats_url"], sentinels)
 
 	logs, err := logstore.New(required["clickhouse_dsn"])
 	if err != nil {
@@ -183,8 +188,33 @@ logging:
 	if err := os.WriteFile(configFile, []byte(config), 0o444); err != nil {
 		t.Fatalf("write load Config: %v", err)
 	}
+	// Match the non-root image's mount permissions independently of the runner's umask.
+	for _, name := range []string{"ca.pem", "tls.crt", "tls.key", "master-key", "config.yaml"} {
+		if err := os.Chmod(filepath.Join(runtimeDirectory, name), 0o444); err != nil {
+			t.Fatalf("chmod load runtime mount: %v", err)
+		}
+	}
 	containerName := "configra-load-" + suffix
 	t.Cleanup(func() { _ = exec.Command("docker", "rm", "-f", containerName).Run() })
+	measurementDirectory := t.TempDir()
+	warmResult := filepath.Join(measurementDirectory, "warm.gob")
+	resultFile := filepath.Join(measurementDirectory, "results.gob")
+	imageDescription, _ := exec.CommandContext(ctx, "docker", "image", "inspect", required["image"],
+		"--format", "{{.Id}} {{.Architecture}} {{.Os}} {{.Size}}").Output()
+	evidence := loadEvidence{
+		StartedAt: startedAt, Stage: "startup", Duration: duration.String(), RequestedQPS: loadRate,
+		HarnessGoVersion: runtime.Version(), HostOS: runtime.GOOS, HostArch: runtime.GOARCH, HostCPUs: runtime.NumCPU(),
+		Image: strings.TrimSpace(string(imageDescription)), ContainerCPUs: 2, ContainerMemoryBytes: 512 << 20,
+		MySQLVersion: "8.0.22", ClickHouseVersion: "26.7.3.19",
+		MySQLInterpolateParams: database.interpolateParams,
+	}
+	// Run before container/TempDir cleanup, including when a gate calls Fatal.
+	t.Cleanup(func() {
+		if t.Failed() {
+			evidence.Passed = false
+			preserveLoadFailure(t, evidence, sentinels, containerName, warmResult, resultFile)
+		}
+	})
 	if output, err := exec.CommandContext(ctx, "docker", "run", "--detach",
 		"--name", containerName,
 		"--network", required["docker_network"],
@@ -220,7 +250,7 @@ logging:
 		t.Fatalf("load preflight File: %v", err)
 	}
 
-	targetFile := filepath.Join(t.TempDir(), "target.http")
+	targetFile := filepath.Join(measurementDirectory, "target.http")
 	target := fmt.Sprintf("GET %s/v1/environments/load/configs/service\nAuthorization: Bearer %s\nAccept: application/json\n\n",
 		baseURL, token.Token)
 	if err := os.WriteFile(targetFile, []byte(target), 0o600); err != nil {
@@ -233,20 +263,31 @@ logging:
 	if warmDuration < 2*time.Second {
 		warmDuration = 2 * time.Second
 	}
-	warmResult := filepath.Join(t.TempDir(), "warm.gob")
+	evidence.Stage = "warmup"
 	warmReport := runVegeta(t, ctx, required["vegeta"], warmDuration, targetFile, warmResult, tlsMaterial)
+	evidence.Warmup = warmReport
 	validateVegetaReport(t, warmReport, warmDuration)
 
+	evidence.Stage = "load"
 	sampleContext, stopSampling := context.WithCancel(ctx)
 	samplesDone := make(chan []loadSample, 1)
 	go func() { samplesDone <- sampleLoad(sampleContext, containerName, database.admin) }()
-	resultFile := filepath.Join(t.TempDir(), "results.gob")
+	defer func() {
+		stopSampling()
+		if samplesDone != nil {
+			evidence.Samples = <-samplesDone
+		}
+	}()
 	report := runVegeta(t, ctx, required["vegeta"], duration, targetFile, resultFile, tlsMaterial)
 	stopSampling()
 	samples := <-samplesDone
+	samplesDone = nil
+	evidence.Report, evidence.Samples = report, samples
 	validateVegetaReport(t, report, duration)
 	resourceSummary := validateLoadSamples(t, samples, duration)
+	evidence.Resources = resourceSummary
 
+	evidence.Stage = "authorization-and-shutdown"
 	negativeClient := &http.Client{Timeout: 3 * time.Second, Transport: &http.Transport{
 		Proxy: nil, TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: tlsMaterial.roots,
 			Certificates: []tls.Certificate{clientCertificate}},
@@ -287,7 +328,10 @@ logging:
 	}
 	defer reader.Close()
 	expectedEvents := report.Requests + warmReport.Requests + 2
+	evidence.Stage = "access-events"
+	evidence.ExpectedAccessEvents = expectedEvents
 	accessEvents := waitForAccessEvents(ctx, reader, token.PublicID, expectedEvents)
+	evidence.PersistedAccessEvents = accessEvents
 	stopConsumer()
 	select {
 	case err := <-consumerDone:
@@ -301,7 +345,14 @@ logging:
 	if accessEvents*100 < expectedEvents*95 {
 		t.Fatalf("persisted Access Events = %d/%d; below 95%%", accessEvents, expectedEvents)
 	}
+	capturedEvents, wireLeak := finishCapture()
+	evidence.CapturedAccessEvents = capturedEvents
+	if wireLeak || capturedEvents*100 < expectedEvents*95 {
+		t.Fatalf("NATS capture failed: events=%d/%d protected_material=%t", capturedEvents, expectedEvents, wireLeak)
+	}
+	evidence.NATSLeakScanPassed = true
 
+	evidence.Stage = "leak-scan"
 	composeFile, err := filepath.Abs(filepath.Join("..", "deploy", "compose.test.yaml"))
 	if err != nil {
 		t.Fatalf("resolve Compose file: %v", err)
@@ -310,10 +361,6 @@ logging:
 		"logs", "--no-color", "mysql", "nats", "clickhouse").CombinedOutput()
 	if err != nil {
 		t.Fatalf("read dependency logs: %v", err)
-	}
-	sentinels := [][]byte{
-		[]byte(token.Token), []byte(vaultSecret), []byte(fileSecret), masterKey[:],
-		[]byte(base64.StdEncoding.EncodeToString(masterKey[:])), tlsMaterial.clientPrivateKeyPEM,
 	}
 	for source, content := range map[string][]byte{
 		"API logs": containerLogs, "dependency logs": dependencyLogs, "HTTP error": negativeBody,
@@ -327,19 +374,10 @@ logging:
 		t.Fatal("load API logs contain a runtime failure")
 	}
 
-	imageDescription, _ := exec.CommandContext(ctx, "docker", "image", "inspect", required["image"],
-		"--format", "{{.Id}} {{.Architecture}} {{.Os}} {{.Size}}").Output()
-	evidence := loadEvidence{
-		StartedAt: startedAt, Duration: duration.String(), RequestedQPS: loadRate,
-		HarnessGoVersion: runtime.Version(), HostOS: runtime.GOOS, HostArch: runtime.GOARCH, HostCPUs: runtime.NumCPU(),
-		Image: strings.TrimSpace(string(imageDescription)), ContainerCPUs: 2, ContainerMemoryBytes: 512 << 20,
-		MySQLVersion: "8.0.22", ClickHouseVersion: "26.7.3.19", Report: report,
-		Samples: samples, Resources: resourceSummary, ExpectedAccessEvents: expectedEvents,
-		PersistedAccessEvents: accessEvents, LeakScanPassed: true,
-		GCTraceLines:        bytes.Count(containerLogs, []byte("gc ")),
-		SchedulerTraceLines: bytes.Count(containerLogs, []byte("SCHED ")),
-	}
-	evidencePath := writeLoadEvidence(t, evidence)
+	evidence.Passed, evidence.LeakScanPassed, evidence.Stage = true, true, "complete"
+	evidence.GCTraceLines = bytes.Count(containerLogs, []byte("gc "))
+	evidence.SchedulerTraceLines = bytes.Count(containerLogs, []byte("SCHED "))
+	evidencePath := writeLoadEvidence(t, evidence, sentinels)
 	t.Logf("1000 QPS evidence: requests=%d throughput=%.2f/s success=%.5f p95=%s p99=%s RSS=%s..%s access=%d/%d report=%s",
 		report.Requests, report.Throughput, report.Success,
 		time.Duration(report.Latencies.P95), time.Duration(report.Latencies.P99),
@@ -348,9 +386,10 @@ logging:
 }
 
 type loadDatabase struct {
-	store        *mysqlstore.Store
-	admin        *sql.DB
-	containerDSN string
+	store             *mysqlstore.Store
+	admin             *sql.DB
+	containerDSN      string
+	interpolateParams bool
 }
 
 func newLoadDatabase(
@@ -398,7 +437,8 @@ func newLoadDatabase(
 		t.Fatalf("OpenManagement load database: %v", err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	return loadDatabase{store: store, admin: admin, containerDSN: containerConfiguration.FormatDSN()}
+	return loadDatabase{store: store, admin: admin, containerDSN: containerConfiguration.FormatDSN(),
+		interpolateParams: containerConfiguration.InterpolateParams}
 }
 
 func loadVaultSnapshot(secret, file string) vaultdoc.Snapshot {
@@ -425,7 +465,7 @@ type loadTLSMaterial struct {
 	serverPrivateKeyFile  string
 	clientCertificateFile string
 	clientPrivateKeyFile  string
-	clientPrivateKeyPEM   []byte
+	privateKeyMaterial    [][]byte
 	clientCertificate     *x509.Certificate
 	roots                 *x509.CertPool
 }
@@ -482,16 +522,19 @@ func createLoadTLS(t *testing.T) loadTLSMaterial {
 	clientPEM := append(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: clientDER}), caPEM...)
 	serverKeyDER, _ := x509.MarshalPKCS8PrivateKey(serverKey)
 	clientKeyDER, _ := x509.MarshalPKCS8PrivateKey(clientKey)
+	caKeyDER, _ := x509.MarshalPKCS8PrivateKey(caPrivate)
 	serverKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: serverKeyDER})
 	clientKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: clientKeyDER})
+	caKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: caKeyDER})
 	material := loadTLSMaterial{
 		caFile:                filepath.Join(directory, "ca.pem"),
 		serverCertificateFile: filepath.Join(directory, "server.crt"),
 		serverPrivateKeyFile:  filepath.Join(directory, "server.key"),
 		clientCertificateFile: filepath.Join(directory, "client.crt"),
 		clientPrivateKeyFile:  filepath.Join(directory, "client.key"),
-		clientPrivateKeyPEM:   clientKeyPEM, clientCertificate: clientCertificate,
-		roots: x509.NewCertPool(),
+		privateKeyMaterial:    [][]byte{serverKey, serverKeyDER, serverKeyPEM, clientKey, clientKeyDER, clientKeyPEM, caPrivate, caKeyDER, caKeyPEM},
+		clientCertificate:     clientCertificate,
+		roots:                 x509.NewCertPool(),
 	}
 	material.roots.AddCert(ca)
 	for path, content := range map[string][]byte{
@@ -765,12 +808,114 @@ func waitForAccessEvents(ctx context.Context, connection clickhouse.Conn, princi
 	}
 }
 
-func assertNoSentinels(t *testing.T, source string, content []byte, sentinels [][]byte) {
-	t.Helper()
+func loadSecretForms(values ...[]byte) [][]byte {
+	var forms [][]byte
+	for _, value := range values {
+		if len(value) == 0 {
+			continue
+		}
+		encodedHex := hex.EncodeToString(value)
+		forms = append(forms, value, []byte(base64.StdEncoding.EncodeToString(value)), []byte(encodedHex), []byte(strings.ToUpper(encodedHex)))
+	}
+	return forms
+}
+
+func containsLoadSecret(content []byte, sentinels [][]byte) bool {
 	for _, sentinel := range sentinels {
 		if len(sentinel) > 0 && bytes.Contains(content, sentinel) {
-			t.Fatalf("%s contains protected load-test material", source)
+			return true
 		}
+	}
+	return false
+}
+
+func assertNoSentinels(t *testing.T, source string, content []byte, sentinels [][]byte) {
+	t.Helper()
+	if containsLoadSecret(content, sentinels) {
+		t.Fatalf("%s contains protected load-test material", source)
+	}
+}
+
+// Scan in the subscriber callback, without retaining the full load's payloads.
+func captureLoadAccess(t *testing.T, url string, sentinels [][]byte) func() (uint64, bool) {
+	t.Helper()
+	var count atomic.Uint64
+	var leaked, failed atomic.Bool
+	closed := make(chan struct{})
+	connection, err := nats.Connect(url, nats.NoReconnect(), nats.Timeout(5*time.Second), nats.DrainTimeout(5*time.Second),
+		nats.ErrorHandler(func(*nats.Conn, *nats.Subscription, error) { failed.Store(true) }),
+		nats.ClosedHandler(func(*nats.Conn) { close(closed) }),
+	)
+	if err != nil {
+		t.Fatal("connect load NATS capture")
+	}
+	t.Cleanup(connection.Close)
+	subscription, err := connection.Subscribe(accessnats.Subject, func(message *nats.Msg) {
+		if containsLoadSecret(message.Data, sentinels) {
+			leaked.Store(true)
+		}
+		count.Add(1)
+	})
+	if err != nil {
+		t.Fatal("subscribe load NATS capture")
+	}
+	if err := subscription.SetPendingLimits(8192, 8<<20); err != nil {
+		t.Fatal("bound load NATS capture")
+	}
+	if err := connection.FlushTimeout(5 * time.Second); err != nil {
+		t.Fatal("activate load NATS capture")
+	}
+	return func() (uint64, bool) {
+		if err := connection.Drain(); err != nil {
+			t.Fatal("drain load NATS capture")
+		}
+		select {
+		case <-closed:
+		case <-time.After(12 * time.Second):
+			t.Fatal("load NATS capture did not close")
+		}
+		if failed.Load() || connection.LastError() != nil {
+			t.Fatal("load NATS capture lost messages or failed")
+		}
+		return count.Load(), leaked.Load()
+	}
+}
+
+func TestLoadLeakSecretForms(t *testing.T) {
+	value := []byte("load-key-\x00\xff\r\n")
+	forms := loadSecretForms(nil, value)
+	for _, encoded := range [][]byte{value, []byte("bG9hZC1rZXktAP8NCg=="), []byte("6c6f61642d6b65792d00ff0d0a"), []byte("6C6F61642D6B65792D00FF0D0A")} {
+		if !containsLoadSecret(append([]byte("metadata:"), encoded...), forms) {
+			t.Fatal("raw/base64/hex protected material went undetected")
+		}
+	}
+	if containsLoadSecret([]byte("value-free metadata"), forms) {
+		t.Fatal("unrelated metadata matched a secret")
+	}
+}
+
+func TestLoadLeakCaptureFindsEncodedPayload(t *testing.T) {
+	url := os.Getenv("CONFIGRA_TEST_NATS_URL")
+	if url == "" {
+		t.Skip("CONFIGRA_TEST_NATS_URL is not set")
+	}
+	value := []byte("load-capture-regression")
+	finish := captureLoadAccess(t, url, loadSecretForms(value))
+	publisher, err := nats.Connect(url, nats.NoReconnect(), nats.Timeout(5*time.Second))
+	if err != nil {
+		t.Fatal("connect load capture regression publisher")
+	}
+	defer publisher.Close()
+	for _, body := range []string{"value-free metadata", base64.StdEncoding.EncodeToString(value)} {
+		if err := publisher.Publish(accessnats.Subject, []byte(body)); err != nil {
+			t.Fatal("publish load capture regression payload")
+		}
+	}
+	if err := publisher.FlushTimeout(5 * time.Second); err != nil {
+		t.Fatal("flush load capture regression publisher")
+	}
+	if count, leaked := finish(); count != 2 || !leaked {
+		t.Fatalf("capture = %d messages, leaked=%t; want two messages and a detected leak", count, leaked)
 	}
 }
 
@@ -810,50 +955,165 @@ func assertClickHouseHasNoSentinels(
 	sentinels [][]byte,
 ) {
 	t.Helper()
-	for _, sentinel := range sentinels {
-		if len(sentinel) == 0 || !utf8.Valid(sentinel) {
-			continue
-		}
-		var count uint64
-		err := connection.QueryRow(ctx, `
-			SELECT count() FROM access_events
-			WHERE principal = ? AND position(
-				concat(principal, authentication, environment, resource_type, resource, toString(vault_revisions)), ?
-			) > 0
-		`, principal, string(sentinel)).Scan(&count)
-		if err != nil {
+	// Stream metadata once. Do not send protected values as SQL parameters: the
+	// database's own query log could otherwise record the scan's secret needles.
+	rows, err := connection.Query(ctx, `
+		SELECT concat(principal, authentication, environment, namespace, resource_type,
+		              resource, toString(config_revision), toString(vault_revisions))
+		FROM access_events WHERE principal = ?
+	`, principal)
+	if err != nil {
+		t.Fatalf("read ClickHouse Access Events for leak scan: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var content string
+		if err := rows.Scan(&content); err != nil {
 			t.Fatalf("scan ClickHouse Access Events: %v", err)
 		}
-		if count != 0 {
-			t.Fatal("ClickHouse Access Events contain protected load-test material")
-		}
+		assertNoSentinels(t, "ClickHouse Access Events", []byte(content), sentinels)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate ClickHouse Access Events for leak scan: %v", err)
 	}
 }
 
 type loadEvidence struct {
-	StartedAt             time.Time           `json:"started_at"`
-	Duration              string              `json:"duration"`
-	RequestedQPS          int                 `json:"requested_qps"`
-	HarnessGoVersion      string              `json:"harness_go_version"`
-	HostOS                string              `json:"host_os"`
-	HostArch              string              `json:"host_arch"`
-	HostCPUs              int                 `json:"host_cpus"`
-	Image                 string              `json:"image"`
-	ContainerCPUs         int                 `json:"container_cpus"`
-	ContainerMemoryBytes  uint64              `json:"container_memory_bytes"`
-	MySQLVersion          string              `json:"mysql_version"`
-	ClickHouseVersion     string              `json:"clickhouse_version"`
-	Report                vegetaReport        `json:"vegeta"`
-	Samples               []loadSample        `json:"samples"`
-	Resources             loadResourceSummary `json:"resources"`
-	ExpectedAccessEvents  uint64              `json:"expected_access_events"`
-	PersistedAccessEvents uint64              `json:"persisted_access_events"`
-	LeakScanPassed        bool                `json:"leak_scan_passed"`
-	GCTraceLines          int                 `json:"gc_trace_lines"`
-	SchedulerTraceLines   int                 `json:"scheduler_trace_lines"`
+	StartedAt              time.Time           `json:"started_at"`
+	Passed                 bool                `json:"passed"`
+	Stage                  string              `json:"stage"`
+	Duration               string              `json:"duration"`
+	RequestedQPS           int                 `json:"requested_qps"`
+	HarnessGoVersion       string              `json:"harness_go_version"`
+	HostOS                 string              `json:"host_os"`
+	HostArch               string              `json:"host_arch"`
+	HostCPUs               int                 `json:"host_cpus"`
+	Image                  string              `json:"image"`
+	ContainerCPUs          int                 `json:"container_cpus"`
+	ContainerMemoryBytes   uint64              `json:"container_memory_bytes"`
+	MySQLVersion           string              `json:"mysql_version"`
+	MySQLInterpolateParams bool                `json:"mysql_interpolate_params"`
+	ClickHouseVersion      string              `json:"clickhouse_version"`
+	Warmup                 vegetaReport        `json:"warmup"`
+	Report                 vegetaReport        `json:"vegeta"`
+	Samples                []loadSample        `json:"samples"`
+	Resources              loadResourceSummary `json:"resources"`
+	ExpectedAccessEvents   uint64              `json:"expected_access_events"`
+	PersistedAccessEvents  uint64              `json:"persisted_access_events"`
+	CapturedAccessEvents   uint64              `json:"captured_access_events"`
+	NATSLeakScanPassed     bool                `json:"nats_leak_scan_passed"`
+	LeakScanPassed         bool                `json:"leak_scan_passed"`
+	GCTraceLines           int                 `json:"gc_trace_lines"`
+	SchedulerTraceLines    int                 `json:"scheduler_trace_lines"`
 }
 
-func writeLoadEvidence(t *testing.T, evidence loadEvidence) string {
+func preserveLoadFailure(t *testing.T, evidence loadEvidence, sentinels [][]byte, container string, results ...string) {
+	t.Helper()
+	path := writeLoadEvidence(t, evidence, sentinels)
+	directory, err := os.MkdirTemp(filepath.Dir(path), "failed-"+strconv.FormatInt(evidence.StartedAt.UnixNano(), 10)+"-")
+	if err != nil {
+		t.Errorf("create private load failure directory: %v", err)
+		return
+	}
+	for _, source := range append([]string{path}, results...) {
+		if err := copyLoadEvidenceFile(source, filepath.Join(directory, filepath.Base(source))); err != nil {
+			t.Errorf("preserve load evidence: %v", err)
+		}
+	}
+	// Raw logs/results may contain a newly discovered leak: keep them private,
+	// never print them or retain target.http (which contains the Bearer Token).
+	logFile, err := os.OpenFile(filepath.Join(directory, "api.log"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		t.Errorf("create private load API log: %v", err)
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	command := exec.CommandContext(ctx, "docker", "logs", container)
+	command.Stdout, command.Stderr = logFile, logFile
+	if err := command.Run(); err != nil {
+		t.Errorf("preserve load API log: %v", err)
+	}
+	if err := logFile.Close(); err != nil {
+		t.Errorf("close load API log: %v", err)
+	}
+	t.Logf("failed load evidence (private; do not publish raw logs/results): %s", directory)
+}
+
+func copyLoadEvidenceFile(source, target string) error {
+	input, err := os.Open(source)
+	if os.IsNotExist(err) {
+		return nil // The test may fail before this measurement starts.
+	}
+	if err != nil {
+		return err
+	}
+	defer input.Close()
+	output, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	_, copyErr := io.Copy(output, input)
+	closeErr := output.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	return closeErr
+}
+
+func TestLoadEvidenceCopyIsPrivateAndDoesNotOverwrite(t *testing.T) {
+	directory := t.TempDir()
+	source, target := filepath.Join(directory, "source"), filepath.Join(directory, "target")
+	if err := copyLoadEvidenceFile(source, target); err != nil {
+		t.Fatalf("missing measurement: %v", err)
+	}
+	if err := os.WriteFile(source, []byte("measurement"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := copyLoadEvidenceFile(source, target); err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(target)
+	if err != nil || string(content) != "measurement" {
+		t.Fatalf("copied measurement = %q, %v", content, err)
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("evidence permissions = %v; want 0600", info.Mode().Perm())
+	}
+	if err := copyLoadEvidenceFile(source, target); !os.IsExist(err) {
+		t.Fatalf("existing evidence overwrite = %v; want existence error", err)
+	}
+}
+
+func TestLoadEvidenceRejectsSecretsInReport(t *testing.T) {
+	evidence := loadEvidence{Passed: true, Stage: "complete", MySQLInterpolateParams: true}
+	secret := []byte("private-report-sentinel")
+	sentinels := loadSecretForms(secret)
+	if encoded, err := encodeLoadEvidence(evidence, sentinels); err != nil || !bytes.Contains(encoded, []byte(`"mysql_interpolate_params": true`)) {
+		t.Fatalf("clean report must record the query mode without a DSN: %v", err)
+	}
+	evidence.Report.Errors = []string{base64.StdEncoding.EncodeToString(secret)}
+	if encoded, err := encodeLoadEvidence(evidence, sentinels); err == nil || len(encoded) != 0 {
+		t.Fatal("secret-bearing report must return an error without encoded content")
+	}
+}
+
+func encodeLoadEvidence(evidence loadEvidence, sentinels [][]byte) ([]byte, error) {
+	encoded, err := json.MarshalIndent(evidence, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("encode load evidence: %w", err)
+	}
+	if containsLoadSecret(encoded, sentinels) {
+		return nil, fmt.Errorf("load evidence contains protected load-test material")
+	}
+	return encoded, nil
+}
+
+func writeLoadEvidence(t *testing.T, evidence loadEvidence, sentinels [][]byte) string {
 	t.Helper()
 	repository, err := filepath.Abs("..")
 	if err != nil {
@@ -863,9 +1123,11 @@ func writeLoadEvidence(t *testing.T, evidence loadEvidence) string {
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		t.Fatalf("create load evidence directory: %v", err)
 	}
-	encoded, err := json.MarshalIndent(evidence, "", "  ")
+	encoded, err := encodeLoadEvidence(evidence, sentinels)
 	if err != nil {
-		t.Fatalf("encode load evidence: %v", err)
+		t.Errorf("load report redacted: %v", err)
+		// Never leave a previous success as "latest" when the report itself leaks.
+		encoded = []byte(`{"passed":false,"stage":"evidence-redacted"}`)
 	}
 	path := filepath.Join(directory, "latest.json")
 	if err := os.WriteFile(path, append(encoded, '\n'), 0o600); err != nil {

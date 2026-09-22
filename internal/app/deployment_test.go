@@ -56,6 +56,12 @@ func TestKubernetesBaseBuildsSeparatedHardenedDeployments(t *testing.T) {
 	if count := bytes.Count(output, []byte("kind: Service")); count != 2 {
 		t.Errorf("Service count = %d, want 2", count)
 	}
+	// Both scratch-image services must drain endpoints without an exec/shell hook.
+	for _, required := range []string{"preStop:\n            sleep:\n              seconds: 5", "terminationGracePeriodSeconds: 30"} {
+		if count := bytes.Count(output, []byte(required)); count != 2 {
+			t.Errorf("drain setting %q count = %d, want 2", required, count)
+		}
+	}
 }
 
 func TestBackupToolsRejectUnsafeDatabaseNamesBeforeConnecting(t *testing.T) {

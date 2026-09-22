@@ -24,11 +24,11 @@ func TestHandlerReturnsResolvedConfigForAuthorizedEnvironmentWithRegisteredCerti
 	secret := base64.RawURLEncoding.EncodeToString(secretBytes)
 	certificateDER := []byte("registered-client-certificate")
 	repository := fakeRepository{
+		environment: "a",
 		token: machine.Token{
-			PublicID:            publicID,
-			SecretDigest:        sha256.Sum256(secretBytes),
-			AllowedEnvironments: []string{"a"},
-			ExpiresAt:           time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC),
+			PublicID:     publicID,
+			SecretDigest: sha256.Sum256(secretBytes),
+			ExpiresAt:    time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC),
 		},
 		certificateFingerprint: sha256.Sum256(certificateDER),
 		config: machine.ResolvedConfig{
@@ -88,11 +88,11 @@ func TestHandlerReturnsNotModifiedWithoutPublishingAccessEvent(t *testing.T) {
 	secret := base64.RawURLEncoding.EncodeToString(secretBytes)
 	certificateDER := []byte("registered-client-certificate")
 	repository := fakeRepository{
+		environment: "a",
 		token: machine.Token{
-			PublicID:            publicID,
-			SecretDigest:        sha256.Sum256(secretBytes),
-			AllowedEnvironments: []string{"a"},
-			ExpiresAt:           time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC),
+			PublicID:     publicID,
+			SecretDigest: sha256.Sum256(secretBytes),
+			ExpiresAt:    time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC),
 		},
 		certificateFingerprint: sha256.Sum256(certificateDER),
 		config:                 machine.ResolvedConfig{ETag: `"unchanged"`},
@@ -136,11 +136,11 @@ func TestHandlerReturnsAuthorizedFileBytesWithoutLeakingThemIntoAccessEvent(t *t
 	secret := base64.RawURLEncoding.EncodeToString(secretBytes)
 	certificateDER := []byte("registered-client-certificate")
 	repository := fakeRepository{
+		environment: "a",
 		token: machine.Token{
-			PublicID:            publicID,
-			SecretDigest:        sha256.Sum256(secretBytes),
-			AllowedEnvironments: []string{"a"},
-			ExpiresAt:           time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC),
+			PublicID:     publicID,
+			SecretDigest: sha256.Sum256(secretBytes),
+			ExpiresAt:    time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC),
 		},
 		certificateFingerprint: sha256.Sum256(certificateDER),
 		file: machine.FileContent{
@@ -195,11 +195,11 @@ func TestHandlerEnforcesTokenEnvironmentAndConditionalMTLS(t *testing.T) {
 	secretBytes := []byte("0123456789abcdef0123456789abcdef")
 	certificateDER := []byte("registered-client-certificate")
 	base := fakeRepository{
+		environment: "a",
 		token: machine.Token{
-			PublicID:            "token1",
-			SecretDigest:        sha256.Sum256(secretBytes),
-			AllowedEnvironments: []string{"a"},
-			ExpiresAt:           time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC),
+			PublicID:     "token1",
+			SecretDigest: sha256.Sum256(secretBytes),
+			ExpiresAt:    time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC),
 		},
 		certificateFingerprint: sha256.Sum256(certificateDER),
 	}
@@ -211,6 +211,8 @@ func TestHandlerEnforcesTokenEnvironmentAndConditionalMTLS(t *testing.T) {
 	revoked.token.Revoked = true
 	tokenLookupFailure := base
 	tokenLookupFailure.tokenErr = errors.New("MySQL unavailable")
+	missingToken := base
+	missingToken.tokenErr = machine.ErrNotFound
 	certificateLookupFailure := base
 	certificateLookupFailure.certificateErr = errors.New("MySQL unavailable")
 	authorization := "Bearer cfg_token1_" + base64.RawURLEncoding.EncodeToString(secretBytes)
@@ -234,6 +236,9 @@ func TestHandlerEnforcesTokenEnvironmentAndConditionalMTLS(t *testing.T) {
 		{"expired token is rejected", expired, "https://configra.test/v1/environments/a/configs/payment", authorization, validTLS, http.StatusUnauthorized, "unauthorized"},
 		{"revoked token is rejected", revoked, "https://configra.test/v1/environments/a/configs/payment", authorization, validTLS, http.StatusUnauthorized, "unauthorized"},
 		{"wrong token secret is rejected", base, "https://configra.test/v1/environments/a/configs/payment", wrongSecret, validTLS, http.StatusUnauthorized, "unauthorized"},
+		{"bad secret precedes environment denial", base, "https://configra.test/v1/environments/b/configs/payment", wrongSecret, validTLS, http.StatusUnauthorized, "unauthorized"},
+		{"revocation precedes environment denial", revoked, "https://configra.test/v1/environments/b/configs/payment", authorization, validTLS, http.StatusUnauthorized, "unauthorized"},
+		{"unknown token is unauthorized", missingToken, "https://configra.test/v1/environments/a/configs/payment", authorization, validTLS, http.StatusUnauthorized, "unauthorized"},
 		{"missing token is rejected", base, "https://configra.test/v1/environments/a/configs/payment", "", validTLS, http.StatusUnauthorized, "unauthorized"},
 		{"token lookup failure is unavailable", tokenLookupFailure, "https://configra.test/v1/environments/a/configs/payment", authorization, validTLS, http.StatusServiceUnavailable, "service_unavailable"},
 		{"certificate lookup failure is unavailable", certificateLookupFailure, "https://configra.test/v1/environments/a/configs/payment", authorization, validTLS, http.StatusServiceUnavailable, "service_unavailable"},
@@ -260,6 +265,7 @@ func TestHandlerEnforcesTokenEnvironmentAndConditionalMTLS(t *testing.T) {
 
 type fakeRepository struct {
 	token                  machine.Token
+	environment            string
 	certificateFingerprint [32]byte
 	config                 machine.ResolvedConfig
 	readErr                error
@@ -268,8 +274,10 @@ type fakeRepository struct {
 	certificateErr         error
 }
 
-func (repository fakeRepository) TokenByPublicID(context.Context, string) (machine.Token, error) {
-	return repository.token, repository.tokenErr
+func (repository fakeRepository) TokenForEnvironment(_ context.Context, _, environment string) (machine.Token, error) {
+	token := repository.token
+	token.EnvironmentGranted = environment == repository.environment
+	return token, repository.tokenErr
 }
 
 func (repository fakeRepository) IsCertificateActive(_ context.Context, fingerprint [32]byte) (bool, error) {

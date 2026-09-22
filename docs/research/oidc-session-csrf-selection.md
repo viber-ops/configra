@@ -5,6 +5,12 @@ Session 与 CSRF；Casdoor 是首个兼容目标，但实现保持标准 OIDC。
 `/v2`、`/v3` 只出现在上游 Go Module 的包路径中，不代表 Configra 存在 V2；
 Configra 的 API、Schema 与产品契约仍然都是 V1。
 
+2026-09-22 更新：SCS 仍负责 Session，但 MySQL adapter 已换成项目内的
+`scs.CtxStore` 实现。原 adapter 的 SQL 不接收请求 context，取消请求仍会继续
+查询，清理任务也可能阻塞停机。新实现复用原表，SQL 最长五秒，清理支持取消；
+MySQL 8.0.22 集成测试覆盖了这些情况。下文保留原选型过程，当前实现见
+[本轮验证记录](../verification/2026-09-22.md)。
+
 ## 结论
 
 | 能力 | V1 选择 | 最小理由 |

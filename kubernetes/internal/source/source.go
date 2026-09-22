@@ -122,6 +122,11 @@ func ValidateObjects(objects []Object) error {
 		if !resourceKey.MatchString(object.Environment) || !ValidPath(object.Path) || seen[object.Path] {
 			return errors.New("invalid object Environment or duplicate/unsafe path")
 		}
+		for previous := range seen {
+			if strings.HasPrefix(previous, object.Path+"/") || strings.HasPrefix(object.Path, previous+"/") {
+				return errors.New("object paths cannot be both a file and a directory")
+			}
+		}
 		seen[object.Path] = true
 		switch object.Type {
 		case "", "config":

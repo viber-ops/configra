@@ -1,0 +1,21 @@
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directories: ['/', '/kubernetes', '/e2e']
+    schedule: {interval: weekly}
+    open-pull-requests-limit: 5
+    groups:
+      go-dependencies: {patterns: ['*']}
+  - package-ecosystem: npm
+    directory: /web
+    schedule: {interval: weekly}
+    open-pull-requests-limit: 5
+    groups:
+      ui-dependencies: {patterns: ['*']}
+  - package-ecosystem: docker
+    directories: ['/', '/kubernetes']
+    schedule: {interval: weekly}
+    open-pull-requests-limit: 5
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly}

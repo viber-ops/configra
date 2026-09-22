@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { inventoryPage } from './inventory.js';
 
 async function mockAdmin(page) {
   await page.route('**/v1/me', route => route.fulfill({
@@ -8,6 +9,34 @@ async function mockAdmin(page) {
   }));
 }
 
+test('Notification destinations and their subscriptions are independently paged', async ({ page }) => {
+  await mockAdmin(page);
+  const events = Array.from({ length: 105 }, (_, index) => `event.${String(index).padStart(3, '0')}`);
+  const items = Array.from({ length: 105 }, (_, index) => ({ key: `target_${String(index).padStart(3, '0')}`, display_name: `Target ${index}`, provider: 'generic_webhook', safe_host: 'hooks.example.test', masked_suffix: '••••test', enabled: true, archived: false, event_types: events }));
+  await page.route('**/v1/notification-destinations**', route => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith('/event-types')) {
+      const offset = Number(url.searchParams.get('offset') || 0), limit = Number(url.searchParams.get('limit') || 50);
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: events.slice(offset, offset + limit), total: events.length }) });
+    }
+    return route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, items) });
+  });
+  await page.goto('/ui/#/notifications');
+  await expect(page.locator('.notifications-page tbody tr')).toHaveCount(50);
+  await page.locator('.notifications-page > nav').getByRole('button', { name: 'Next' }).click();
+  await expect(page.getByRole('row', { name: /Target 50 / })).toBeVisible();
+  await page.locator('.notifications-page').getByRole('searchbox').fill('target_104');
+  await expect(page.locator('.notifications-page tbody tr')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Event types Target 104' }).click();
+  const subscriptions = page.locator('.delivery-section');
+  await expect(subscriptions.getByText('event.049', { exact: true })).toBeVisible();
+  await expect(subscriptions.getByText('event.050', { exact: true })).toHaveCount(0);
+  await subscriptions.getByRole('button', { name: 'Next' }).click();
+  await subscriptions.getByRole('button', { name: 'Next' }).click();
+  await expect(subscriptions.getByText('event.104', { exact: true })).toBeVisible();
+  await expect(subscriptions.getByRole('button', { name: 'Next' })).toBeDisabled();
+});
+
 test('administrator creates an Environment-scoped API Token and receives its plaintext once', async ({ page }) => {
   await mockAdmin(page);
   const tokens = [{
@@ -16,10 +45,10 @@ test('administrator creates an Environment-scoped API Token and receives its pla
   }];
   let mutation;
   await page.route('**/v1/environments*', route => route.fulfill({
-    status: 200, contentType: 'application/json', body: JSON.stringify({ items: [
+    status: 200, contentType: 'application/json', body: inventoryPage(route, [
       { key: 'production', display_name: 'Production', archived: false },
       { key: 'recovery', display_name: 'Recovery', archived: false },
-    ] }),
+    ]),
   }));
   await page.route('**/v1/api-tokens*', async route => {
     if (route.request().method() === 'POST') {
@@ -31,7 +60,7 @@ test('administrator creates an Environment-scoped API Token and receives its pla
       }) });
       return;
     }
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: tokens }) });
+    await route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, tokens) });
   });
   await page.goto('/ui/#/administration');
 
@@ -54,8 +83,8 @@ test('administrator creates an Environment-scoped API Token and receives its pla
 
 test('administrator imports a public client certificate and can permanently revoke it', async ({ page }) => {
   await mockAdmin(page);
-  await page.route('**/v1/environments*', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[]}' }));
-  await page.route('**/v1/api-tokens*', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[]}' }));
+  await page.route('**/v1/environments*', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[],"total":0}' }));
+  await page.route('**/v1/api-tokens*', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[],"total":0}' }));
   const certificates = [{
     fingerprint_sha256: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
     display_name: 'Datacenter A', subject: 'CN=datacenter-a', serial_hex: '01',
@@ -76,7 +105,7 @@ test('administrator imports a public client certificate and can permanently revo
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ outcome: 'success', ...certificates[0], display_name: imported.body.display_name }) });
       return;
     }
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: certificates }) });
+    await route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, certificates) });
   });
   await page.goto('/ui/#/administration');
   await page.getByRole('tab', { name: 'Client certificates' }).click();
@@ -97,22 +126,23 @@ test('administrator imports a public client certificate and can permanently revo
   await expect(page.getByText('Revoked', { exact: true })).toBeVisible();
 });
 
-test('administrator replaces a Token Environment grant set and permanently revokes the Token', async ({ page }) => {
+test('administrator patches a Token Environment grant set and permanently revokes the Token', async ({ page }) => {
   await mockAdmin(page);
   const token = {
     public_id: '0123456789abcdef', display_name: 'Datacenter A', display_prefix: 'cfg_0123456789abcdef',
     environment_keys: ['production'], allow_without_mtls: false, revoked: false, created_at: '2026-08-27T01:00:00Z',
   };
-  await page.route('**/v1/environments*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [
-    { key: 'production', display_name: 'Production', archived: false }, { key: 'recovery', display_name: 'Recovery', archived: false },
-  ] }) }));
+  await page.route('**/v1/environments*', route => route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, [
+    { key: 'production', display_name: 'Production', archived: false, granted: token.environment_keys.includes('production') }, { key: 'recovery', display_name: 'Recovery', archived: false, granted: token.environment_keys.includes('recovery') },
+  ]) }));
   let grantChange;
   let revocation;
   await page.route('**/v1/api-tokens**', async route => {
     const pathname = new URL(route.request().url()).pathname;
     if (pathname.endsWith('/environments')) {
       grantChange = { body: route.request().postDataJSON(), operation: route.request().headers()['idempotency-key'] };
-      token.environment_keys = grantChange.body.environment_keys;
+      expect(route.request().method()).toBe('PATCH');
+      token.environment_keys = [...token.environment_keys.filter(key => !grantChange.body.remove.includes(key)), ...grantChange.body.add];
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ outcome: 'success', public_id: token.public_id, environment_keys: token.environment_keys }) });
       return;
     }
@@ -122,7 +152,7 @@ test('administrator replaces a Token Environment grant set and permanently revok
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ outcome: 'success', public_id: token.public_id, revoked: true }) });
       return;
     }
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [token] }) });
+    await route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, [token]) });
   });
   await page.goto('/ui/#/administration');
 
@@ -130,13 +160,82 @@ test('administrator replaces a Token Environment grant set and permanently revok
   await page.getByRole('checkbox', { name: /Production/ }).uncheck();
   await page.getByRole('checkbox', { name: /Recovery/ }).check();
   await page.getByRole('button', { name: 'Save environment grants' }).click();
-  expect(grantChange.body).toEqual({ environment_keys: ['recovery'] });
+  expect(grantChange.body).toEqual({ add: ['recovery'], remove: ['production'] });
   expect(grantChange.operation).toMatch(/^[0-9a-f-]{36}$/);
 
   await page.getByRole('button', { name: 'Revoke Datacenter A' }).click();
   await page.getByRole('button', { name: 'Confirm revoke Datacenter A' }).click();
   expect(revocation).toMatch(/^[0-9a-f-]{36}$/);
   await expect(page.getByText('Revoked', { exact: true })).toBeVisible();
+});
+
+test('grant editing retains unseen permissions and pending changes across searches and pages', async ({ page }) => {
+  await mockAdmin(page);
+  const environments = Array.from({ length: 105 }, (_, index) => ({ key: `env_${String(index).padStart(3, '0')}`, display_name: `Environment ${index}`, granted: index % 2 === 0 }));
+  const token = { public_id: '0123456789abcdef', display_name: 'Paged reader', display_prefix: 'cfg_0123456789abcdef', environment_keys: environments.filter(item => item.granted).map(item => item.key) };
+  const reads = [];
+  let mutation;
+  await page.route('**/v1/environments*', route => {
+    reads.push(new URL(route.request().url()).searchParams);
+    return route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, environments) });
+  });
+  await page.route('**/v1/api-tokens**', route => {
+    if (route.request().method() === 'PATCH') {
+      mutation = route.request().postDataJSON();
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '{"outcome":"success","public_id":"0123456789abcdef"}' });
+    }
+    return route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, [token]) });
+  });
+  await page.goto('/ui/#/administration');
+  await page.getByRole('button', { name: 'Edit environments Paged reader' }).click();
+  const form = page.locator('.grant-form');
+  await expect(form.getByRole('checkbox')).toHaveCount(50);
+  await expect(form.getByRole('checkbox', { name: /env_000$/ })).toBeChecked();
+  await form.getByRole('checkbox', { name: /env_000$/ }).uncheck();
+  await form.getByRole('button', { name: 'Next', exact: true }).click();
+  await form.getByRole('checkbox', { name: /env_051$/ }).check();
+  await form.getByRole('button', { name: 'Previous', exact: true }).click();
+  await expect(form.getByRole('checkbox', { name: /env_000$/ })).not.toBeChecked();
+  await form.getByRole('searchbox').fill('env_104');
+  await expect(form.getByRole('checkbox')).toHaveCount(1);
+  await expect(form.getByRole('checkbox', { name: /env_104$/ })).toBeChecked();
+  await form.getByRole('button', { name: 'Save environment grants' }).click();
+  expect(mutation).toEqual({ add: ['env_051'], remove: ['env_000'] });
+  expect(reads.some(query => query.get('offset') === '50' && query.get('token') === token.public_id)).toBe(true);
+  expect(reads.some(query => query.get('q') === 'env_104' && query.get('offset') === '0')).toBe(true);
+  expect(reads.every(query => Number(query.get('limit')) <= 50)).toBe(true);
+});
+
+test('grant drafts distinguish inherited property names from explicit edits', async ({ page }) => {
+  await mockAdmin(page);
+  const token = { public_id: '0123456789abcdef', display_name: 'Constructor reader', environment_keys: ['constructor'] };
+  let mutation;
+  await page.route('**/v1/environments*', route => route.fulfill({
+    contentType: 'application/json', body: inventoryPage(route, [
+      { key: 'constructor', display_name: 'Constructor', granted: true },
+      { key: 'production', display_name: 'Production', granted: false },
+    ]),
+  }));
+  await page.route('**/v1/api-tokens**', route => {
+    if (route.request().method() === 'PATCH') {
+      mutation = route.request().postDataJSON();
+      return route.fulfill({ contentType: 'application/json', body: '{"outcome":"success"}' });
+    }
+    return route.fulfill({ contentType: 'application/json', body: inventoryPage(route, [token]) });
+  });
+  await page.goto('/ui/#/administration');
+  await page.getByRole('button', { name: 'Edit environments Constructor reader' }).click();
+  const form = page.locator('.grant-form');
+  const constructor = form.getByRole('checkbox', { name: /constructor$/ });
+  await expect(constructor).toBeChecked();
+  await expect(form.getByRole('button', { name: 'Save environment grants' })).toBeDisabled();
+  await constructor.uncheck();
+  await form.getByRole('searchbox').fill('production');
+  await form.getByRole('checkbox', { name: /production$/ }).check();
+  await form.getByRole('searchbox').fill('constructor');
+  await expect(constructor).not.toBeChecked();
+  await form.getByRole('button', { name: 'Save environment grants' }).click();
+  expect(mutation).toEqual({ add: ['production'], remove: ['constructor'] });
 });
 
 test('administrator creates a Notification Destination without redisplaying URL credentials', async ({ page }) => {
@@ -154,7 +253,7 @@ test('administrator creates a Notification Destination without redisplaying URL 
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ outcome: 'success', ...items.at(-1) }) });
       return;
     }
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items }) });
+    await route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, items) });
   });
   await page.goto('/ui/#/notifications');
 
@@ -220,7 +319,7 @@ test('administrator tests, inspects, redelivers, and archives a Notification Des
       await route.fulfill({ status: 200, contentType: 'application/json', body: '{"outcome":"success","archived":false}' });
       return;
     }
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [destination] }) });
+    await route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, [destination]) });
   });
   await page.goto('/ui/#/notifications');
 
@@ -242,8 +341,8 @@ test('administrator tests, inspects, redelivers, and archives a Notification Des
 
 test('deployment status distinguishes observed readiness from configured architecture', async ({ page }) => {
   await mockAdmin(page);
-  await page.route('**/v1/environments*', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[]}' }));
-  await page.route('**/v1/api-tokens*', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[]}' }));
+  await page.route('**/v1/environments*', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[],"total":0}' }));
+  await page.route('**/v1/api-tokens*', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[],"total":0}' }));
   await page.route('**/health/ready', route => route.fulfill({ status: 204 }));
   await page.goto('/ui/#/administration');
   await page.getByRole('tab', { name: 'Deployment status' }).click();

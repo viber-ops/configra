@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
+import { inventoryPage } from './inventory.js';
 
 async function mockIdentity(page, role = 'admin') {
+  await page.route(/\/v1\/(environments|configs|vault-items)(\?|$)/, route => route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, []) }));
   await page.route('**/v1/me', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
@@ -29,7 +31,7 @@ test('administrator creates a peer Environment with an immutable resource key', 
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ outcome: 'success', ...mutation.body, archived: false }) });
       return;
     }
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items }) });
+    await route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, items) });
   });
   await page.goto('/ui/#/environments');
 
@@ -63,7 +65,7 @@ test('administrator renames, archives, and restores a peer Environment', async (
       mutations.push({ method: action, operation: request.headers()['idempotency-key'] });
       environment.archived = action === 'archive';
     } else {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [environment] }) });
+      await route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, [environment]) });
       return;
     }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ outcome: 'success', ...environment }) });
@@ -98,9 +100,9 @@ test('viewer opens an Environment and carries its exact filter into Config and V
     { namespace_key: 'platform', key: 'mysql', display_name: 'MySQL credentials', revision: 5, environment_keys: ['canary', 'development', 'eu-west', 'production', 'qa', 'recovery', 'staging'], archived: false, updated_at: '2026-08-27T01:00:00Z' },
     { namespace_key: 'platform', key: 'redis', display_name: 'Redis credentials', revision: 3, environment_keys: ['staging'], archived: false, updated_at: '2026-08-26T01:00:00Z' },
   ];
-  await page.route('**/v1/environments*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: environments }) }));
-  await page.route('**/v1/configs*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: configs }) }));
-  await page.route('**/v1/vault-items*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: vault }) }));
+  await page.route('**/v1/environments*', route => route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, environments) }));
+  await page.route('**/v1/configs*', route => route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, configs) }));
+  await page.route('**/v1/vault-items*', route => route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, vault) }));
 
   await page.goto('/ui/#/environments');
   const environmentLink = page.getByRole('link', { name: 'Open Environment Production' });
@@ -114,15 +116,15 @@ test('viewer opens an Environment and carries its exact filter into Config and V
 
   await page.getByRole('link', { name: 'View all Configs in Production' }).click();
   await expect(page).toHaveURL(/#\/configs\?environment=production$/);
-  await expect(page.getByLabel('Environment filter')).toHaveValue('production');
+  await expect(page.getByLabel('Environment filter', { exact: true })).toHaveValue('production');
   await expect(page.getByRole('link', { name: 'Open Config Payment service' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Open Config Worker' })).toHaveCount(0);
 
   await page.goto('/ui/#/vault?environment=production');
-  await expect(page.getByLabel('Environment filter')).toHaveValue('production');
+  await expect(page.getByLabel('Environment filter', { exact: true })).toHaveValue('production');
   await expect(page.getByRole('link', { name: 'platform.mysql · MySQL credentials · v5' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'recovery', exact: true })).toBeVisible();
-  await expect(page.getByText('+4', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'recovery', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: '+4', exact: true })).toHaveAttribute('href', '#/vault/platform/mysql');
   await expect(page.getByRole('link', { name: 'platform.redis · Redis credentials · v3' })).toHaveCount(0);
 });
 
@@ -131,11 +133,11 @@ test('viewer reads Config identities and their independent Environment revisions
   await page.route('**/v1/configs*', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    body: JSON.stringify({ items: [{
+    body: inventoryPage(route, [{
       key: 'payment', display_name: 'Payment service', archived: false,
       updated_at: '2026-08-27T01:00:00Z',
       environments: [{ key: 'production', revision: 17, archived: false }, { key: 'recovery', revision: 4, archived: true }],
-    }] }),
+    }]),
   }));
   await page.goto('/ui/#/configs');
 
@@ -158,7 +160,7 @@ test('Config index searches and paginates a thousand-scale resource list', async
       updated_at: '2026-08-27T01:00:00Z', environments: [{ key: 'production', revision: index + 1, archived: false }],
     };
   });
-  await page.route('**/v1/configs*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items }) }));
+  await page.route('**/v1/configs*', route => route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, items) }));
   await page.goto('/ui/#/configs');
 
   await expect(page.locator('.config-index-table tbody tr')).toHaveCount(50);
@@ -178,19 +180,19 @@ test('viewer opens a Config identity before choosing its Environment context', a
   await page.route('**/v1/configs*', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    body: JSON.stringify({ items: [{
+    body: inventoryPage(route, [{
       key: 'payment', display_name: 'Payment service', archived: false,
       updated_at: '2026-08-27T01:00:00Z',
       environments: [{ key: 'production', revision: 17, archived: false }, { key: 'recovery', revision: 4, archived: true }],
-    }] }),
+    }]),
   }));
   await page.route('**/v1/environments*', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    body: JSON.stringify({ items: [
-      { key: 'production', display_name: 'Production', archived: false },
-      { key: 'recovery', display_name: 'Recovery', archived: true },
-    ] }),
+    body: inventoryPage(route, [
+      { key: 'production', display_name: 'Production', archived: false, revision: 17 },
+      { key: 'recovery', display_name: 'Recovery', archived: true, revision: 4 },
+    ]),
   }));
   await page.goto('/ui/#/configs');
 
@@ -205,15 +207,45 @@ test('viewer opens a Config identity before choosing its Environment context', a
   if (process.env.CONFIGRA_CONFIG_HOME_SCREENSHOT) await page.screenshot({ path: process.env.CONFIGRA_CONFIG_HOME_SCREENSHOT, fullPage: true });
 });
 
+test('off-page identities and Config environments remain searchable and directly addressable', async ({ page }) => {
+  await mockIdentity(page, 'viewer');
+  const environments = Array.from({ length: 105 }, (_, index) => ({ key: `env_${String(index).padStart(3, '0')}`, display_name: `Environment ${index}`, revision: index + 1 }));
+  const configs = Array.from({ length: 105 }, (_, index) => ({ key: `service_${String(index).padStart(3, '0')}`, display_name: `Service ${index}`, environments, archived: false }));
+  const requests = [];
+  await page.route('**/v1/environments*', route => {
+    requests.push(new URL(route.request().url()));
+    return route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, environments) });
+  });
+  await page.route('**/v1/configs*', route => {
+    requests.push(new URL(route.request().url()));
+    return route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, configs) });
+  });
+  await page.goto('/ui/#/configs/service_104');
+  await expect(page.getByRole('heading', { name: 'Service 104', exact: true })).toBeVisible();
+  const contexts = page.locator('.config-context-section');
+  await expect(contexts.locator('tbody tr')).toHaveCount(50);
+  await contexts.getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(contexts.getByRole('link', { name: /Open context: Environment 50/ })).toBeVisible();
+  await contexts.getByRole('searchbox').fill('env_104');
+  await expect(contexts.locator('tbody tr')).toHaveCount(1);
+  await expect(contexts.getByRole('link', { name: /Open context: Environment 104.*v105/ })).toHaveAttribute('href', '#/configs/service_104/env_104');
+  await page.getByRole('combobox', { name: 'Workspace search' }).fill('Service 104');
+  await expect(page.getByRole('listbox').getByRole('option')).toHaveCount(1);
+  await expect(page.getByRole('listbox').getByRole('option')).toHaveAttribute('href', '#/configs/service_104');
+  expect(requests.some(url => url.pathname === '/v1/configs' && url.searchParams.get('key') === 'service_104')).toBe(true);
+  expect(requests.some(url => url.searchParams.get('config') === 'service_104' && url.searchParams.get('offset') === '50')).toBe(true);
+  expect(requests.some(url => url.searchParams.get('config') === 'service_104' && url.searchParams.get('q') === 'env_104' && url.searchParams.get('offset') === '0')).toBe(true);
+});
+
 test('administrator creates, archives, and restores a Config identity', async ({ page }) => {
   await mockIdentity(page);
   const items = [];
   const lifecycle = [];
   let commit;
-  await page.route('**/v1/environments', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [
+  await page.route('**/v1/environments*', route => route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, [
     { key: 'production', display_name: 'Production', archived: false },
     { key: 'staging', display_name: 'Staging', archived: false },
-  ] }) }));
+  ]) }));
   await page.route('**/v1/configs**', async route => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
@@ -224,7 +256,7 @@ test('administrator creates, archives, and restores a Config identity', async ({
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ outcome: 'success', key: 'payment', archived: items[0].archived }) });
       return;
     }
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items }) });
+    await route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, items) });
   });
   await page.route('**/v1/environments/production/configs/payment', async route => {
     commit = { body: route.request().postDataJSON(), operation: route.request().headers()['idempotency-key'] };
@@ -238,7 +270,7 @@ test('administrator creates, archives, and restores a Config identity', async ({
 
   await page.getByRole('button', { name: 'New config' }).click();
   if (process.env.CONFIGRA_CONFIG_CREATE_SCREENSHOT) await page.screenshot({ path: process.env.CONFIGRA_CONFIG_CREATE_SCREENSHOT, fullPage: true });
-  await page.getByRole('combobox', { name: /^Environment/ }).selectOption('production');
+  await page.getByRole('combobox', { name: 'Environment', exact: true }).selectOption('production');
   await page.getByLabel('Resource key').fill('payment');
   await page.getByLabel('Display name').fill('Payment service');
   await page.getByLabel('Format').selectOption('yaml');
@@ -339,21 +371,35 @@ test('administrator edits canonical Config source against the visible current Re
   await expect(page.getByRole('row', { name: /v16.*bob@example.com/ })).toBeVisible();
 });
 
-test('administrator opens an old Config Revision beyond the rail and restores it as a new current Revision', async ({ page }) => {
+test('administrator retries a history page and restores an old Config Revision beyond the first page', async ({ page }) => {
   await mockIdentity(page);
-  let current = { environment_key: 'production', config_key: 'payment', config_name: 'Payment service', format: 'yaml', content: 'revision: 12\n', revision: 12 };
-  const revisions = Array.from({ length: 12 }, (_, index) => ({ revision: 12 - index, format: 'yaml', actor_id: 'admin@example.com', created_at: `2026-08-${String(27 - index).padStart(2, '0')}T01:00:00Z` }));
+  let current = { environment_key: 'production', config_key: 'payment', config_name: 'Payment service', format: 'yaml', content: 'revision: 53\n', revision: 53 };
+  const revisions = Array.from({ length: 53 }, (_, index) => ({ revision: 53 - index, format: 'yaml', actor_id: 'admin@example.com', created_at: '2026-08-27T01:00:00Z' }));
   let restore;
+  let failOlder = true;
+  const historyRequests = [];
   await page.route('**/v1/environments/production/configs/payment**', async route => {
     const request = route.request();
-    const pathname = new URL(request.url()).pathname;
+    const url = new URL(request.url());
+    const pathname = url.pathname;
     if (pathname.endsWith('/revisions/1')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...current, content: 'revision: 1\n', revision: 1 }) });
-    if (pathname.endsWith('/revisions')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: revisions }) });
+    if (pathname.endsWith('/revisions')) {
+      const before = Number(url.searchParams.get('before'));
+      historyRequests.push(before);
+      expect(url.searchParams.get('limit')).toBe('50');
+      if (before && failOlder) {
+        failOlder = false;
+        return route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":{"code":"service_unavailable","request_id":"history-page-failure"}}' });
+      }
+      const matching = revisions.filter(item => !before || item.revision < before);
+      const items = matching.slice(0, 50);
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items, next_before: matching.length > 50 ? items.at(-1).revision : undefined }) });
+    }
     if (pathname.endsWith('/restore')) {
       restore = request.postDataJSON();
-      current = { ...current, content: 'revision: 1\n', revision: 13 };
-      revisions.unshift({ revision: 13, format: 'yaml', actor_id: 'admin@example.com', created_at: '2026-08-27T02:00:00Z' });
-      return route.fulfill({ status: 200, contentType: 'application/json', body: '{"outcome":"success","revision":13}' });
+      current = { ...current, content: 'revision: 1\n', revision: 54 };
+      revisions.unshift({ revision: 54, format: 'yaml', actor_id: 'admin@example.com', created_at: '2026-08-27T02:00:00Z' });
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '{"outcome":"success","revision":54}' });
     }
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(current) });
   });
@@ -361,6 +407,15 @@ test('administrator opens an old Config Revision beyond the rail and restores it
 
   await expect(page.getByLabel('Revision history').getByText('v1', { exact: true })).toHaveCount(0);
   await page.getByRole('tab', { name: 'History' }).click();
+  await expect(page.locator('.history-table tbody tr')).toHaveCount(50);
+  expect(historyRequests).toEqual([0]);
+  const pager = page.getByRole('navigation', { name: 'Revision pagination' });
+  await pager.getByRole('button', { name: 'Next' }).click();
+  await expect(page.getByRole('button', { name: 'Copy Request ID history-page-failure' })).toBeVisible();
+  await page.getByRole('button', { name: 'Try again' }).click();
+  await expect(page.locator('.history-table tbody tr')).toHaveCount(3);
+  await expect(pager.getByRole('button', { name: 'Next' })).toBeDisabled();
+  expect(historyRequests).toEqual([0, 4, 4]);
   await page.getByRole('button', { name: 'View v1', exact: true }).click();
   await expectEditorText(page.getByLabel('Revision v1'), 'revision: 1\n');
   await expect(page.getByLabel('Revision v1')).toHaveAttribute('aria-readonly', 'true');
@@ -369,8 +424,11 @@ test('administrator opens an old Config Revision beyond the rail and restores it
   await page.getByRole('tab', { name: 'History' }).click();
   await page.getByRole('button', { name: 'Restore v1', exact: true }).click();
   await page.getByRole('button', { name: 'Confirm restore v1', exact: true }).click();
-  expect(restore).toEqual({ source_revision: 1, expected_revision: 12 });
-  await expect(page.getByRole('button', { name: 'v13 Current' })).toBeVisible();
+  expect(restore).toEqual({ source_revision: 1, expected_revision: 53 });
+  await expect(page.getByRole('button', { name: 'v54 Current' })).toBeVisible();
+  await expect(pager).toContainText('Page 1');
+  await expect(page.locator('.history-table tbody tr')).toHaveCount(50);
+  expect(historyRequests).toEqual([0, 4, 4, 0]);
 });
 
 test('Config editor protects dirty source and keeps it after an actionable Revision conflict', async ({ page }) => {
@@ -499,24 +557,30 @@ test('administrator compares, restores, and clones an immutable Config Revision'
   expect(clone.operation).toMatch(/^[0-9a-f-]{36}$/);
 });
 
-test('viewer compares arbitrary Config revisions across peer Environments', async ({ page }) => {
+test('viewer compares paged Config revisions across peer Environments and keeps selection while changing pages', async ({ page }) => {
   await mockIdentity(page, 'viewer');
   await page.route('**/v1/configs*', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    body: JSON.stringify({ items: [{ key: 'payment', display_name: 'Payment', environments: [{ key: 'production', revision: 3 }, { key: 'recovery', revision: 7 }] }] }),
+    body: JSON.stringify({ items: [{ key: 'payment', display_name: 'Payment', environments: [{ key: 'production', revision: 53 }, { key: 'recovery', revision: 57 }] }] }),
   }));
-  await page.route('**/v1/environments', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[]}' }));
-  await page.route('**/v1/vault-items', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[]}' }));
+  await page.route('**/v1/environments*', route => route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, [
+    { key: 'production', display_name: 'Production', revision: 53 }, { key: 'recovery', display_name: 'Recovery', revision: 57 },
+  ]) }));
+  await page.route('**/v1/vault-items', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[],"total":0}' }));
   await page.route('**/v1/environments/**/configs/**', async route => {
-    const pathname = new URL(route.request().url()).pathname;
+    const url = new URL(route.request().url());
+    const pathname = url.pathname;
     if (pathname.endsWith('/revisions')) {
       const recovery = pathname.includes('/recovery/');
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [{ revision: recovery ? 7 : 3, format: 'yaml', actor_id: 'admin', created_at: '2026-08-27T03:00:00Z' }] }) });
+      const before = Number(url.searchParams.get('before'));
+      const matching = Array.from({ length: recovery ? 57 : 53 }, (_, index) => ({ revision: (recovery ? 57 : 53) - index, format: 'yaml', actor_id: 'admin', created_at: '2026-08-27T03:00:00Z' })).filter(item => !before || item.revision < before);
+      const items = matching.slice(0, 50);
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items, next_before: matching.length > 50 ? items.at(-1).revision : undefined }) });
       return;
     }
     if (pathname === '/v1/environments/production/configs/payment') {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ environment_key: 'production', config_key: 'payment', config_name: 'Payment', format: 'yaml', content: 'port: 6380\n', revision: 3 }) });
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ environment_key: 'production', config_key: 'payment', config_name: 'Payment', format: 'yaml', content: 'port: 6380\n', revision: 53 }) });
       return;
     }
     const content = pathname.includes('/recovery/') ? 'port: 6379\n' : 'port: 6380\n';
@@ -530,12 +594,27 @@ test('viewer compares arbitrary Config revisions across peer Environments', asyn
 
   await expect(page.getByTestId('compare-source-slot')).toContainText('Drop a revision here');
   await expect(page.getByTestId('compare-target-slot')).toContainText('Drop a revision here');
+  const lanes = page.locator('.compare-revision-lane');
+  await lanes.last().getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(lanes.last().getByTestId('revision-recovery-57')).toHaveCount(0);
   await page.getByTestId('revision-recovery-7').dragTo(page.getByTestId('compare-source-slot'));
+  await lanes.first().getByRole('button', { name: 'Next', exact: true }).click();
   await page.getByTestId('revision-production-3').dragTo(page.getByTestId('compare-target-slot'));
 
   await expectEditorText(page.getByLabel('recovery/payment@v7'), 'port: 6379\n');
   await expectEditorText(page.getByLabel('production/payment@v3'), 'port: 6380\n');
   await expect(page.locator('.config-diff-editor .cm-changedLine').first()).toBeVisible();
+  await lanes.last().getByRole('button', { name: 'Previous', exact: true }).click();
+  await expect(page.getByTestId('compare-source-slot')).toContainText('recovery/payment@v7');
+  await expect(lanes.last().getByRole('navigation')).toContainText('Page 1');
+  // Environment changes reset only that lane; old selections remain explicit.
+  await page.getByLabel('Environment A', { exact: true }).selectOption('recovery');
+  await expect(lanes.first().getByRole('navigation')).toContainText('Page 1');
+  await expect(lanes.first().getByTestId('revision-recovery-57')).toBeVisible();
+  await expect(page.getByTestId('compare-target-slot')).toContainText('production/payment@v3');
+  await page.getByLabel('Environment A', { exact: true }).selectOption('production');
+  await expect(lanes.first().getByRole('navigation')).toContainText('Page 1');
+  await expect(lanes.first().getByTestId('revision-production-53')).toBeVisible();
 });
 
 test('administrator sees a format mismatch for Merge and can Replace across formats', async ({ page }) => {
@@ -548,8 +627,10 @@ test('administrator sees a format mismatch for Merge and can Replace across form
     contentType: 'application/json',
     body: JSON.stringify({ items: [{ key: 'payment', display_name: 'Payment', environments: [{ key: 'production', revision: 2 }, { key: 'recovery', revision: 1 }] }] }),
   }));
-  await page.route('**/v1/environments', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[]}' }));
-  await page.route('**/v1/vault-items', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[]}' }));
+  await page.route('**/v1/environments*', route => route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, [
+    { key: 'production', display_name: 'Production', revision: 2 }, { key: 'recovery', display_name: 'Recovery', revision: 1 },
+  ]) }));
+  await page.route('**/v1/vault-items', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[],"total":0}' }));
   await page.route('**/v1/environments/**/configs/payment**', async route => {
     const pathname = new URL(route.request().url()).pathname;
     const recovery = pathname.includes('/recovery/');
@@ -587,54 +668,54 @@ test('administrator sees a format mismatch for Merge and can Replace across form
   expect(previewModes).toEqual(['merge', 'replace']);
 });
 
-test('administrator previews and commits one directional Config merge', async ({ page }) => {
+test('administrator previews and commits a directional Config merge using versions on older pages', async ({ page }) => {
   await mockIdentity(page);
   let current = {
     environment_key: 'b', config_key: 'payment', config_name: 'Payment service',
-    format: 'yaml', content: 'database:\n  host: target\n  target_only: keep\n', revision: 5,
+    format: 'yaml', content: 'database:\n  host: target\n  target_only: keep\n', revision: 55,
   };
-  const targetRevisions = [
-    { revision: 5, format: 'yaml', actor_id: 'admin@example.com', created_at: '2026-08-27T01:00:00Z' },
-    { revision: 4, format: 'yaml', actor_id: 'admin@example.com', created_at: '2026-08-26T01:00:00Z' },
-  ];
+  const targetRevisions = Array.from({ length: 55 }, (_, index) => ({ revision: 55 - index, format: 'yaml', actor_id: 'admin@example.com', created_at: '2026-08-27T01:00:00Z' }));
+  const sourceRevisions = Array.from({ length: 53 }, (_, index) => ({ revision: 53 - index, format: 'yaml', actor_id: 'admin@example.com', created_at: '2026-08-27T01:00:00Z' }));
   let previewRequest;
   let mergeRequest;
   await page.route('**/v1/configs*', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    body: JSON.stringify({ items: [{ key: 'payment', display_name: 'Payment service', environments: [{ key: 'a', revision: 3 }, { key: 'b', revision: 5 }] }] }),
+    body: JSON.stringify({ items: [{ key: 'payment', display_name: 'Payment service', environments: [{ key: 'a', revision: 53 }, { key: 'b', revision: 55 }] }] }),
   }));
-  await page.route('**/v1/environments', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[]}' }));
-  await page.route('**/v1/vault-items', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[]}' }));
+  await page.route('**/v1/environments*', route => route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, [
+    { key: 'a', display_name: 'A', revision: 53 }, { key: 'b', display_name: 'B', revision: 55 },
+  ]) }));
+  await page.route('**/v1/vault-items', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[],"total":0}' }));
   await page.route('**/v1/environments/**/configs/payment**', async route => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith('/revisions')) {
-      const items = url.pathname.includes('/a/')
-        ? [{ revision: 3, format: 'yaml', actor_id: 'admin@example.com', created_at: '2026-08-27T02:00:00Z' }]
-        : targetRevisions;
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items }) });
+      const before = Number(url.searchParams.get('before'));
+      const matching = (url.pathname.includes('/a/') ? sourceRevisions : targetRevisions).filter(item => !before || item.revision < before);
+      const items = matching.slice(0, 50);
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items, next_before: matching.length > 50 ? items.at(-1).revision : undefined }) });
       return;
     }
     if (url.pathname.endsWith('/transfer-preview')) {
       previewRequest = route.request().postDataJSON();
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
-        mode: 'merge', format: 'yaml', content: 'database:\n  host: source\n  historical_only: keep\n', source_revision: 3, target_revision: 4, expected_target_revision: 5,
+        mode: 'merge', format: 'yaml', content: 'database:\n  host: source\n  historical_only: keep\n', source_revision: 3, target_revision: 4, expected_target_revision: 55,
       }) });
       return;
     }
     if (url.pathname.endsWith('/merge')) {
       mergeRequest = { body: route.request().postDataJSON(), operation: route.request().headers()['idempotency-key'] };
-      current = { ...current, content: 'database:\n  host: source\n  historical_only: keep\n', revision: 6 };
-      targetRevisions.unshift({ revision: 6, format: 'yaml', actor_id: 'admin@example.com', created_at: '2026-08-27T03:00:00Z' });
-      await route.fulfill({ status: 200, contentType: 'application/json', body: '{"outcome":"success","revision":6}' });
+      current = { ...current, content: 'database:\n  host: source\n  historical_only: keep\n', revision: 56 };
+      targetRevisions.unshift({ revision: 56, format: 'yaml', actor_id: 'admin@example.com', created_at: '2026-08-27T03:00:00Z' });
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{"outcome":"success","revision":56}' });
       return;
     }
     if (url.pathname.endsWith('/revisions/3') && url.pathname.includes('/a/')) {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ format: 'yaml', content: 'database:\n  host: source\n', revision: 3 }) });
       return;
     }
-    if (url.pathname.endsWith('/revisions/5')) {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ format: 'yaml', content: 'database:\n  host: target\n  target_only: keep\n', revision: 5 }) });
+    if (url.pathname.endsWith('/revisions/55')) {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ format: 'yaml', content: 'database:\n  host: target\n  target_only: keep\n', revision: 55 }) });
       return;
     }
     if (url.pathname.endsWith('/revisions/4')) {
@@ -650,8 +731,12 @@ test('administrator previews and commits one directional Config merge', async ({
   await expect(page.getByLabel('Revision history')).toHaveCount(0);
   await expect(page.getByTestId('compare-source-slot')).toContainText('Drop a revision here');
   await expect(page.getByTestId('compare-target-slot')).toContainText('Drop a revision here');
+  const lanes = page.locator('.compare-revision-lane');
+  await lanes.first().getByRole('button', { name: 'Next', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Use b@v4 as Target' })).toBeEnabled();
   await page.getByRole('button', { name: 'Merge', exact: true }).click();
+  await lanes.first().getByRole('button', { name: 'Next', exact: true }).click();
+  await lanes.last().getByRole('button', { name: 'Next', exact: true }).click();
   await page.getByTestId('revision-a-3').dragTo(page.getByTestId('compare-source-slot'));
   await page.getByTestId('revision-b-4').dragTo(page.getByTestId('compare-target-slot'));
 
@@ -660,12 +745,12 @@ test('administrator previews and commits one directional Config merge', async ({
   await expect(page.locator('.transfer-result .cm-merge-b .cm-changedLine').first()).toBeVisible();
   expect(previewRequest).toEqual({ mode: 'merge', source_environment: 'a', source_config: 'payment', source_revision: 3, target_revision: 4 });
   await expect(page.locator('.transfer-direction')).toContainText('a/payment@v3→b/payment@v4');
-  await expect(page.locator('.transfer-conflict-hint')).toContainText('current at v5');
+  await expect(page.locator('.transfer-conflict-hint')).toContainText('current at v55');
   await page.getByRole('button', { name: 'Merge into b' }).click();
 
-  expect(mergeRequest.body).toEqual({ source_environment: 'a', source_config: 'payment', source_revision: 3, target_revision: 4, expected_target_revision: 5 });
+  expect(mergeRequest.body).toEqual({ source_environment: 'a', source_config: 'payment', source_revision: 3, target_revision: 4, expected_target_revision: 55 });
   expect(mergeRequest.operation).toMatch(/^[0-9a-f-]{36}$/);
-  await expect(page.getByRole('button', { name: 'v6 Current' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'v56 Current' })).toBeVisible();
 });
 
 test('administrator explicitly reveals the resolved Config and its exact Vault revisions', async ({ page }) => {
@@ -704,10 +789,10 @@ test('viewer browses versioned Vault Item metadata without value controls', asyn
   await page.route('**/v1/vault-items*', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    body: JSON.stringify({ items: [
+    body: inventoryPage(route, [
       { namespace_key: 'platform', key: 'redis', display_name: 'Redis connection', revision: 4, archived: false, updated_at: '2026-08-27T01:00:00Z' },
       { namespace_key: 'legacy', key: 'redis', display_name: 'Legacy key', revision: 2, archived: true, updated_at: '2026-08-26T01:00:00Z' },
-    ] }),
+    ]),
   }));
   await page.goto('/ui/#/vault');
 
@@ -716,7 +801,7 @@ test('viewer browses versioned Vault Item metadata without value controls', asyn
   await expect(page.getByRole('row', { name: /platform.*redis.*Redis connection/ })).toBeVisible();
   await expect(page.getByRole('row', { name: /legacy.*redis.*Legacy key/ })).toBeVisible();
   await expect(page.getByText('Archived', { exact: true })).toBeVisible();
-  await page.getByLabel('Filter by namespace').selectOption('platform');
+  await page.getByLabel('Filter by namespace').fill('platform');
   await expect(page.getByRole('row', { name: /legacy.*redis.*Legacy key/ })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /new vault/i })).toHaveCount(0);
 });
@@ -746,44 +831,59 @@ test('archived Vault Item keeps metadata and history but has no value or mutatio
   await expect(page.getByRole('button', { name: /Restore/ })).toHaveCount(0);
 });
 
-test('viewer opens a Vault Revision beyond the rail from History and returns to current', async ({ page }) => {
+test('viewer pages through Vault history and returns to the current revision without losing the latest rail', async ({ page }) => {
   await mockIdentity(page, 'viewer');
   const metadata = {
-    namespace_key: 'platform', key: 'redis', display_name: 'Redis current', revision: 12, archived: false,
+    namespace_key: 'platform', key: 'redis', display_name: 'Redis current', revision: 53, archived: false,
     snapshot: { fields: [{ key: 'host', name: 'Current host', type: 'text' }], variants: [{ id: '01', environments: ['production'] }] },
   };
   const historical = {
     ...metadata, display_name: 'Redis v1', revision: 1,
     snapshot: { fields: [{ key: 'host', name: 'Historical host', type: 'text' }], variants: [{ id: '01', environments: ['production'] }] },
   };
-  const revisions = Array.from({ length: 12 }, (_, index) => ({ revision: 12 - index, actor_id: 'admin@example.com', created_at: `2026-08-${String(27 - index).padStart(2, '0')}T01:00:00Z` }));
+  const revisions = Array.from({ length: 53 }, (_, index) => ({ revision: 53 - index, actor_id: 'admin@example.com', created_at: '2026-08-27T01:00:00Z' }));
   await page.route('**/v1/vault-items/platform/redis**', async route => {
-    const pathname = new URL(route.request().url()).pathname;
+    const url = new URL(route.request().url());
+    const pathname = url.pathname;
     if (pathname.endsWith('/revisions/1')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(historical) });
-    if (pathname.endsWith('/revisions')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: revisions }) });
-    if (pathname.endsWith('/usages')) return route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[]}' });
+    if (pathname.endsWith('/revisions')) {
+      expect(url.searchParams.get('limit')).toBe('50');
+      const before = Number(url.searchParams.get('before'));
+      const matching = revisions.filter(item => !before || item.revision < before);
+      const items = matching.slice(0, 50);
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items, next_before: matching.length > 50 ? items.at(-1).revision : undefined }) });
+    }
+    if (pathname.endsWith('/usages')) return route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[],"total":0}' });
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(metadata) });
   });
   await page.goto('/ui/#/vault/platform/redis');
 
   await expect(page.getByLabel('Revision history').getByText('v1', { exact: true })).toHaveCount(0);
   await page.getByRole('tab', { name: 'History' }).click();
+  await expect(page.locator('.history-table tbody tr')).toHaveCount(50);
+  const pager = page.getByRole('navigation', { name: 'Revision pagination' });
+  await pager.getByRole('button', { name: 'Next' }).click();
+  await expect(page.locator('.history-table tbody tr')).toHaveCount(3);
+  await expect(pager.getByRole('button', { name: 'Next' })).toBeDisabled();
+  await pager.getByRole('button', { name: 'Previous' }).click();
+  await expect(page.locator('.history-table tbody tr')).toHaveCount(50);
+  await pager.getByRole('button', { name: 'Next' }).click();
   await page.getByRole('button', { name: 'View v1', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Redis v1' })).toBeVisible();
   await expect(page.getByText('Read-only', { exact: true })).toBeVisible();
   await expect(page.getByText('Historical host', { exact: true })).toBeVisible();
 
-  await page.getByLabel('Revision history').getByRole('button', { name: /v12/ }).click();
+  await page.getByLabel('Revision history').getByRole('button', { name: /v53/ }).click();
   await expect(page.getByRole('heading', { name: 'Redis current' })).toBeVisible();
-  await expect(page.getByLabel('Revision history').getByRole('button', { name: /v12/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByLabel('Revision history').getByRole('button', { name: /v53/ })).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('administrator creates and controls the soft lifecycle of a Vault Item snapshot', async ({ page }) => {
   await mockIdentity(page);
-  await page.route('**/v1/environments', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [
+  await page.route('**/v1/environments*', route => route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, [
     { key: 'production', display_name: 'Production', archived: false },
     { key: 'staging', display_name: 'Staging', archived: false },
-  ] }) }));
+  ]) }));
   const items = [];
   const lifecycle = [];
   let commit;
@@ -803,14 +903,14 @@ test('administrator creates and controls the soft lifecycle of a Vault Item snap
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ outcome: 'success', key: 'redis', archived: items[0].archived }) });
       return;
     }
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items }) });
+    await route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, items) });
   });
   await page.goto('/ui/#/vault');
 
   await page.getByRole('button', { name: 'New Vault item' }).click();
   await expect(page.getByLabel('Snapshot JSON')).toHaveCount(0);
   if (process.env.CONFIGRA_VAULT_CREATE_SCREENSHOT) await page.screenshot({ path: process.env.CONFIGRA_VAULT_CREATE_SCREENSHOT, fullPage: true });
-  await page.getByLabel('Namespace').fill('platform');
+  await page.locator('.vault-structured-form').getByLabel('Namespace').fill('platform');
   await page.getByLabel('Resource key').fill('redis');
   await page.getByLabel('Display name').fill('Redis connection');
   await page.getByLabel('Field key 1').fill('password');
@@ -826,6 +926,7 @@ test('administrator creates and controls the soft lifecycle of a Vault Item snap
   await expect(page.getByText('Complete every Field value and use a unique valid Field key.')).toBeVisible();
   expect(commit).toBeUndefined();
   await page.getByLabel('Field key 2').fill('ca');
+  await page.getByLabel('Variant 1 Production production').check();
   await page.getByLabel('Variant 1 Staging staging').check();
   await page.getByRole('button', { name: 'Add Variant' }).click();
   await page.getByLabel('Variant 2 Staging staging').check();
@@ -966,12 +1067,15 @@ test('Vault current references are value-free and destructive edits require impa
   const valued = structuredClone(metadata);
   valued.snapshot.variants[0].values = { password: { text: 'secret-never-rendered' }, host: { text: 'redis.internal' } };
   let commit;
-  await page.route('**/v1/environments*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [{ key: 'production', display_name: 'Production', archived: false }] }) }));
+  await page.route('**/v1/environments*', route => route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, [{ key: 'production', display_name: 'Production', archived: false }]) }));
   await page.route('**/v1/vault-items/platform/redis**', async route => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
     if (pathname.endsWith('/revisions')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [{ revision: 4, actor_id: 'admin@example.com', created_at: '2026-08-27T01:00:00Z' }] }) });
-    if (pathname.endsWith('/usages')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [{ field_key: 'password', environment_key: 'production', config_key: 'payment', config_name: 'Payment service', config_revision: 7 }] }) });
+    if (pathname.endsWith('/usages') || pathname.endsWith('/impact-preview')) {
+      const items = !pathname.endsWith('/impact-preview') || !request.postDataJSON().fields.includes('password') ? [{ field_key: 'password', environment_key: 'production', config_key: 'payment', config_name: 'Payment service', config_revision: 7 }] : [];
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items, total: items.length }) });
+    }
     if (pathname.endsWith('/values')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(valued) });
     if (request.method() === 'PUT') {
       commit = request.postDataJSON();
@@ -991,7 +1095,61 @@ test('Vault current references are value-free and destructive edits require impa
   await page.getByRole('button', { name: 'Save item' }).click();
   expect(commit).toBeUndefined();
   await page.getByRole('button', { name: 'Confirm save with impact' }).click();
+  await expect.poll(() => commit).toBeDefined();
   expect(commit.snapshot.fields.map(field => field.key)).toEqual(['host']);
+});
+
+test('Vault impact checks off-page references and fails closed without discarding the draft', async ({ page }) => {
+  await mockIdentity(page);
+  const metadata = { namespace_key: 'platform', key: 'db', display_name: 'Database', revision: 1, archived: false, snapshot: {
+    fields: [{ key: 'password', name: 'Password', type: 'secret' }, { key: 'host', name: 'Host', type: 'text' }],
+    variants: [{ id: '01'.repeat(16), environments: ['production'] }],
+  } };
+  const valued = structuredClone(metadata);
+  valued.snapshot.variants[0].values = { password: { text: 'off-page-secret' }, host: { text: 'localhost' } };
+  const usages = Array.from({ length: 105 }, (_, index) => ({ field_key: index === 104 ? 'password' : 'host', environment_key: 'production', config_key: `app_${index}`, config_name: `Application ${index}`, config_revision: 1 }));
+  let unavailable = false, commits = 0;
+  await page.route('**/v1/environments*', route => route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, [{ key: 'production', display_name: 'Production' }]) }));
+  await page.route('**/v1/vault-items/platform/db**', route => {
+    const req = route.request(), url = new URL(req.url());
+    if (url.pathname.endsWith('/usages') || url.pathname.endsWith('/impact-preview')) {
+      let items = usages;
+      if (req.method() === 'POST') {
+        const body = req.postDataJSON();
+        expect(Object.keys(body).sort()).toEqual(['environments', 'fields']);
+        expect(req.postData()).not.toContain('off-page-secret');
+        if (unavailable) return route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":{"code":"service_unavailable","request_id":"impact-retry-123"}}' });
+        items = usages.filter(usage => !body.fields.includes(usage.field_key) || !body.environments.includes(usage.environment_key));
+      }
+      const offset = Number(url.searchParams.get('offset') || 0), limit = Number(url.searchParams.get('limit') || 50);
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: items.slice(offset, offset + limit), total: items.length }) });
+    }
+    if (url.pathname.endsWith('/values')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(valued) });
+    if (url.pathname.endsWith('/revisions')) return route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[]}' });
+    if (req.method() === 'PUT') { commits++; return route.fulfill({ status: 200, contentType: 'application/json', body: '{"outcome":"success","revision":2}' }); }
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(metadata) });
+  });
+  await page.goto('/ui/#/vault/platform/db');
+  const references = page.getByRole('region', { name: 'Current references' });
+  await expect(references.getByRole('link')).toHaveCount(50);
+  await expect(references.getByText('Application 104', { exact: true })).toHaveCount(0);
+  await references.getByRole('button', { name: 'Next' }).click();
+  await references.getByRole('button', { name: 'Next' }).click();
+  await expect(references.getByText('Application 104', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Edit item' }).click();
+  unavailable = true;
+  await page.getByRole('button', { name: 'Remove field Password' }).click();
+  await expect(page.getByRole('alert')).toContainText('impact-retry-123');
+  await expect(page.getByRole('button', { name: 'Save item', exact: true })).toBeDisabled();
+  await expect(page.getByLabel('Variant 1 Host value')).toHaveValue('localhost');
+  expect(commits).toBe(0);
+  unavailable = false;
+  await page.getByRole('button', { name: 'Try again', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Application 104');
+  await page.getByRole('button', { name: 'Save item', exact: true }).click();
+  expect(commits).toBe(0);
+  await page.getByRole('button', { name: 'Confirm save with impact' }).click();
+  await expect.poll(() => commits).toBe(1);
 });
 
 test('administrator edits and restores a complete Vault Item snapshot', async ({ page }) => {
@@ -1026,6 +1184,7 @@ test('administrator edits and restores a complete Vault Item snapshot', async ({
       await route.fulfill({ status: 200, contentType: 'application/json', body: '{"outcome":"success","revision":6}' });
       return;
     }
+    if (pathname.endsWith('/impact-preview') || pathname.endsWith('/usages')) return route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[],"total":0}' });
     if (request.method() === 'PUT') {
       commit = { body: request.postDataJSON(), operation: request.headers()['idempotency-key'] };
       metadata = { ...metadata, display_name: commit.body.display_name, revision: 5 };
@@ -1058,6 +1217,7 @@ test('administrator edits and restores a complete Vault Item snapshot', async ({
   await page.getByLabel('Variant 1 Password value').fill('rotated-secret');
   await page.getByRole('button', { name: 'Save item' }).click();
 
+  await expect.poll(() => commit).toBeDefined();
   expect(commit.body.display_name).toBe('Primary Redis');
   expect(commit.body.expected_revision).toBe(4);
   expect(commit.body.snapshot.variants[0].values.password.text).toBe('rotated-secret');

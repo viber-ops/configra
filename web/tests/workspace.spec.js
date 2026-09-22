@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { inventoryPage } from './inventory.js';
 
 test('resource workspace provides keyboard search, bounded fields, and light/dark/mobile layouts', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -14,14 +15,14 @@ test('resource workspace provides keyboard search, bounded fields, and light/dar
   ] } };
   await page.route('**/v1/**', async route => {
     const path = new URL(route.request().url()).pathname;
-    let body = { items: [] };
+    let body = { items: [], total: 0 };
     if (path === '/v1/me') body = { subject: 'operator', email: 'alex@example.com', role: 'admin' };
     if (path === '/v1/environments') body = { items: [{ key: 'production', display_name: 'Production' }, { key: 'staging', display_name: 'Staging' }] };
     if (path === '/v1/vault-items') body = { items };
     if (path === '/v1/configs') body = { items: [{ key: 'payments', display_name: 'Payments service', environments: [] }] };
     if (path.endsWith('/postgres')) body = metadata;
     if (path.endsWith('/postgres/revisions')) body = { items: [12, 11, 10, 9].map(revision => ({ revision, actor_id: 'alex@example.com', created_at: '2026-09-10T10:30:00Z' })) };
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    await route.fulfill({ status: 200, contentType: 'application/json', body: ['/v1/environments', '/v1/configs', '/v1/vault-items'].includes(path) ? inventoryPage(route, body.items) : JSON.stringify(body) });
   });
   await page.goto('/ui/#/vault/platform/postgres');
   await expect(page.getByRole('heading', { name: 'Application database' })).toBeVisible();

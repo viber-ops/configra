@@ -2,6 +2,35 @@
 
 Reviewed 2026-09-12. This report inventories **93 distinct application-module/version pairs** in the eight `v0.1.0-rc.2-review.2` executables under `.cache/release-license-check-20260912/dist/v0.1.0-rc.2-review.2/`. It covers the server and Kubernetes command on Darwin/Linux and amd64/arm64. The Go runtime, UI/npm dependencies, and container CA bundle have separate scope; see [distribution requirements](distribution-license-requirements.md).
 
+## Follow-up — 2026-09-22
+
+The current manifest has 92 module/version records. The server no longer imports
+`github.com/alexedwards/scs/mysqlstore`; the session manager still uses `scs/v2`.
+Kubernetes now uses gRPC 1.83.2, `x/net` 0.58.0, `x/term` 0.45.0, `x/text` 0.41.0
+and `genproto/googleapis/rpc` at `3dc84a4a5aaa`.
+
+For these five upgrades, canonical module sums and VCS origins were checked;
+root and nested LICENSE/NOTICE/AUTHORS/PATENTS files were compared with the prior
+review. Applicable legal text hashes are unchanged. The union of selected
+source/assembly files across four platforms contains 223 files, of which 20 changed.
+The additional gRPC source file carries the ordinary Apache-2.0 header; no new
+selected package or supplemental attribution was found. Package guards remain
+unchanged for Kubernetes; the four server guards now exclude the removed adapter.
+These guards and notice hashes remain fail-closed.
+
+For v1.0.0, Kubernetes pins the SDK v1.0.0 module archive at source commit
+`d092602d8c7b907c4b4f331d6869b447fcc5a4bc`, sum
+`h1:6oHBwkKCR/xyGHLum7ZW4cMiNlyDHFeBkDd56xdm6JI=`. The diff from SDK rc.2
+contains the reviewed client/snapshot repairs, tests, CI and documentation;
+no additional runtime imports or legal files were added. The canonical archive's
+root Apache-2.0 LICENSE and NOTICE hashes remain `cfc7749b96f6…` and
+`2f02607c1c0a…`. Module/notice guards now bind this exact published version;
+the full package-selection and bundle/image checks still apply.
+
+The [current verification record](../verification/2026-09-22.md#distribution)
+records collection and image checks. The table and hashes below describe the
+September 12 inputs, not the new dependencies or an approval of a new release.
+
 ## Result and evidence boundary
 
 The module/version sets obtained from target-matched source package loading exactly match the embedded dependency records of all eight binaries. Server binaries contain 31 dependency modules each; Kubernetes contains 67 on Darwin and 68 on Linux. The Linux-only difference is `github.com/prometheus/procfs`. All eight binaries report Go 1.26.7 and `CGO_ENABLED=0`. Their hashes are recorded under [machine-readable evidence](#machine-readable-evidence).

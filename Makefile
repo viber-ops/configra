@@ -126,6 +126,8 @@ test-integration: dependencies-test-up
 	CONFIGRA_TEST_DOCKER_NETWORK='$(TEST_DOCKER_NETWORK)' \
 	go test -tags=integration -race -count=1 ./...
 	CONFIGRA_TEST_MYSQL_ROOT_DSN='$(TEST_MYSQL_ROOT_DSN)' \
+	CONFIGRA_TEST_NATS_URL='$(TEST_NATS_URL)' \
+	CONFIGRA_TEST_CLICKHOUSE_DSN='$(TEST_CLICKHOUSE_DSN)' \
 	go -C e2e test -tags=integration -race -count=1 ./...
 
 .PHONY: backup-test
@@ -137,7 +139,7 @@ backup-test: dependencies-test-up
 		./internal/storage/mysqlstore ./internal/logstore \
 		-run 'Test(MySQLBackup|ClickHouseNativeBackup)'
 
-.PHONY: image image-test
+.PHONY: image image-test service-test kubernetes-service-test
 image:
 	docker build --pull --tag '$(IMAGE)' .
 
@@ -148,6 +150,13 @@ image-test: dependencies-test-up image
 	CONFIGRA_TEST_DOCKER_NETWORK='$(TEST_DOCKER_NETWORK)' \
 	go test -tags=integration -race -count=1 ./internal/app \
 		-run TestProductionAPIImageStartsReadyStopsCleanlyAndRejectsWrongMasterKey
+
+# Owns a fresh, uniquely named disposable stack; never reuses a deployment.
+service-test: image
+	node scripts/service-smoke.mjs '$(IMAGE)'
+
+kubernetes-service-test: image kubernetes-image
+	node scripts/service-smoke.mjs '$(IMAGE)' --kubernetes '$(KUBERNETES_IMAGE)'
 
 $(VEGETA):
 	@mkdir -p '$(dir $(VEGETA))'

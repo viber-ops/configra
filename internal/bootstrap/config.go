@@ -90,21 +90,9 @@ func Load(path string, mode Mode) (Config, error) {
 	if mode != Management && mode != API {
 		return Config{}, errors.New("invalid Server mode")
 	}
-	document, err := os.ReadFile(path)
+	config, err := readConfig(path)
 	if err != nil {
-		return Config{}, fmt.Errorf("read bootstrap Config: %w", err)
-	}
-	if len(document) == 0 || len(document) > maxConfigBytes {
-		return Config{}, errors.New("bootstrap Config must contain between 1 byte and 1 MiB")
-	}
-	decoder := yaml.NewDecoder(bytes.NewReader(document))
-	decoder.KnownFields(true)
-	var config Config
-	if err := decoder.Decode(&config); err != nil {
-		return Config{}, fmt.Errorf("decode bootstrap Config: %w", err)
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return Config{}, errors.New("bootstrap Config must contain exactly one YAML document")
+		return Config{}, err
 	}
 	if err := config.validate(mode); err != nil {
 		return Config{}, err
@@ -112,21 +100,50 @@ func Load(path string, mode Mode) (Config, error) {
 	return config, nil
 }
 
+// LoadForMaintenance accepts either server YAML or a storage-only YAML file.
+// It does not require unrelated TLS files, OIDC secrets or worker dependencies.
+func LoadForMaintenance(path string) (Config, error) {
+	config, err := readConfig(path)
+	if err != nil {
+		return Config{}, err
+	}
+	if err := config.validateStorage(); err != nil {
+		return Config{}, err
+	}
+	return config, nil
+}
+
+func readConfig(path string) (Config, error) {
+	document, err := readLimitedFile(path, maxConfigBytes)
+	if err != nil {
+		return Config{}, fmt.Errorf("read bootstrap Config: %w", err)
+	}
+	defer clear(document)
+	if len(document) == 0 || len(document) > maxConfigBytes {
+		return Config{}, errors.New("bootstrap Config must contain between 1 byte and 1 MiB")
+	}
+	decoder := yaml.NewDecoder(bytes.NewReader(document))
+	decoder.KnownFields(true)
+	var config Config
+	if err := decoder.Decode(&config); err != nil {
+		// YAML decoder errors can quote secret-bearing values from malformed input.
+		return Config{}, errors.New("decode bootstrap Config: invalid YAML, value type, or unknown field; see deploy/*.example.yaml")
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return Config{}, errors.New("bootstrap Config must contain exactly one YAML document")
+	}
+	return config, nil
+}
+
 func (config *Config) validate(mode Mode) error {
-	if config.Version != 1 {
-		return errors.New("bootstrap Config version must be 1")
+	if err := config.validateStorage(); err != nil {
+		return err
 	}
 	if err := validateListen(config.Listen); err != nil {
 		return err
 	}
 	if config.TLS.CertificateFile == "" || config.TLS.PrivateKeyFile == "" {
 		return errors.New("TLS Certificate and Private Key files are required")
-	}
-	if config.MySQL.DSNEnv == "" || !validEnvironmentVariable(config.MySQL.DSNEnv) {
-		return errors.New("MySQL DSN environment variable name is invalid")
-	}
-	if config.KeyProvider.MasterKeyFile == "" {
-		return errors.New("Master Key file is required")
 	}
 	if config.Logging.Level == "" {
 		config.Logging.Level = "info"
@@ -178,10 +195,6 @@ func (config *Config) validate(mode Mode) error {
 		}
 	}
 
-	dsn, ok := os.LookupEnv(config.MySQL.DSNEnv)
-	if !ok || dsn == "" {
-		return fmt.Errorf("environment variable %s is required", config.MySQL.DSNEnv)
-	}
 	if config.OIDC != nil {
 		secret, ok := os.LookupEnv(config.OIDC.ClientSecretEnv)
 		if !ok || secret == "" {
@@ -193,6 +206,22 @@ func (config *Config) validate(mode Mode) error {
 		if !ok || dsn == "" {
 			return fmt.Errorf("environment variable %s is required", config.ClickHouse.DSNEnv)
 		}
+	}
+	return nil
+}
+
+func (config Config) validateStorage() error {
+	if config.Version != 1 {
+		return errors.New("bootstrap Config version must be 1")
+	}
+	if !validEnvironmentVariable(config.MySQL.DSNEnv) {
+		return errors.New("MySQL DSN environment variable name is invalid")
+	}
+	if config.KeyProvider.MasterKeyFile == "" {
+		return errors.New("Master Key file is required")
+	}
+	if os.Getenv(config.MySQL.DSNEnv) == "" {
+		return fmt.Errorf("environment variable %s is required", config.MySQL.DSNEnv)
 	}
 	return nil
 }
@@ -253,7 +282,7 @@ func (config Config) ClickHouseDSN() string {
 }
 
 func LoadMasterKey(path string) ([]byte, error) {
-	encoded, err := os.ReadFile(path)
+	encoded, err := readLimitedFile(path, 1024)
 	if err != nil {
 		return nil, fmt.Errorf("read Master Key file: %w", err)
 	}
@@ -269,6 +298,20 @@ func LoadMasterKey(path string) ([]byte, error) {
 		return nil, errors.New("Master Key file must contain one base64-encoded 256-bit key")
 	}
 	return decoded[:size], nil
+}
+
+func readLimitedFile(path string, limit int64) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, limit+1))
+	if err != nil {
+		clear(data)
+		return nil, err
+	}
+	return data, nil
 }
 
 func validateListen(value string) error {

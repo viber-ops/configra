@@ -9,6 +9,7 @@ import (
 	"maps"
 	"mime"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -31,10 +32,10 @@ const maxManagementRequestBytes = 32 << 20
 type ConfigRepository interface {
 	AuthorityRepository
 	RecordRejectedMutation(context.Context, mysqlstore.RejectedMutation) error
-	ListEnvironments(context.Context, bool) ([]mysqlstore.Environment, error)
+	ListEnvironments(context.Context, mysqlstore.EnvironmentQuery) (mysqlstore.InventoryPage[mysqlstore.Environment], error)
 	ApplyEnvironmentChange(context.Context, mysqlstore.EnvironmentChange) (mysqlstore.EnvironmentChangeResult, error)
-	ListConfigs(context.Context, bool) ([]mysqlstore.ConfigSummary, error)
-	ListConfigRevisions(context.Context, string, string) ([]mysqlstore.ConfigRevision, error)
+	ListConfigs(context.Context, mysqlstore.ConfigQuery) (mysqlstore.InventoryPage[mysqlstore.ConfigSummary], error)
+	ListConfigRevisions(context.Context, string, string, mysqlstore.RevisionQuery) (mysqlstore.RevisionPage[mysqlstore.ConfigRevision], error)
 	ReadRawConfigRevision(context.Context, string, string, uint64) (mysqlstore.RawConfig, error)
 	ValidateConfig(context.Context, mysqlstore.ConfigValidation) (mysqlstore.ConfigValidationResult, error)
 	CommitConfig(context.Context, mysqlstore.ConfigCommit) (mysqlstore.ConfigCommitResult, error)
@@ -45,21 +46,22 @@ type ConfigRepository interface {
 	ApplyConfigLifecycleChange(context.Context, mysqlstore.ConfigLifecycleChange) (mysqlstore.ConfigLifecycleResult, error)
 	ReadRawConfig(context.Context, string, string) (mysqlstore.RawConfig, error)
 	ReadResolvedConfig(context.Context, string, string, string) (machine.ResolvedConfig, error)
-	ListVaultItems(context.Context, bool) ([]mysqlstore.VaultItemSummary, error)
-	ListVaultUsages(context.Context, string, string) ([]mysqlstore.VaultUsage, error)
+	ListVaultItems(context.Context, mysqlstore.VaultQuery) (mysqlstore.InventoryPage[mysqlstore.VaultItemSummary], error)
+	ListVaultUsages(context.Context, string, string, mysqlstore.VaultUsageQuery) (mysqlstore.InventoryPage[mysqlstore.VaultUsage], error)
 	ReadVaultItem(context.Context, string, string, uint64, bool) (mysqlstore.VaultItem, error)
-	ListVaultRevisions(context.Context, string, string) ([]mysqlstore.VaultRevision, error)
+	ListVaultRevisions(context.Context, string, string, mysqlstore.RevisionQuery) (mysqlstore.RevisionPage[mysqlstore.VaultRevision], error)
 	CommitVault(context.Context, mysqlstore.VaultCommit) (mysqlstore.VaultCommitResult, error)
 	RestoreVault(context.Context, mysqlstore.VaultRestore) (mysqlstore.VaultCommitResult, error)
 	ApplyVaultLifecycleChange(context.Context, mysqlstore.VaultLifecycleChange) (mysqlstore.VaultLifecycleResult, error)
-	ListTokens(context.Context, bool) ([]mysqlstore.TokenSummary, error)
+	ListTokens(context.Context, mysqlstore.InventoryQuery) (mysqlstore.InventoryPage[mysqlstore.TokenSummary], error)
 	CreateToken(context.Context, mysqlstore.TokenCreate) (mysqlstore.TokenCreateResult, error)
 	SetTokenEnvironments(context.Context, mysqlstore.TokenEnvironmentChange) (mysqlstore.TokenEnvironmentResult, error)
 	RevokeToken(context.Context, mysqlstore.TokenRevoke) (mysqlstore.TokenRevokeResult, error)
-	ListClientCertificates(context.Context, bool) ([]mysqlstore.ClientCertificate, error)
+	ListClientCertificates(context.Context, mysqlstore.InventoryQuery) (mysqlstore.InventoryPage[mysqlstore.ClientCertificate], error)
 	RegisterVerifiedClientCertificate(context.Context, mysqlstore.ClientCertificateRegister) (mysqlstore.ClientCertificateResult, error)
 	RevokeClientCertificate(context.Context, mysqlstore.ClientCertificateRevoke) (mysqlstore.ClientCertificateResult, error)
-	ListNotificationDestinations(context.Context, bool) ([]mysqlstore.NotificationDestination, error)
+	ListNotificationDestinations(context.Context, mysqlstore.InventoryQuery) (mysqlstore.InventoryPage[mysqlstore.NotificationDestination], error)
+	ListNotificationEventTypes(context.Context, string, mysqlstore.InventoryQuery) (mysqlstore.InventoryPage[string], error)
 	CommitNotificationDestination(context.Context, mysqlstore.NotificationDestinationCommit) (mysqlstore.NotificationDestinationResult, error)
 	ApplyNotificationDestinationLifecycle(context.Context, mysqlstore.NotificationDestinationLifecycle) (mysqlstore.NotificationDestinationLifecycleResult, error)
 	ListNotificationDeliveries(context.Context, string, int) ([]mysqlstore.NotificationDelivery, error)
@@ -114,6 +116,7 @@ func NewHandler(configs ConfigRepository, publisher machine.AccessPublisher, cli
 	mux.HandleFunc("GET /v1/vault-items", server.listVaultItems)
 	mux.HandleFunc("GET /v1/vault-items/{namespace}/{item}", server.readVaultItem)
 	mux.HandleFunc("GET /v1/vault-items/{namespace}/{item}/usages", server.listVaultUsages)
+	mux.HandleFunc("POST /v1/vault-items/{namespace}/{item}/impact-preview", server.previewVaultImpact)
 	mux.HandleFunc("GET /v1/vault-items/{namespace}/{item}/values", server.readVaultItemValues)
 	mux.HandleFunc("GET /v1/vault-items/{namespace}/{item}/revisions", server.listVaultRevisions)
 	mux.HandleFunc("GET /v1/vault-items/{namespace}/{item}/revisions/{revision}", server.readVaultItem)
@@ -125,6 +128,7 @@ func NewHandler(configs ConfigRepository, publisher machine.AccessPublisher, cli
 	mux.HandleFunc("GET /v1/api-tokens", server.listTokens)
 	mux.HandleFunc("POST /v1/api-tokens", server.createToken)
 	mux.HandleFunc("PUT /v1/api-tokens/{public_id}/environments", server.setTokenEnvironments)
+	mux.HandleFunc("PATCH /v1/api-tokens/{public_id}/environments", server.patchTokenEnvironments)
 	mux.HandleFunc("POST /v1/api-tokens/{public_id}/revoke", server.revokeToken)
 	mux.HandleFunc("GET /v1/client-certificates", server.listClientCertificates)
 	mux.HandleFunc("GET /v1/certificate-authorities", server.listCertificateAuthorities)
@@ -134,6 +138,7 @@ func NewHandler(configs ConfigRepository, publisher machine.AccessPublisher, cli
 	mux.HandleFunc("POST /v1/client-certificates", server.registerClientCertificate)
 	mux.HandleFunc("POST /v1/client-certificates/{fingerprint}/revoke", server.revokeClientCertificate)
 	mux.HandleFunc("GET /v1/notification-destinations", server.listNotificationDestinations)
+	mux.HandleFunc("GET /v1/notification-destinations/{destination}/event-types", server.listNotificationEventTypes)
 	mux.HandleFunc("PUT /v1/notification-destinations/{destination}", server.commitNotificationDestination)
 	mux.HandleFunc("POST /v1/notification-destinations/{destination}/archive", server.archiveNotificationDestination)
 	mux.HandleFunc("POST /v1/notification-destinations/{destination}/unarchive", server.unarchiveNotificationDestination)
@@ -166,82 +171,129 @@ func (server *server) listEnvironments(response http.ResponseWriter, request *ht
 	if _, ok := requirePrincipal(response, request); !ok {
 		return
 	}
-	includeArchived, ok := parseIncludeArchived(response, request)
+	query, values, ok := parseInventoryQuery(response, request, "include_archived", "config", "namespace", "item", "token")
 	if !ok {
 		return
 	}
-	environments, err := server.configs.ListEnvironments(request.Context(), includeArchived)
+	if values.Get("token") != "" {
+		if _, ok := requireAdmin(response, request); !ok {
+			return
+		}
+	}
+	page, err := server.configs.ListEnvironments(request.Context(), mysqlstore.EnvironmentQuery{
+		InventoryQuery: query, Config: values.Get("config"), Namespace: values.Get("namespace"), Item: values.Get("item"), TokenPublicID: values.Get("token"),
+	})
 	if err != nil {
-		writeError(response, http.StatusServiceUnavailable, "service_unavailable")
+		writeReadError(response, err)
 		return
 	}
-	writeJSON(response, struct {
-		Items []mysqlstore.Environment `json:"items"`
-	}{environments})
+	writeJSON(response, page)
 }
 
 func (server *server) listConfigs(response http.ResponseWriter, request *http.Request) {
 	if _, ok := requirePrincipal(response, request); !ok {
 		return
 	}
-	includeArchived, ok := parseIncludeArchived(response, request)
+	query, values, ok := parseInventoryQuery(response, request, "include_archived", "environment", "unbound")
 	if !ok {
 		return
 	}
-	configs, err := server.configs.ListConfigs(request.Context(), includeArchived)
-	if err != nil {
-		writeError(response, http.StatusServiceUnavailable, "service_unavailable")
+	unbound := values.Get("unbound")
+	if values.Has("unbound") && unbound != "true" && unbound != "false" {
+		writeError(response, http.StatusBadRequest, "invalid_request")
 		return
 	}
-	writeJSON(response, struct {
-		Items []mysqlstore.ConfigSummary `json:"items"`
-	}{configs})
+	page, err := server.configs.ListConfigs(request.Context(), mysqlstore.ConfigQuery{
+		InventoryQuery: query, Environment: values.Get("environment"), Unbound: unbound == "true",
+	})
+	if err != nil {
+		writeReadError(response, err)
+		return
+	}
+	writeJSON(response, page)
 }
 
 func (server *server) listVaultItems(response http.ResponseWriter, request *http.Request) {
 	if _, ok := requirePrincipal(response, request); !ok {
 		return
 	}
-	includeArchived, ok := parseIncludeArchived(response, request)
+	query, values, ok := parseInventoryQuery(response, request, "include_archived", "namespace", "environment")
 	if !ok {
 		return
 	}
-	items, err := server.configs.ListVaultItems(request.Context(), includeArchived)
+	page, err := server.configs.ListVaultItems(request.Context(), mysqlstore.VaultQuery{
+		InventoryQuery: query, Namespace: values.Get("namespace"), Environment: values.Get("environment"),
+	})
 	if err != nil {
-		writeError(response, http.StatusServiceUnavailable, "service_unavailable")
+		writeReadError(response, err)
 		return
 	}
-	writeJSON(response, struct {
-		Items []mysqlstore.VaultItemSummary `json:"items"`
-	}{items})
+	writeJSON(response, page)
 }
 
 func (server *server) listVaultUsages(response http.ResponseWriter, request *http.Request) {
 	if _, ok := requirePrincipal(response, request); !ok {
 		return
 	}
-	items, err := server.configs.ListVaultUsages(request.Context(), request.PathValue("namespace"), request.PathValue("item"))
+	query, _, ok := parseInventoryQuery(response, request, "")
+	if !ok {
+		return
+	}
+	page, err := server.configs.ListVaultUsages(request.Context(), request.PathValue("namespace"), request.PathValue("item"), mysqlstore.VaultUsageQuery{InventoryQuery: query})
 	if err != nil {
 		writeReadError(response, err)
 		return
 	}
-	writeJSON(response, struct {
-		Items []mysqlstore.VaultUsage `json:"items"`
-	}{items})
+	writeJSON(response, page)
+}
+
+func (server *server) previewVaultImpact(response http.ResponseWriter, request *http.Request) {
+	if _, ok := requireAdmin(response, request); !ok {
+		return
+	}
+	query, values, ok := parseInventoryQuery(response, request, "")
+	if !ok {
+		return
+	}
+	if values.Has("q") {
+		writeError(response, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	var body struct {
+		Fields       []string `json:"fields"`
+		Environments []string `json:"environments"`
+	}
+	if !decodeJSON(response, request, &body) {
+		return
+	}
+	if body.Fields == nil || body.Environments == nil {
+		writeError(response, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	page, err := server.configs.ListVaultUsages(request.Context(), request.PathValue("namespace"), request.PathValue("item"), mysqlstore.VaultUsageQuery{
+		InventoryQuery: query, Impact: true, Fields: body.Fields, Environments: body.Environments,
+	})
+	if err != nil {
+		writeReadError(response, err)
+		return
+	}
+	writeJSON(response, page)
 }
 
 func (server *server) listVaultRevisions(response http.ResponseWriter, request *http.Request) {
 	if _, ok := requirePrincipal(response, request); !ok {
 		return
 	}
-	revisions, err := server.configs.ListVaultRevisions(request.Context(), request.PathValue("namespace"), request.PathValue("item"))
+	query, ok := parseRevisionQuery(response, request)
+	if !ok {
+		return
+	}
+	page, err := server.configs.ListVaultRevisions(request.Context(), request.PathValue("namespace"), request.PathValue("item"), query)
 	if err != nil {
 		writeReadError(response, err)
 		return
 	}
-	writeJSON(response, struct {
-		Items []mysqlstore.VaultRevision `json:"items"`
-	}{revisions})
+	writeJSON(response, page)
 }
 
 func (server *server) readVaultItem(response http.ResponseWriter, request *http.Request) {
@@ -310,16 +362,18 @@ func (server *server) listConfigRevisions(response http.ResponseWriter, request 
 	if _, ok := requirePrincipal(response, request); !ok {
 		return
 	}
-	revisions, err := server.configs.ListConfigRevisions(
-		request.Context(), request.PathValue("environment"), request.PathValue("config"),
+	query, ok := parseRevisionQuery(response, request)
+	if !ok {
+		return
+	}
+	page, err := server.configs.ListConfigRevisions(
+		request.Context(), request.PathValue("environment"), request.PathValue("config"), query,
 	)
 	if err != nil {
 		writeReadError(response, err)
 		return
 	}
-	writeJSON(response, struct {
-		Items []mysqlstore.ConfigRevision `json:"items"`
-	}{revisions})
+	writeJSON(response, page)
 }
 
 func (server *server) readRawConfigRevision(response http.ResponseWriter, request *http.Request) {
@@ -790,18 +844,16 @@ func (server *server) listTokens(response http.ResponseWriter, request *http.Req
 	if _, ok := requireAdmin(response, request); !ok {
 		return
 	}
-	includeRevoked, ok := parseBooleanQuery(response, request, "include_revoked")
+	query, _, ok := parseInventoryQuery(response, request, "include_revoked")
 	if !ok {
 		return
 	}
-	tokens, err := server.configs.ListTokens(request.Context(), includeRevoked)
+	tokens, err := server.configs.ListTokens(request.Context(), query)
 	if err != nil {
-		writeError(response, http.StatusServiceUnavailable, "service_unavailable")
+		writeReadError(response, err)
 		return
 	}
-	writeJSON(response, struct {
-		Items []mysqlstore.TokenSummary `json:"items"`
-	}{tokens})
+	writeJSON(response, tokens)
 }
 
 func (server *server) createToken(response http.ResponseWriter, request *http.Request) {
@@ -855,6 +907,29 @@ func (server *server) setTokenEnvironments(response http.ResponseWriter, request
 	writeMutationResult(response, result, err)
 }
 
+func (server *server) patchTokenEnvironments(response http.ResponseWriter, request *http.Request) {
+	principal, ok := requireAdmin(response, request)
+	if !ok {
+		return
+	}
+	var body struct {
+		Add    []string `json:"add"`
+		Remove []string `json:"remove"`
+	}
+	if !decodeJSON(response, request, &body) {
+		return
+	}
+	result, err := server.configs.SetTokenEnvironments(request.Context(), mysqlstore.TokenEnvironmentChange{
+		OperationID: request.Header.Get("Idempotency-Key"),
+		Actor:       mysqlstore.Actor{Type: "user", ID: principal.ActorID()},
+		PublicID:    request.PathValue("public_id"), Patch: true, Add: body.Add, Remove: body.Remove,
+	})
+	writeMutationResult(response, struct {
+		Outcome  mysqlstore.Outcome `json:"outcome"`
+		PublicID string             `json:"public_id"`
+	}{result.Outcome, result.PublicID}, err)
+}
+
 func (server *server) revokeToken(response http.ResponseWriter, request *http.Request) {
 	principal, ok := requireAdmin(response, request)
 	if !ok {
@@ -872,18 +947,16 @@ func (server *server) listClientCertificates(response http.ResponseWriter, reque
 	if _, ok := requireAdmin(response, request); !ok {
 		return
 	}
-	includeRevoked, ok := parseBooleanQuery(response, request, "include_revoked")
+	query, _, ok := parseInventoryQuery(response, request, "include_revoked")
 	if !ok {
 		return
 	}
-	certificates, err := server.configs.ListClientCertificates(request.Context(), includeRevoked)
+	page, err := server.configs.ListClientCertificates(request.Context(), query)
 	if err != nil {
-		writeError(response, http.StatusServiceUnavailable, "service_unavailable")
+		writeReadError(response, err)
 		return
 	}
-	writeJSON(response, struct {
-		Items []mysqlstore.ClientCertificate `json:"items"`
-	}{certificates})
+	writeJSON(response, page)
 }
 
 func (server *server) registerClientCertificate(response http.ResponseWriter, request *http.Request) {
@@ -938,18 +1011,32 @@ func (server *server) listNotificationDestinations(response http.ResponseWriter,
 	if _, ok := requireAdmin(response, request); !ok {
 		return
 	}
-	includeArchived, ok := parseIncludeArchived(response, request)
+	query, _, ok := parseInventoryQuery(response, request, "include_archived")
 	if !ok {
 		return
 	}
-	destinations, err := server.configs.ListNotificationDestinations(request.Context(), includeArchived)
+	page, err := server.configs.ListNotificationDestinations(request.Context(), query)
 	if err != nil {
-		writeError(response, http.StatusServiceUnavailable, "service_unavailable")
+		writeReadError(response, err)
 		return
 	}
-	writeJSON(response, struct {
-		Items []mysqlstore.NotificationDestination `json:"items"`
-	}{destinations})
+	writeJSON(response, page)
+}
+
+func (server *server) listNotificationEventTypes(response http.ResponseWriter, request *http.Request) {
+	if _, ok := requireAdmin(response, request); !ok {
+		return
+	}
+	query, _, ok := parseInventoryQuery(response, request, "")
+	if !ok {
+		return
+	}
+	page, err := server.configs.ListNotificationEventTypes(request.Context(), request.PathValue("destination"), query)
+	if err != nil {
+		writeReadError(response, err)
+		return
+	}
+	writeJSON(response, page)
 }
 
 func (server *server) commitNotificationDestination(response http.ResponseWriter, request *http.Request) {
@@ -1105,27 +1192,6 @@ func decodeJSON(response http.ResponseWriter, request *http.Request, destination
 	return true
 }
 
-func parseIncludeArchived(response http.ResponseWriter, request *http.Request) (bool, bool) {
-	return parseBooleanQuery(response, request, "include_archived")
-}
-
-func parseBooleanQuery(response http.ResponseWriter, request *http.Request, name string) (bool, bool) {
-	query := request.URL.Query()
-	if len(query) > 1 || (len(query) == 1 && !query.Has(name)) || len(query[name]) > 1 {
-		writeError(response, http.StatusBadRequest, "invalid_request")
-		return false, false
-	}
-	switch query.Get(name) {
-	case "", "false":
-		return false, true
-	case "true":
-		return true, true
-	default:
-		writeError(response, http.StatusBadRequest, "invalid_request")
-		return false, false
-	}
-}
-
 func parseLimit(response http.ResponseWriter, request *http.Request, fallback, maximum int) (int, bool) {
 	query := request.URL.Query()
 	if len(query) == 0 {
@@ -1175,8 +1241,40 @@ func parseAuditQuery(response http.ResponseWriter, request *http.Request) (logst
 	return query, true
 }
 
+func parseRevisionQuery(response http.ResponseWriter, request *http.Request) (mysqlstore.RevisionQuery, bool) {
+	query := mysqlstore.RevisionQuery{Limit: 50}
+	values, err := url.ParseQuery(request.URL.RawQuery)
+	if err == nil {
+		for name, entries := range values {
+			if (name != "limit" && name != "before") || len(entries) != 1 || entries[0] == "" {
+				err = mysqlstore.ErrValidation
+				break
+			}
+		}
+	}
+	if err == nil && values.Has("limit") {
+		query.Limit, err = strconv.Atoi(values.Get("limit"))
+		if query.Limit < 1 || query.Limit > mysqlstore.MaxRevisionPageSize {
+			err = mysqlstore.ErrValidation
+		}
+	}
+	if err == nil && values.Has("before") {
+		query.Before, err = strconv.ParseUint(values.Get("before"), 10, 64)
+		if query.Before == 0 {
+			err = mysqlstore.ErrValidation
+		}
+	}
+	if err != nil {
+		writeError(response, http.StatusBadRequest, "invalid_request")
+		return mysqlstore.RevisionQuery{}, false
+	}
+	return query, true
+}
+
 func writeReadError(response http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, mysqlstore.ErrValidation):
+		writeError(response, http.StatusBadRequest, "invalid_request")
 	case errors.Is(err, mysqlstore.ErrNotFound), errors.Is(err, machine.ErrNotFound):
 		writeError(response, http.StatusNotFound, "not_found")
 	case errors.Is(err, machine.ErrUnresolved):

@@ -40,9 +40,9 @@ func TestNotificationDestinationEncryptsCredentialsAndSnapshotsSubscribedTargets
 		strings.Contains(created.MaskedSuffix, "url-token-sentinel") {
 		t.Fatalf("CommitNotificationDestination = %#v, %v", created, err)
 	}
-	destinations, err := store.ListNotificationDestinations(ctx, false)
+	destinations, err := store.ListNotificationDestinations(ctx, InventoryQuery{Limit: 50})
 	encoded, encodeErr := json.Marshal(destinations)
-	if err != nil || encodeErr != nil || len(destinations) != 1 ||
+	if err != nil || encodeErr != nil || destinations.Total != 1 || len(destinations.Items) != 1 ||
 		strings.Contains(string(encoded), url) || strings.Contains(string(encoded), secret) {
 		t.Fatalf("ListNotificationDestinations = %s, %v, %v", encoded, err, encodeErr)
 	}
@@ -200,7 +200,7 @@ func TestNotificationDestinationEncryptsCredentialsAndSnapshotsSubscribedTargets
 	if err != nil || !archived.Archived {
 		t.Fatalf("Archive Notification Destination = %#v, %v", archived, err)
 	}
-	if active, err := store.ListNotificationDestinations(ctx, false); err != nil || len(active) != 1 || active[0].Key != "late" {
+	if active, err := store.ListNotificationDestinations(ctx, InventoryQuery{Limit: 50}); err != nil || active.Total != 1 || len(active.Items) != 1 || active.Items[0].Key != "late" {
 		t.Fatalf("active Notification Destinations = %#v, %v", active, err)
 	}
 }

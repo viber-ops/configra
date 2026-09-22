@@ -9,8 +9,8 @@
       "goos": "darwin",
       "goarch": "amd64",
       "goamd64": "v1",
-      "package_count": 313,
-      "package_paths_sha256": "59a0cde75bbd9a01f9231cec33655c14450a5883b608b51d5d52884100d3f88d"
+      "package_count": 312,
+      "package_paths_sha256": "66e4a231c95c5d6892b6fac54af262e3bce2bb917880767ef7d7c010b036bf6b"
     },
     {
       "target": "configra-kubernetes/darwin/amd64",
@@ -29,8 +29,8 @@
       "goos": "darwin",
       "goarch": "arm64",
       "goarm64": "v8.0",
-      "package_count": 311,
-      "package_paths_sha256": "866d19077e71f3ecda5d7e5e6aa9025138e292779d82ceee3cdf87522a3674ba"
+      "package_count": 310,
+      "package_paths_sha256": "a8e2f6f42c2f8ff9561c2d36f1acf5127e72b0c2dc4518362c84959389343e83"
     },
     {
       "target": "configra-kubernetes/darwin/arm64",
@@ -49,8 +49,8 @@
       "goos": "linux",
       "goarch": "amd64",
       "goamd64": "v1",
-      "package_count": 313,
-      "package_paths_sha256": "feb1289f1861d00995bb7124afdc7dfa74f5a526f66388c2fb74c68e515804b9"
+      "package_count": 312,
+      "package_paths_sha256": "a6837588832dc0515e16d11c869764d425a101d9f0fe7ce43c8a504f934e8b27"
     },
     {
       "target": "configra-kubernetes/linux/amd64",
@@ -69,8 +69,8 @@
       "goos": "linux",
       "goarch": "arm64",
       "goarm64": "v8.0",
-      "package_count": 311,
-      "package_paths_sha256": "c51b3c6a6b996fb0ad55f0158c4a8460bfbbbea5cdd30b0ca033d01da2bff3b1"
+      "package_count": 310,
+      "package_paths_sha256": "bc5364593de541636937b4d4f1284410ad1f1dac5ecdfeed6761e83e0554b37f"
     },
     {
       "target": "configra-kubernetes/linux/arm64",
@@ -129,33 +129,6 @@
           "kind": "source_notice",
           "sha256": "e4aebdd46ca174b66c9bb782aae062020f6984a20434c9f119ce271a6f30abce",
           "source": "https://github.com/FiloSottile/edwards25519/blob/b182a6575cfd9f4fbb1d1d4e487a6b00a3ec06f7/scalar.go",
-          "verified": true
-        }
-      ],
-      "excluded_discovered_legal_paths": [],
-      "target_mask": 85
-    },
-    {
-      "module": "github.com/alexedwards/scs/mysqlstore",
-      "version": "v0.0.0-20251002162104-209de6e426de",
-      "module_sum": "h1:/Y/iIFgV1Ofvk4Euv5gUQ74vgqFZOQ1wlJQ3yz/zYGs=",
-      "primary_license_identifiers": [
-        "MIT"
-      ],
-      "qualification": "Root license for the selected package scopes.",
-      "origin": {
-        "kind": "vcs",
-        "vcs": "git",
-        "url": "https://github.com/alexedwards/scs",
-        "hash": "209de6e426de9259665975ce16b91331d228f052",
-        "subdir": "mysqlstore"
-      },
-      "files": [
-        {
-          "path": "LICENSE",
-          "kind": "license",
-          "sha256": "60aa83c124df5a317fe85b1ad9c4984ad056e0221d572d195b00d5b45b8f3bb1",
-          "source": "https://github.com/alexedwards/scs/blob/209de6e426de9259665975ce16b91331d228f052/LICENSE",
           "verified": true
         }
       ],
@@ -1870,8 +1843,8 @@
     },
     {
       "module": "github.com/viber-ops/configra-go",
-      "version": "v0.1.0-rc.2",
-      "module_sum": "h1:r2ObWg0WK5yhO03gvDypfReW4uIAJYMIgtEUq4ILnwQ=",
+      "version": "v1.0.0",
+      "module_sum": "h1:6oHBwkKCR/xyGHLum7ZW4cMiNlyDHFeBkDd56xdm6JI=",
       "primary_license_identifiers": [
         "Apache-2.0"
       ],
@@ -1880,21 +1853,21 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/viber-ops/configra-go",
-        "hash": "bddf8e91cb73ff6fddafbf11b890745a637ea014"
+        "hash": "d092602d8c7b907c4b4f331d6869b447fcc5a4bc"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
-          "source": "https://github.com/viber-ops/configra-go/blob/bddf8e91cb73ff6fddafbf11b890745a637ea014/LICENSE",
+          "source": "https://github.com/viber-ops/configra-go/blob/d092602d8c7b907c4b4f331d6869b447fcc5a4bc/LICENSE",
           "verified": true
         },
         {
           "path": "NOTICE",
           "kind": "notice",
           "sha256": "2f02607c1c0a7ad8a8cd5c89bb620d68e3b2ad2d438c5878a604773999aeffab",
-          "source": "https://github.com/viber-ops/configra-go/blob/bddf8e91cb73ff6fddafbf11b890745a637ea014/NOTICE",
+          "source": "https://github.com/viber-ops/configra-go/blob/d092602d8c7b907c4b4f331d6869b447fcc5a4bc/NOTICE",
           "verified": true
         }
       ],
@@ -2200,8 +2173,8 @@
     },
     {
       "module": "golang.org/x/net",
-      "version": "v0.55.0",
-      "module_sum": "h1:bcvxaJn3e1U6InsFWt1JUq1aSjnRxLzT2rtD2KfkDF8=",
+      "version": "v0.58.0",
+      "module_sum": "h1:ynWG7rqYi4ccpTEuPZ2QGWHktVEM9DMCj9yzDE0Q7To=",
       "primary_license_identifiers": [
         "BSD-3-Clause"
       ],
@@ -2210,21 +2183,21 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://go.googlesource.com/net",
-        "hash": "7770ec48d03fec35e378665337b4faca93c38423"
+        "hash": "acc78e0d2b2c855c0c4fbdcfe5f42a9e3d0f9778"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
-          "source": "https://go.googlesource.com/net/+/7770ec48d03fec35e378665337b4faca93c38423/LICENSE",
+          "source": "https://go.googlesource.com/net/+/acc78e0d2b2c855c0c4fbdcfe5f42a9e3d0f9778/LICENSE",
           "verified": true
         },
         {
           "path": "PATENTS",
           "kind": "patent_notice",
           "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
-          "source": "https://go.googlesource.com/net/+/7770ec48d03fec35e378665337b4faca93c38423/PATENTS",
+          "source": "https://go.googlesource.com/net/+/acc78e0d2b2c855c0c4fbdcfe5f42a9e3d0f9778/PATENTS",
           "verified": true
         }
       ],
@@ -2395,8 +2368,8 @@
     },
     {
       "module": "golang.org/x/term",
-      "version": "v0.43.0",
-      "module_sum": "h1:S4RLU2sB31O/NCl+zFN9Aru9A/Cq2aqKpTZJ6B+DwT4=",
+      "version": "v0.45.0",
+      "module_sum": "h1:NwWyBmoJCbfTHpxrWoZ9C6/VxOf7ic219I8xZZFdrf0=",
       "primary_license_identifiers": [
         "BSD-3-Clause"
       ],
@@ -2405,21 +2378,21 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://go.googlesource.com/term",
-        "hash": "3c3e4855f7d2eb06c3e48933554add9ec6b599b5"
+        "hash": "9f69229da31ca6a34b522f59dbe07cad5ea21587"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
-          "source": "https://go.googlesource.com/term/+/3c3e4855f7d2eb06c3e48933554add9ec6b599b5/LICENSE",
+          "source": "https://go.googlesource.com/term/+/9f69229da31ca6a34b522f59dbe07cad5ea21587/LICENSE",
           "verified": true
         },
         {
           "path": "PATENTS",
           "kind": "patent_notice",
           "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
-          "source": "https://go.googlesource.com/term/+/3c3e4855f7d2eb06c3e48933554add9ec6b599b5/PATENTS",
+          "source": "https://go.googlesource.com/term/+/9f69229da31ca6a34b522f59dbe07cad5ea21587/PATENTS",
           "verified": true
         }
       ],
@@ -2428,8 +2401,8 @@
     },
     {
       "module": "golang.org/x/text",
-      "version": "v0.40.0",
-      "module_sum": "h1:Ub2Z6/xjgF1WrYQz2nuITOEegKFtiIy+rieRJ5lHZKs=",
+      "version": "v0.41.0",
+      "module_sum": "h1:vz/seA0lnX87Othu2f/0L24RcgrXD9/YFTSuGjj3rH8=",
       "primary_license_identifiers": [
         "BSD-3-Clause"
       ],
@@ -2438,21 +2411,21 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://go.googlesource.com/text",
-        "hash": "724af9c35838492dcaacc1ac51a8a0187c994c54"
+        "hash": "acdba6655fd45cdb5ab73c9d6a8981333bd65a39"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
-          "source": "https://go.googlesource.com/text/+/724af9c35838492dcaacc1ac51a8a0187c994c54/LICENSE",
+          "source": "https://go.googlesource.com/text/+/acdba6655fd45cdb5ab73c9d6a8981333bd65a39/LICENSE",
           "verified": true
         },
         {
           "path": "PATENTS",
           "kind": "patent_notice",
           "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
-          "source": "https://go.googlesource.com/text/+/724af9c35838492dcaacc1ac51a8a0187c994c54/PATENTS",
+          "source": "https://go.googlesource.com/text/+/acdba6655fd45cdb5ab73c9d6a8981333bd65a39/PATENTS",
           "verified": true
         }
       ],
@@ -2520,8 +2493,8 @@
     },
     {
       "module": "google.golang.org/genproto/googleapis/rpc",
-      "version": "v0.0.0-20260414002931-afd174a4e478",
-      "module_sum": "h1:RmoJA1ujG+/lRGNfUnOMfhCy5EipVMyvUE+KNbPbTlw=",
+      "version": "v0.0.0-20260526163538-3dc84a4a5aaa",
+      "module_sum": "h1:mZHHdPZl0dbGHCflZgAq/Q468DWVFcU2whhB2KAo8fk=",
       "primary_license_identifiers": [
         "Apache-2.0"
       ],
@@ -2530,7 +2503,7 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/googleapis/go-genproto",
-        "hash": "afd174a4e4785681a98d8dac6439fd597d488b20",
+        "hash": "3dc84a4a5aaa87331e10f51e22e90d961f986894",
         "subdir": "googleapis/rpc"
       },
       "files": [
@@ -2538,7 +2511,7 @@
           "path": "LICENSE",
           "kind": "license",
           "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
-          "source": "https://github.com/googleapis/go-genproto/blob/afd174a4e4785681a98d8dac6439fd597d488b20/LICENSE",
+          "source": "https://github.com/googleapis/go-genproto/blob/3dc84a4a5aaa87331e10f51e22e90d961f986894/LICENSE",
           "verified": true
         }
       ],
@@ -2547,8 +2520,8 @@
     },
     {
       "module": "google.golang.org/grpc",
-      "version": "v1.82.1",
-      "module_sum": "h1:NnAxzGRA0677vCa4BUkOAnO5+FfQqVl9iUXeD0IqcGE=",
+      "version": "v1.83.2",
+      "module_sum": "h1:EManeRomTObA0BU7I8vXgg/78uE5MJ9M8B39EX2WscU=",
       "primary_license_identifiers": [
         "Apache-2.0"
       ],
@@ -2557,28 +2530,28 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/grpc/grpc-go",
-        "hash": "ebd8f06a09426fbece97157c95c3917abff28f4e"
+        "hash": "030ee8becb20ce4315d6bf2dfa26bdd876169dc4"
       },
       "files": [
         {
           "path": "AUTHORS",
           "kind": "authors",
           "sha256": "627c695f80fdac6412d66e6ad4160a4acb41923ca7ee3fd7e112e105f0ff46b9",
-          "source": "https://github.com/grpc/grpc-go/blob/ebd8f06a09426fbece97157c95c3917abff28f4e/AUTHORS",
+          "source": "https://github.com/grpc/grpc-go/blob/030ee8becb20ce4315d6bf2dfa26bdd876169dc4/AUTHORS",
           "verified": true
         },
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
-          "source": "https://github.com/grpc/grpc-go/blob/ebd8f06a09426fbece97157c95c3917abff28f4e/LICENSE",
+          "source": "https://github.com/grpc/grpc-go/blob/030ee8becb20ce4315d6bf2dfa26bdd876169dc4/LICENSE",
           "verified": true
         },
         {
           "path": "NOTICE.txt",
           "kind": "notice",
           "sha256": "693ff28ec216d5112ac1bbfe64ef539005867d1c7bd427b57d579683293b947f",
-          "source": "https://github.com/grpc/grpc-go/blob/ebd8f06a09426fbece97157c95c3917abff28f4e/NOTICE.txt",
+          "source": "https://github.com/grpc/grpc-go/blob/030ee8becb20ce4315d6bf2dfa26bdd876169dc4/NOTICE.txt",
           "verified": true
         }
       ],

@@ -168,6 +168,9 @@ oidc:
 		"multiple documents":  base + "---\nversion: 1\n",
 		"unsupported version": strings.Replace(base, "version: 1", "version: 2", 1),
 		"invalid listen":      strings.Replace(base, "listen: :8443", "listen: missing-port", 1),
+		"secret in bad type":  strings.Replace(base, "version: 1", "version: oidc-value-sentinel", 1),
+		"short secret type":   strings.Replace(base, "version: 1", "version: s3cr3t", 1),
+		"secret in field":     base + "dsn-value-sentinel: true\n",
 	}
 	for name, document := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -176,7 +179,7 @@ oidc:
 				t.Fatal("Load succeeded")
 			}
 			if strings.Contains(err.Error(), "dsn-value-sentinel") || strings.Contains(err.Error(), "oidc-value-sentinel") ||
-				strings.Contains(err.Error(), "clickhouse-value-sentinel") {
+				strings.Contains(err.Error(), "clickhouse-value-sentinel") || strings.Contains(err.Error(), "s3cr3t") {
 				t.Fatalf("error leaked a secret: %v", err)
 			}
 		})
@@ -197,6 +200,28 @@ oidc:
 	} {
 		if _, err := bootstrap.Load(writeFile(t, name+".yaml", base+notificationConfig), bootstrap.Management); err == nil {
 			t.Fatalf("%s succeeded", name)
+		}
+	}
+}
+
+func TestMaintenanceConfigNeedsOnlyStorageAndKeepsStrictYAML(t *testing.T) {
+	t.Setenv("CONFIGRA_TEST_MYSQL_DSN", "dsn-secret")
+	minimal := "version: 1\nmysql:\n  dsn_env: CONFIGRA_TEST_MYSQL_DSN\nkey_provider:\n  master_key_file: /run/secrets/master-key\n"
+	for _, document := range []string{minimal, minimal + "oidc:\n  client_secret_env: UNSET_OIDC_SECRET\nclickhouse:\n  dsn_env: UNSET_CLICKHOUSE_DSN\n"} {
+		config, err := bootstrap.LoadForMaintenance(writeFile(t, "doctor.yaml", document))
+		if err != nil || config.MySQLDSN() != "dsn-secret" {
+			t.Fatalf("maintenance Config: %v", err)
+		}
+	}
+	for _, document := range []string{
+		minimal + "unexpected: true\n", minimal + "---\nversion: 1\n", "", strings.Repeat("a", (1<<20)+1),
+		strings.Replace(minimal, "version: 1", "version: 2", 1),
+		strings.Replace(minimal, "CONFIGRA_TEST_MYSQL_DSN", "INVALID-NAME", 1),
+		strings.Replace(minimal, "CONFIGRA_TEST_MYSQL_DSN", "CONFIGRA_UNSET_MAINTENANCE_DSN", 1),
+		strings.Replace(minimal, "/run/secrets/master-key", "", 1),
+	} {
+		if _, err := bootstrap.LoadForMaintenance(writeFile(t, "bad.yaml", document)); err == nil {
+			t.Fatal("accepted invalid maintenance Config")
 		}
 	}
 }

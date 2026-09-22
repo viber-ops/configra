@@ -466,7 +466,7 @@ func finishOperation(
 		UPDATE operations
 		SET outcome = ?, response_json = ?, resulting_revision = ?, completed_at = UTC_TIMESTAMP(6)
 		WHERE operation_id = ? AND outcome = 'pending'
-	`, outcome, response, resultingRevision, operationID); err != nil {
+	`, outcome, string(response), resultingRevision, operationID); err != nil {
 		return fmt.Errorf("finish Operation: %w", err)
 	}
 	payload := struct {
@@ -549,7 +549,7 @@ func insertOutbox(
 	if _, err := transaction.ExecContext(ctx, `
 		INSERT INTO outbox_events (id, kind, event_type, operation_id, payload)
 		VALUES (?, ?, ?, ?, ?)
-	`, id, kind, eventType, operationID, payload); err != nil {
+	`, id, kind, eventType, operationID, string(payload)); err != nil {
 		return nil, fmt.Errorf("insert %s Outbox Event: %w", kind, err)
 	}
 	return id, nil

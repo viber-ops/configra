@@ -4,15 +4,15 @@
 
 [Website](https://viber-ops.github.io/en/configra/) ·
 [Documentation](https://viber-ops.github.io/en/docs/configra/) ·
-[Downloads](https://github.com/viber-ops/configra/releases/tag/v0.1.0-rc.2) ·
+[Downloads](https://github.com/viber-ops/configra/releases/tag/v1.0.0) ·
 [Go SDK](https://github.com/viber-ops/configra-go) · [中文](README.zh-CN.md)
 
 Configra stores versioned YAML/JSON and shared Vault values for each environment.
 Applications read resolved configuration through the Go SDK, CSI file mounts,
 or native Kubernetes Secret/ConfigMap synchronization.
 
-> **Preview: v0.1.0-rc.2.** This is an evaluation release, not a completed
-> production acceptance. Use the tag for these guides.
+> **Stable release: v1.0.0.** Use the tag for these guides.
+> Validate ingress, capacity and recovery in your own deployment before rollout.
 > [Read the limits](https://viber-ops.github.io/en/docs/configra/security/).
 
 ![Configra: resource navigation, Vault entries, environment variants and field details](https://viber-ops.github.io/assets/configra/vault-light.png)
@@ -53,8 +53,8 @@ must occupy the complete scalar; File fields are read separately.
 With Docker Compose, Go 1.25.13+, Node.js 24, npm, Make and OpenSSL installed:
 
 ```sh
-git clone --branch v0.1.0-rc.2 https://github.com/viber-ops/configra.git
-git clone --branch v0.1.0-rc.2 https://github.com/viber-ops/configra-go.git
+git clone --branch v1.0.0 https://github.com/viber-ops/configra.git
+git clone --branch v1.0.0 https://github.com/viber-ops/configra-go.git
 cd configra
 make local-run
 ```
@@ -91,11 +91,17 @@ workspace-wide. Vault Namespaces organize items; they do not isolate untrusted
 tenants. Configra is not a dynamic database-credential engine, HSM/KMS, or an
 application restart controller.
 
-The current 1000 QPS gate did not pass on the shared test host. Some gateway
-rejections are not durable Audit events, inventory APIs still need bounded
-server-side pagination, and automatic Master Key rotation is not implemented.
-See the [security and architecture review](https://viber-ops.github.io/en/docs/configra/security/)
-before a production rollout.
+The current source image passed the ten-minute 1000 QPS gate on an eight-vCPU
+Linux host, with the API limited to two CPUs/512 MiB. The
+[results and failed runs](docs/verification/2026-09-22.md#native-linux-default-profile-ten-minute-gate)
+record the exact hardware, query profile and scope; they are not a capacity
+guarantee for every deployment. v1.0.0 adds bounded inventory pages, a read-only recovery check and
+[offline Master Key rotation](deploy/backup/README.md#offline-master-key-rotation).
+Custom Management clients must [follow pagination](docs/ui.md) when upgrading from rc.2;
+machine reads and SDK calls are unchanged.
+Production ingress and independent-host failure checks remain deployment-specific.
+Check the [current production status](docs/production-readiness.md)
+before a rollout.
 
 ## Develop and verify
 

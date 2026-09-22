@@ -137,7 +137,7 @@ Configuration that Configra itself needs before it can operate. It always exists
 _Avoid_: Self-hosted configuration
 
 **Crypto Sentinel**:
-A fixed encrypted record created by Management Server for a new database and verified by every Management and API Server startup. Missing or failed verification in an initialized database is fatal rather than treated as a new installation.
+An encrypted proof tying a Configra database to its active Master Key. Missing or failed verification means the key or database cannot be trusted; it does not mean this is a new installation.
 _Avoid_: Master Key fingerprint
 
 **Managed Configuration**:

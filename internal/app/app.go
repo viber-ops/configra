@@ -48,6 +48,7 @@ func NewCommand() *cobra.Command {
 		_ = command.MarkFlagRequired("config")
 		root.AddCommand(command)
 	}
+	root.AddCommand(newDoctorCommand(), newKeyRotationCommand())
 	return root
 }
 
@@ -101,9 +102,9 @@ func run(ctx context.Context, mode bootstrap.Mode, configPath string) error {
 		defer sessionStore.StopCleanup()
 		sessions := humanauth.NewSessionManager(sessionStore)
 		sessions.ErrorFunc = func(response http.ResponseWriter, request *http.Request, _ error) {
+			// Session loading precedes routing: raw URLs can contain credentials.
 			logger.Error("Session operation failed",
 				zap.String("method", request.Method),
-				zap.String("path", request.URL.Path),
 			)
 			response.Header().Set("Cache-Control", "no-store")
 			response.Header().Set("Content-Type", "application/json")
@@ -233,7 +234,7 @@ func serve(ctx context.Context, address string, tlsConfig *tls.Config, handler h
 		return fmt.Errorf("listen: %w", err)
 	}
 	server := &http.Server{
-		Handler:           handler,
+		Handler:           withRequestDeadline(handler),
 		TLSConfig:         tlsConfig,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
@@ -267,4 +268,14 @@ func serve(ctx context.Context, address string, tlsConfig *tls.Config, handler h
 		logger.Info("Server stopped", zap.String("mode", string(mode)))
 		return nil
 	}
+}
+
+func withRequestDeadline(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		// Socket write deadlines do not cancel database work. Leave time within
+		// the 30-second write budget for the rejection audit and error response.
+		ctx, cancel := context.WithTimeout(request.Context(), 20*time.Second)
+		defer cancel()
+		next.ServeHTTP(response, request.WithContext(ctx))
+	})
 }

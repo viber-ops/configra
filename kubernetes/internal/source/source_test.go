@@ -70,3 +70,21 @@ func TestReaderRejectsOriginsWithCredentialsAndUnsupportedSchemes(t *testing.T) 
 		}
 	}
 }
+
+func TestObjectPathsCannotConflictWithTheirDirectories(t *testing.T) {
+	for _, paths := range [][]string{{"database", "database/client.pem"}, {"database/client.pem", "database"}} {
+		objects := []source.Object{
+			{Environment: "production", Config: "app", Path: paths[0]},
+			{Environment: "production", Config: "app", Path: paths[1]},
+		}
+		if err := source.ValidateObjects(objects); err == nil {
+			t.Fatal("accepted a path as both a file and directory")
+		}
+	}
+	if err := source.ValidateObjects([]source.Object{
+		{Environment: "production", Config: "app", Path: "database"},
+		{Environment: "production", Config: "app", Path: "database-backup/client.pem"},
+	}); err != nil {
+		t.Fatalf("rejected non-conflicting paths: %v", err)
+	}
+}

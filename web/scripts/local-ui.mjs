@@ -1,6 +1,7 @@
 import { chromium } from '@playwright/test';
 import { mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const baseURL = process.env.CONFIGRA_URL || 'https://localhost:18088';
 const screenshotDirectory = process.env.CONFIGRA_SCREENSHOT_DIR || '.cache/ui-screenshots';
@@ -37,12 +38,21 @@ async function api(page, pathname, method = 'GET', body) {
   return response.payload;
 }
 
-async function seed() {
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ ignoreHTTPSErrors: true });
-  const page = await context.newPage();
-  await signIn(page);
+async function inventory(page, pathname) {
+  const url = new URL(pathname, baseURL);
+  url.searchParams.set('limit', '50');
+  const items = [];
+  for (;;) {
+    url.searchParams.set('offset', String(items.length));
+    const result = await api(page, url.pathname + url.search);
+    if (!Array.isArray(result?.items) || !Number.isSafeInteger(result.total) || result.total < 0) throw new Error(`${pathname}: invalid inventory response`);
+    items.push(...result.items);
+    if (items.length >= result.total) return items;
+    if (!result.items.length) throw new Error(`${pathname}: incomplete inventory response`);
+  }
+}
 
+export async function seed(page) {
   const environmentSeeds = [
     ['production', 'Production · Singapore'],
     ['staging', 'Staging / Integration'],
@@ -53,11 +63,11 @@ async function seed() {
     ['qa', 'Quality assurance · Browser, API and migration verification'],
     ['legacy', 'Legacy datacenter · archived read-only context'],
   ];
-  let environments = (await api(page, '/v1/environments?include_archived=true')).items;
+  let environments = await inventory(page, '/v1/environments?include_archived=true');
   for (const [key, display_name] of environmentSeeds) {
     if (!environments.some(item => item.key === key)) await api(page, '/v1/environments', 'POST', { key, display_name });
   }
-  environments = (await api(page, '/v1/environments?include_archived=true')).items;
+  environments = await inventory(page, '/v1/environments?include_archived=true');
   const legacy = environments.find(item => item.key === 'legacy');
   if (legacy && !legacy.archived) await api(page, '/v1/environments/legacy/archive', 'POST');
 
@@ -113,7 +123,7 @@ async function seed() {
     unbound: true,
   });
 
-  let vaultItems = (await api(page, '/v1/vault-items?include_archived=true')).items;
+  let vaultItems = await inventory(page, '/v1/vault-items?include_archived=true');
   for (const item of vaultSeeds) {
     const existing = vaultItems.find(candidate => candidate.namespace_key === item.namespace && candidate.key === item.key);
     let revision = existing?.revision || 0;
@@ -128,7 +138,7 @@ async function seed() {
       revision = result.revision;
     }
   }
-  vaultItems = (await api(page, '/v1/vault-items?include_archived=true')).items;
+  vaultItems = await inventory(page, '/v1/vault-items?include_archived=true');
   const retiredVault = vaultItems.find(item => item.namespace_key === 'legacy' && item.key === 'ftp');
   if (retiredVault && !retiredVault.archived) await api(page, '/v1/vault-items/legacy/ftp/archive', 'POST');
 
@@ -150,7 +160,7 @@ async function seed() {
   }
   configSeeds.push(['obsolete-batch-worker', 'Obsolete batch worker · archived after migration', 'yaml', { production: 1 }]);
 
-  const existingConfigs = (await api(page, '/v1/configs?include_archived=true')).items;
+  const existingConfigs = await inventory(page, '/v1/configs?include_archived=true');
   for (const [key, name, format, contexts] of configSeeds) {
     if (existingConfigs.find(item => item.key === key)?.archived) continue;
     for (const [environment, desiredRevision] of Object.entries(contexts)) {
@@ -164,7 +174,7 @@ async function seed() {
       }
     }
   }
-  let configs = (await api(page, '/v1/configs?include_archived=true')).items;
+  const configs = await inventory(page, '/v1/configs?include_archived=true');
   const obsolete = configs.find(item => item.key === 'obsolete-batch-worker');
   if (obsolete && !obsolete.archived) await api(page, '/v1/configs/obsolete-batch-worker/archive', 'POST');
 
@@ -174,15 +184,15 @@ async function seed() {
     ['feishu-incident-room', 'Feishu incident room · disabled until production handoff', 'feishu_bot', 'https://open.feishu.cn/open-apis/bot/v2/hook/local-development-token', 'local-feishu-secret', false, ['config.updated']],
     ['retired-webhook', 'Retired deployment webhook', 'generic_webhook', 'https://example.net/retired/configra', '', false, ['config.updated']],
   ];
-  let destinations = (await api(page, '/v1/notification-destinations?include_archived=true')).items;
+  let destinations = await inventory(page, '/v1/notification-destinations?include_archived=true');
   for (const [key, display_name, provider, url, secret, enabled, event_types] of notificationSeeds) {
     if (!destinations.some(item => item.key === key)) await api(page, `/v1/notification-destinations/${key}`, 'PUT', { display_name, provider, url, secret, enabled, event_types });
   }
-  destinations = (await api(page, '/v1/notification-destinations?include_archived=true')).items;
+  destinations = await inventory(page, '/v1/notification-destinations?include_archived=true');
   const retiredDestination = destinations.find(item => item.key === 'retired-webhook');
   if (retiredDestination && !retiredDestination.archived) await api(page, '/v1/notification-destinations/retired-webhook/archive', 'POST');
 
-  let tokens = (await api(page, '/v1/api-tokens?include_revoked=true')).items;
+  let tokens = await inventory(page, '/v1/api-tokens?include_revoked=true');
   const tokenSeeds = [
     ['Production edge readers · mTLS required', ['production', 'recovery', 'eu-west'], false, true],
     ['Developer laptops · token-only local access', ['development', 'staging'], true, true],
@@ -194,7 +204,7 @@ async function seed() {
       await api(page, '/v1/api-tokens', 'POST', { display_name, environment_keys, allow_without_mtls, never_expires, expires_at: never_expires ? null : new Date(Date.now() + 45 * 86400000).toISOString() });
     }
   }
-  tokens = (await api(page, '/v1/api-tokens?include_revoked=true')).items;
+  tokens = await inventory(page, '/v1/api-tokens?include_revoked=true');
   const retiredToken = tokens.find(item => item.display_name === 'Retired QA smoke test token');
   if (retiredToken && !retiredToken.revoked) await api(page, `/v1/api-tokens/${retiredToken.public_id}/revoke`, 'POST');
 
@@ -202,14 +212,14 @@ async function seed() {
     ['Edge reader 01 · Singapore', '.cache/local-dev/client-edge.crt', false],
     ['Retired reader 02 · revoked example', '.cache/local-dev/client-revoked.crt', true],
   ];
-  let certificates = (await api(page, '/v1/client-certificates?include_revoked=true')).items;
+  let certificates = await inventory(page, '/v1/client-certificates?include_revoked=true');
   for (const [display_name, filename] of certificateSeeds) {
     if (!certificates.some(item => item.display_name === display_name)) {
       const certificate_pem = await readFile(filename, 'utf8');
       await api(page, '/v1/client-certificates', 'POST', { display_name, certificate_pem });
     }
   }
-  certificates = (await api(page, '/v1/client-certificates?include_revoked=true')).items;
+  certificates = await inventory(page, '/v1/client-certificates?include_revoked=true');
   const revokedCertificate = certificates.find(item => item.display_name === certificateSeeds[1][0]);
   if (revokedCertificate && !revokedCertificate.revoked) await api(page, `/v1/client-certificates/${revokedCertificate.fingerprint_sha256}/revoke`, 'POST');
 
@@ -218,17 +228,16 @@ async function seed() {
   await page.waitForTimeout(1800);
 
   const counts = {
-    environments: (await api(page, '/v1/environments?include_archived=true')).items.length,
-    configs: (await api(page, '/v1/configs?include_archived=true')).items.length,
-    vaultItems: (await api(page, '/v1/vault-items?include_archived=true')).items.length,
-    tokens: (await api(page, '/v1/api-tokens?include_revoked=true')).items.length,
-    certificates: (await api(page, '/v1/client-certificates?include_revoked=true')).items.length,
-    destinations: (await api(page, '/v1/notification-destinations?include_archived=true')).items.length,
+    environments: (await inventory(page, '/v1/environments?include_archived=true')).length,
+    configs: (await inventory(page, '/v1/configs?include_archived=true')).length,
+    vaultItems: (await inventory(page, '/v1/vault-items?include_archived=true')).length,
+    tokens: (await inventory(page, '/v1/api-tokens?include_revoked=true')).length,
+    certificates: (await inventory(page, '/v1/client-certificates?include_revoked=true')).length,
+    destinations: (await inventory(page, '/v1/notification-destinations?include_archived=true')).length,
     access: (await api(page, '/v1/access?limit=100')).items.length,
     audit: (await api(page, '/v1/audit?limit=100')).items.length,
   };
-  console.log(JSON.stringify(counts, null, 2));
-  await browser.close();
+  return counts;
 }
 
 async function settle(page, selector = '.page') {
@@ -348,6 +357,18 @@ async function screenshots() {
   await browser.close();
 }
 
-if (!['seed', 'screenshots', 'all'].includes(command)) throw new Error('usage: node web/scripts/local-ui.mjs [seed|screenshots|all]');
-if (command === 'seed' || command === 'all') await seed();
-if (command === 'screenshots' || command === 'all') await screenshots();
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  if (!['seed', 'screenshots', 'all'].includes(command)) throw new Error('usage: node web/scripts/local-ui.mjs [seed|screenshots|all]');
+  if (command === 'seed' || command === 'all') {
+    const browser = await chromium.launch({ headless: true });
+    try {
+      const context = await browser.newContext({ ignoreHTTPSErrors: true });
+      const page = await context.newPage();
+      await signIn(page);
+      console.log(JSON.stringify(await seed(page), null, 2));
+    } finally {
+      await browser.close();
+    }
+  }
+  if (command === 'screenshots' || command === 'all') await screenshots();
+}

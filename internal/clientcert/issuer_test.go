@@ -97,6 +97,17 @@ func TestAuthorityRejectsInvalidIssuanceAndMismatchedKey(t *testing.T) {
 	if _, err := clientcert.GenerateClient(first.Certificate, first.PrivateKeyDER, "client", 1, now.Add(48*time.Hour)); err == nil {
 		t.Fatal("issued from an expired Authority")
 	}
+	if _, err := clientcert.ParseAuthorityKey(first.Certificate, first.PrivateKeyDER); err != nil {
+		t.Fatalf("valid stored Authority pair: %v", err)
+	}
+	for _, key := range [][]byte{nil, []byte("private-key-sentinel"), second.PrivateKeyDER} {
+		if _, err := clientcert.ParseAuthorityKey(first.Certificate, key); err == nil {
+			t.Fatal("accepted invalid stored Authority key")
+		}
+	}
+	if _, err := clientcert.ParseAuthorityKey(nil, first.PrivateKeyDER); err == nil {
+		t.Fatal("accepted missing Authority certificate")
+	}
 	for _, days := range []int{-1, 366} {
 		if _, err := clientcert.GenerateClient(first.Certificate, first.PrivateKeyDER, "client", days, now); err == nil {
 			t.Fatal("accepted invalid client lifetime")

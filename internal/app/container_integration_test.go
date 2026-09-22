@@ -85,6 +85,12 @@ logging:
 	if err := os.Chmod(directory, 0o755); err != nil {
 		t.Fatalf("chmod image test directory: %v", err)
 	}
+	// These disposable bind mounts must be readable by UID 65532 even with umask 077.
+	for _, name := range []string{"tls.crt", "tls.key", "client-ca.pem", "master-key", "config.yaml"} {
+		if err := os.Chmod(filepath.Join(directory, name), 0o444); err != nil {
+			t.Fatalf("chmod image test mount: %v", err)
+		}
+	}
 
 	containerName := "configra-api-test-" + strconv.FormatInt(time.Now().UnixNano(), 10)
 	t.Cleanup(func() {

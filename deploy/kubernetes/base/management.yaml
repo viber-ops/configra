@@ -32,6 +32,11 @@ spec:
           image: configra
           imagePullPolicy: IfNotPresent
           args: [management, --config, /etc/configra/config.yaml]
+          lifecycle:
+            preStop:
+              # The scratch image has no shell; kubelet performs this delay.
+              sleep:
+                seconds: 5
           ports:
             - name: https
               containerPort: 8443

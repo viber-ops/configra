@@ -1,0 +1,133 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOWORK: 'off'
+  GOFLAGS: '-mod=readonly'
+
+jobs:
+  go:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        module: ['.', kubernetes]
+        go: ['1.25.13', '1.26.7']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ matrix.go }}
+          cache-dependency-path: |
+            go.sum
+            kubernetes/go.sum
+      - name: Test, vet and verify modules
+        working-directory: ${{ matrix.module }}
+        run: |
+          go test -race -count=1 ./...
+          go vet ./...
+          go mod verify
+      - name: Check reachable vulnerabilities
+        if: matrix.go == '1.26.7'
+        working-directory: ${{ matrix.module }}
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
+
+  integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    defaults:
+      run:
+        working-directory: configra
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          path: configra
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: viber-ops/configra-go
+          ref: d092602d8c7b907c4b4f331d6869b447fcc5a4bc # v1.0.0
+          path: configra-go
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.7'
+          cache-dependency-path: |
+            configra/go.sum
+            configra/e2e/go.sum
+            configra-go/go.sum
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - name: MySQL 8.0.22, NATS, ClickHouse and SDK integration
+        run: make test-integration
+      - name: Load harness sampling and leak-detector regressions (not the capacity gate)
+        env:
+          CONFIGRA_TEST_NATS_URL: nats://127.0.0.1:42229
+        run: go -C e2e test -tags='integration load' -race -count=1 -run '^Test(SampleLoad|LoadLeak|LoadEvidence)'
+      - name: Ten-minute production-image capacity and leakage gate
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          make load-test
+          node --input-type=module <<'JS'
+          import { readFileSync } from 'node:fs';
+          const report = JSON.parse(readFileSync('.cache/load/latest.json', 'utf8'));
+          const { started_at, passed, duration, requested_qps, host_cpus, image,
+            container_cpus, container_memory_bytes, mysql_version, mysql_interpolate_params,
+            resources, expected_access_events, persisted_access_events, captured_access_events,
+            nats_leak_scan_passed, leak_scan_passed } = report;
+          const { latencies, requests, throughput, success, status_codes } = report.vegeta;
+          console.log(JSON.stringify({ started_at, passed, duration, requested_qps, host_cpus, image,
+            container_cpus, container_memory_bytes, mysql_version, mysql_interpolate_params,
+            resources, expected_access_events, persisted_access_events, captured_access_events,
+            nats_leak_scan_passed, leak_scan_passed, latencies, requests, throughput, success, status_codes }, null, 2));
+          JS
+      - name: Remove disposable dependencies
+        if: always()
+        run: docker compose -f deploy/compose.test.yaml down
+      - name: Actual service images, OIDC, dependency faults and encrypted recovery
+        if: github.event_name != 'workflow_dispatch'
+        run: make service-test
+      - name: Install the Kubernetes acceptance tool
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          go install sigs.k8s.io/kind@v0.33.0
+          kubectl version --client
+      - name: Three-node Kubernetes services, providers, failure recovery and offline key rotation
+        if: github.event_name == 'workflow_dispatch'
+        run: make kubernetes-service-test
+
+  web:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm --prefix web ci --ignore-scripts
+      - run: npx --prefix web playwright install --with-deps chromium
+      - run: npm --prefix web run test:licenses
+      - run: npm --prefix web test
+      - run: node --test scripts/*.test.mjs scripts/go-notices/*.test.mjs

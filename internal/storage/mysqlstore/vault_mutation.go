@@ -62,6 +62,9 @@ func (store *Store) CommitVault(ctx context.Context, request VaultCommit) (Vault
 		return VaultCommitResult{}, fmt.Errorf("begin Vault Commit: %w", err)
 	}
 	defer transaction.Rollback()
+	if err := store.lockMasterKey(ctx, transaction, false); err != nil {
+		return VaultCommitResult{}, err
+	}
 	replayed, replay, err := beginOperation(ctx, transaction, request.OperationID, digest, request.Actor)
 	if err != nil {
 		return VaultCommitResult{}, err

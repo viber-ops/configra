@@ -331,6 +331,12 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .config-pagination div { display: flex; align-items: center; gap: 10px; }
 .config-pagination button { min-height: 32px; border: 1px solid var(--line); border-radius: 4px; padding: 0 11px; background: var(--surface); color: var(--blue); cursor: pointer; font-weight: 700; }
 .config-pagination button:disabled { color: var(--disabled); cursor: default; }
+.environment-select { display: grid; align-content: start; gap: 5px; min-width: 0; }
+.environment-select label { display: grid; gap: 5px; }
+.environment-select input, .environment-select select { width: 100%; min-width: 0; min-height: 32px; }
+.environment-select .config-pagination, .resource-rail .config-pagination { flex-wrap: wrap; gap: 5px; padding: 5px 0; font-size: 10px; }
+.environment-select .config-pagination div, .resource-rail .config-pagination div { gap: 5px; }
+.vault-environment-picker > input[type="search"] { margin-bottom: 8px; }
 .config-home-heading .eyebrow a:hover { text-decoration: underline; }
 .config-home-summary { display: grid; grid-template-columns: 1.3fr .7fr 1fr; margin-bottom: 16px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
 .config-home-summary > span { display: grid; min-height: 68px; align-content: center; gap: 4px; border-right: 1px solid var(--line); padding: 10px 16px; }
@@ -390,9 +396,6 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .detail-heading-actions .config-identity code, .detail-heading-actions .config-identity span, .detail-heading-actions .config-identity > strong { display: inline-flex; min-width: 64px; height: 100%; align-items: center; justify-content: center; border: 0; border-right: 1px solid var(--line); border-radius: 0; padding: 0 11px; background: transparent; }
 .detail-heading-actions .config-identity > :first-child { min-width: 76px; }
 .detail-heading-actions .config-identity > :last-child { border-right: 0; }
-.config-environment-select { display: flex; width: 210px; height: 38px; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid var(--line); border-radius: 5px; padding: 0 8px 0 11px; background: var(--surface); color: var(--muted); font-size: 11px; font-weight: 700; }
-.config-environment-select span { border-right: 1px solid var(--line); padding-right: 10px; }
-.config-environment-select select { min-width: 104px; border: 0; padding: 0 18px 0 0; background: var(--surface); color: var(--ink); font: 700 12px ui-monospace, "SFMono-Regular", Consolas, monospace; }
 .detail-action-group { display: flex; flex: none; align-items: center; gap: 8px; }
 .detail-action-group > button:not(.primary-action) { height: 38px; flex: none; border: 1px solid var(--line); border-radius: 5px; padding: 0 14px; background: var(--surface); color: var(--blue); cursor: pointer; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .detail-action-group > button[aria-pressed="true"]:not(.primary-action) { border-color: var(--blue); background: var(--blue-soft); }
@@ -950,3 +953,4 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+.vault-save-fields { border: 0; padding: 0; margin: 0; min-width: 0; }

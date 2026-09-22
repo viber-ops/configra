@@ -1,6 +1,7 @@
 import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AuthorityManagement, CertificateManagement, authorityLabel } from './security/Certificates.jsx';
+import { request, managementError, ActionError, useInventory, InventoryPagination } from './management.jsx';
 import './styles.css';
 import './workspace.css';
 
@@ -81,7 +82,7 @@ const messages = {
     currentReferences: 'Current references',
     currentReferencesBody: 'Active current Config revisions that reference this Vault Item.',
     noCurrentReferences: 'No active current Config references this Vault Item.',
-    vaultImpactWarning: 'This change would leave the following current Config references unresolved. Save again to confirm.',
+    vaultImpactWarning: 'This change affects {total} current Config references. This page shows some of them. Save again to confirm; references may change before the save completes.',
     confirmImpactSave: 'Confirm save with impact',
     configurationSource: 'Configuration source',
     created: 'Created',
@@ -324,6 +325,7 @@ const messages = {
     systemStatus: 'System status',
     restartToApply: 'restart to apply',
     revisionHistory: 'Revision history',
+    revisionPagination: 'Revision pagination',
     revisionLabel: 'Revision v{revision}',
     serial: 'Serial',
     status: 'Status',
@@ -408,7 +410,7 @@ const messages = {
     currentReferences: '当前引用',
     currentReferencesBody: '当前启用的 Config Revision 对此 Vault Item 的引用。',
     noCurrentReferences: '当前没有启用的 Config 引用此 Vault Item。',
-    vaultImpactWarning: '此变更会让以下当前 Config 引用无法解析；请再次保存以确认。',
+    vaultImpactWarning: '此变更影响 {total} 条当前 Config 引用，本页仅展示其中一部分。请再次保存以确认；引用可能在保存完成前发生变化。',
     confirmImpactSave: '确认影响并保存',
     configurationSource: '配置原文',
     created: '创建时间',
@@ -651,6 +653,7 @@ const messages = {
     systemStatus: '系统状态',
     restartToApply: '重启后生效',
     revisionHistory: 'Revision 历史',
+    revisionPagination: '历史版本分页',
     revisionLabel: 'Revision v{revision}',
     serial: '序列号',
     status: '状态',
@@ -693,38 +696,79 @@ const iconPaths = {
   moon: 'M20 15.2A8 8 0 0 1 8.8 4 8.2 8.2 0 1 0 20 15.2z',
 };
 
-async function request(path, options = {}) {
-  const response = await fetch(path, {
-    ...options,
-    headers: { Accept: 'application/json', ...options.headers },
-  });
-  if (!response.ok) {
-    const error = new Error(`request failed: ${response.status}`);
-    error.status = response.status;
-    try {
-      const failure = (await response.json()).error;
-      error.code = failure?.code;
-      error.requestID = failure?.request_id;
-    } catch {
-      // The HTTP status remains enough for non-JSON failures.
-    }
-    throw error;
-  }
-  const result = response.status === 204 ? null : await response.json();
-  if (options.method && !['GET', 'HEAD', 'OPTIONS'].includes(options.method) &&
-      /^\/v1\/(environments|configs|vault-items)(\/|$)/.test(path) && !/\/(validate|transfer-preview)$/.test(path)) {
-    window.dispatchEvent(new Event('configra:inventory-changed'));
-  }
-  return result;
+
+function useRevisionHistory(path, refresh = 0) {
+  const key = `${path}@${refresh}`;
+  const [navigation, setNavigation] = useState({ key, cursors: [0] });
+  const [state, setState] = useState({});
+  const [retry, setRetry] = useState(0);
+  const cursors = navigation.key === key ? navigation.cursors : [0];
+  const before = cursors.at(-1);
+  useEffect(() => {
+    const controller = new AbortController();
+    setNavigation(current => current.key === key ? current : { key, cursors: [0] });
+    setState(current => ({ key, before, status: 'loading', items: [], latest: current.key === key ? current.latest : [] }));
+    request(`${path}?limit=50${before ? `&before=${before}` : ''}`, { signal: controller.signal })
+      .then(result => {
+        if (!controller.signal.aborted) setState(current => ({ key, before, status: 'ready', items: result.items, latest: before ? current.latest : result.items, nextBefore: result.next_before }));
+      })
+      .catch(error => {
+        if (!controller.signal.aborted) setState(current => ({ ...current, status: 'failed', error }));
+      });
+    return () => controller.abort();
+  }, [path, key, before, retry]);
+  const visible = state.key === key && state.before === before
+    ? state
+    : { status: 'loading', items: [], latest: state.key === key ? state.latest : [] };
+  return {
+    ...visible,
+    page: cursors.length,
+    previous: () => setNavigation({ key, cursors: cursors.slice(0, -1) }),
+    next: () => setNavigation({ key, cursors: [...cursors, visible.nextBefore] }),
+    retry: () => setRetry(value => value + 1),
+  };
 }
 
-function managementError(error, t, fallback) {
-  return { message: t[error?.code] || fallback, requestID: error?.requestID || '' };
+function RevisionPagination({ history, t }) {
+  return <>
+    {history.status === 'loading' && <div className="collection-state" role="status" aria-busy="true"><span className="loading-line" /></div>}
+    {history.status === 'failed' && <p><ActionError error={managementError(history.error, t, t.loadFailed)} t={t} /> <button type="button" onClick={history.retry}>{t.retry}</button></p>}
+    <nav className="config-pagination" aria-label={t.revisionPagination}>
+      <button type="button" disabled={history.page === 1 || history.status === 'loading'} onClick={history.previous}>{t.previous}</button>
+      <span>{t.pageNumber.replace('{page}', history.page)}</span>
+      <button type="button" disabled={!history.nextBefore || history.status !== 'ready'} onClick={history.next}>{t.next}</button>
+    </nav>
+  </>;
 }
 
-function ActionError({ error, t }) {
-  if (!error) return null;
-  return <span className="action-error" role="alert"><span>{error.message}</span>{error.requestID && <button type="button" aria-label={`${t.copyRequestID} ${error.requestID}`} onClick={() => navigator.clipboard.writeText(error.requestID).catch(() => {})}><span>{t.requestID}</span><code>{error.requestID}</code></button>}</span>;
+
+function EnvironmentSelect({ label, value, onChange, name, required = false, scope = '', includeArchived = false, emptyLabel, t }) {
+  const [search, setSearch] = useState('');
+  const collection = useInventory(`/v1/environments?include_archived=${includeArchived}&q=${encodeURIComponent(search)}${scope}`);
+  return <div className="environment-select">
+    <label><span>{label}</span><select aria-label={label} name={name} required={required} value={value} onChange={event => onChange(event.target.value)}>
+      <option value="">{emptyLabel || t.environment}</option>
+      {value && !collection.items.some(item => item.key === value) && <option value={value}>{value}</option>}
+      {collection.items.map(item => <option key={item.key} value={item.key}>{item.display_name} · {item.key}</option>)}
+    </select></label>
+    <input type="search" aria-label={`${label} · ${t.search}`} placeholder={t.search} value={search} onChange={event => setSearch(event.target.value)} />
+    <InventoryPagination collection={collection} t={t} hideSinglePage />
+  </div>;
+}
+
+function EnvironmentChoices({ label, scope = '', checked, onChange, t }) {
+  const [search, setSearch] = useState('');
+  const collection = useInventory(`/v1/environments?include_archived=true&q=${encodeURIComponent(search)}${scope}`);
+  return <fieldset className="vault-environment-picker"><legend>{label}</legend>
+    <input type="search" aria-label={`${label} · ${t.search}`} placeholder={t.search} value={search} onChange={event => setSearch(event.target.value)} />
+    <div className="choice-grid">{collection.items.map(environment => <label className={environment.archived ? 'choice-disabled' : ''} key={environment.key}>
+      <input type="checkbox" checked={checked(environment)} disabled={environment.archived && !checked(environment)} aria-label={`${label} ${environment.display_name} ${environment.key}`} onChange={event => onChange(environment.key, event.target.checked)} />
+      <span>{environment.display_name}<code>{environment.key}</code>{environment.archived && <small>{t.statusArchived}</small>}</span>
+    </label>)}</div>
+    {collection.status === 'loading' && <span className="loading-line" role="status" aria-busy="true" />}
+    {collection.status === 'ready' && !collection.items.length && <p>{t.noResources}</p>}
+    <InventoryPagination collection={collection} t={t} hideSinglePage />
+  </fieldset>;
 }
 
 function useUnsavedChanges(dirty, message) {
@@ -917,9 +961,9 @@ function Shell({ principal, language, setLanguage, theme, setTheme, t }) {
   const visibleNavigation = principal.role === 'admin' ? navigation : navigation.filter(([key]) => key !== 'notifications' && key !== 'administration');
   useEffect(() => {
     let live = true;
-    Promise.all([request('/v1/environments'), request('/v1/configs'), request('/v1/vault-items')])
-      .then(([environments, configs, vault]) => live && setInventory({
-        status: 'ready', environments: environments.items, configs: configs.items, vault: vault.items,
+    Promise.all([request('/v1/environments?limit=1'), request('/v1/configs?limit=1'), request('/v1/vault-items?limit=1'), request('/v1/configs?unbound=true&limit=6')])
+      .then(([environments, configs, vault, gaps]) => live && setInventory({
+        status: 'ready', environments: environments.total, configs: configs.total, vault: vault.total, gaps,
       }))
       .catch(() => live && setInventory({ status: 'failed' }));
     return () => { live = false; };
@@ -935,15 +979,23 @@ function Shell({ principal, language, setLanguage, theme, setTheme, t }) {
     window.addEventListener('keydown', shortcut);
     return () => { window.removeEventListener('configra:inventory-changed', refresh); window.removeEventListener('keydown', shortcut); };
   }, []);
-  const searchResults = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    if (!needle || inventory.status !== 'ready') return [];
-    return [
-      ...inventory.configs.map(item => ({ type: 'CFG', key: item.key, name: item.display_name, href: `#/configs/${item.key}` })),
-      ...inventory.vault.map(item => ({ type: 'VLT', key: `${item.namespace_key}.${item.key}`, name: item.display_name, href: `#/vault/${item.namespace_key}/${item.key}` })),
-      ...inventory.environments.map(item => ({ type: 'ENV', key: item.key, name: item.display_name, href: `#/environments/${item.key}` })),
-    ].filter(item => item.key.toLowerCase().includes(needle) || item.name.toLowerCase().includes(needle)).slice(0, 7);
-  }, [inventory, search]);
+  const [searchState, setSearchState] = useState({ status: 'idle', items: [] });
+  useEffect(() => {
+    const controller = new AbortController();
+    const needle = search.trim();
+    setSearchState({ status: needle ? 'loading' : 'idle', items: [] });
+    if (!needle) return () => controller.abort();
+    const timer = window.setTimeout(() => Promise.all(['configs', 'vault-items', 'environments'].map(resource =>
+      request(`/v1/${resource}?q=${encodeURIComponent(needle)}&limit=7`, { signal: controller.signal })))
+      .then(([configs, vault, environments]) => !controller.signal.aborted && setSearchState({ status: 'ready', items: [
+        ...configs.items.map(item => ({ type: 'CFG', key: item.key, name: item.display_name, href: `#/configs/${item.key}` })),
+        ...vault.items.map(item => ({ type: 'VLT', key: `${item.namespace_key}.${item.key}`, name: item.display_name, href: `#/vault/${item.namespace_key}/${item.key}` })),
+        ...environments.items.map(item => ({ type: 'ENV', key: item.key, name: item.display_name, href: `#/environments/${item.key}` })),
+      ] }))
+      .catch(error => !controller.signal.aborted && setSearchState({ status: 'failed', items: [], error })), 200);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [search, inventoryRevision]);
+  const searchResults = searchState.items;
 
   return (
     <div className="app-shell">
@@ -977,7 +1029,9 @@ function Shell({ principal, language, setLanguage, theme, setTheme, t }) {
             <kbd className="search-shortcut">⌘ K</kbd>
             {search.trim() && <div className="global-search-results" role="listbox" id="global-search-options">
               {searchResults.map((item, index) => <a role="option" aria-selected={activeResult === index} id={`global-search-${index}`} key={`${item.type}-${item.key}`} href={item.href} onClick={() => setSearch('')}><span>{item.type}</span><strong title={item.name}>{item.name}</strong><code title={item.key}>{item.key}</code></a>)}
-              {searchResults.length === 0 && <p>{t.noResources}</p>}
+              {searchState.status === 'loading' && <p role="status">…</p>}
+              {searchState.status === 'failed' && <ActionError error={managementError(searchState.error, t, t.loadFailed)} t={t} />}
+              {searchState.status === 'ready' && searchResults.length === 0 && <p>{t.noResources}</p>}
             </div>}
           </div>
           <div className="topbar-actions">
@@ -991,12 +1045,12 @@ function Shell({ principal, language, setLanguage, theme, setTheme, t }) {
           ? <EnvironmentDetail environmentKey={currentRoute.segments[1]} t={t} />
           : route === 'environments' && <Environments principal={principal} t={t} />}
         {route === 'configs' && currentRoute.segments.length >= 3
-          ? <div className="resource-explorer"><ResourceRail inventory={inventory} section="configs" selected={currentRoute.segments[1]} t={t} /><div className="resource-explorer-detail"><ConfigDetail key={`${currentRoute.segments[1]}/${currentRoute.segments[2]}`} principal={principal} configKey={currentRoute.segments[1]} environmentKey={currentRoute.segments[2]} inventory={inventory} t={t} /></div></div>
+          ? <div className="resource-explorer"><ResourceRail refresh={inventoryRevision} section="configs" selected={currentRoute.segments[1]} t={t} /><div className="resource-explorer-detail"><ConfigDetail key={`${currentRoute.segments[1]}/${currentRoute.segments[2]}`} principal={principal} configKey={currentRoute.segments[1]} environmentKey={currentRoute.segments[2]} t={t} /></div></div>
           : route === 'configs' && currentRoute.segments.length === 2
             ? <ConfigHome configKey={currentRoute.segments[1]} t={t} />
             : route === 'configs' && <Configs principal={principal} filters={currentRoute.query} t={t} />}
         {route === 'vault' && currentRoute.segments.length >= 3
-          ? <div className="resource-explorer"><ResourceRail inventory={inventory} section="vault" selected={`${currentRoute.segments[1]}/${currentRoute.segments[2]}`} t={t} /><div className="resource-explorer-detail"><VaultDetail key={`${currentRoute.segments[1]}/${currentRoute.segments[2]}`} principal={principal} namespaceKey={currentRoute.segments[1]} itemKey={currentRoute.segments[2]} t={t} /></div></div>
+          ? <div className="resource-explorer"><ResourceRail refresh={inventoryRevision} section="vault" selected={`${currentRoute.segments[1]}/${currentRoute.segments[2]}`} t={t} /><div className="resource-explorer-detail"><VaultDetail key={`${currentRoute.segments[1]}/${currentRoute.segments[2]}`} principal={principal} namespaceKey={currentRoute.segments[1]} itemKey={currentRoute.segments[2]} t={t} /></div></div>
           : route === 'vault' && <VaultItems principal={principal} filters={currentRoute.query} t={t} />}
         {route === 'administration' && principal.role === 'admin' && <Administration t={t} />}
         {route === 'notifications' && principal.role === 'admin' && <Notifications t={t} />}
@@ -1009,19 +1063,20 @@ function Shell({ principal, language, setLanguage, theme, setTheme, t }) {
   );
 }
 
-function ResourceRail({ inventory, section, selected, t }) {
+function ResourceRail({ section, selected, refresh, t }) {
   const [query, setQuery] = useState('');
-  const items = inventory.status === 'ready' ? inventory[section] || [] : [];
-  const visible = items.filter(item => `${item.display_name} ${item.key} ${item.namespace_key || ''}`.toLowerCase().includes(query.toLowerCase()));
+  const collection = useInventory(`/v1/${section === 'vault' ? 'vault-items' : section}?q=${encodeURIComponent(query)}`, refresh);
+  const visible = collection.items;
   return <aside className="resource-rail" aria-label={`${t[section]} ${t.search}`}>
-    <div className="resource-rail-heading"><a href={`#/${section}`}>{t[section]}</a><span>{items.length}</span></div>
+    <div className="resource-rail-heading"><a href={`#/${section}`}>{t[section]}</a><span>{collection.status === 'ready' ? collection.total : '…'}</span></div>
     <label><span className="visually-hidden">{t[section]} {t.search}</span><input type="search" placeholder={t.locale.startsWith('zh') ? '筛选条目…' : 'Filter items…'} value={query} onChange={event => setQuery(event.target.value)} /></label>
     <div className="resource-rail-items">{visible.map(item => {
       const key = section === 'vault' ? `${item.namespace_key}/${item.key}` : item.key;
       return <a className={key === selected ? 'selected' : ''} aria-current={key === selected ? 'true' : undefined} href={`#/${section}/${key}`} key={key}>
         <span className="resource-symbol" data-kind={section}><Icon name={section} /></span><span><strong title={item.display_name}>{item.display_name}</strong><code>{section === 'vault' ? `${item.namespace_key}.` : ''}{item.key}</code></span>
       </a>;
-    })}{visible.length === 0 && <p className="rail-empty">{inventory.status === 'loading' ? '…' : t.noResources}</p>}</div>
+    })}{visible.length === 0 && collection.status !== 'failed' && <p className="rail-empty">{collection.status === 'loading' ? '…' : t.noResources}</p>}</div>
+    <InventoryPagination collection={collection} t={t} hideSinglePage />
     <a className="resource-rail-footer" href={`#/${section}`}>← {t[section]}</a>
   </aside>;
 }
@@ -1048,9 +1103,7 @@ function Overview({ inventory, t }) {
       return true;
     }).slice(0, 6);
   }, [operations.audits]);
-  const gaps = inventory.status === 'ready'
-    ? inventory.configs.filter(item => !(item.environments || []).some(environment => !environment.archived))
-    : [];
+  const gaps = inventory.status === 'ready' ? inventory.gaps.items : [];
 
   return (
     <div className="page overview-page">
@@ -1081,11 +1134,12 @@ function Overview({ inventory, t }) {
         <aside className="overview-side">
           <section className="panel overview-inventory">
             <div className="section-heading"><h2>{t.inventory}</h2></div>
-            <nav aria-label={t.inventory}><a href="#/environments"><span>{t.environments}</span><strong>{inventory.status === 'ready' ? inventory.environments.length : '—'}</strong></a><a href="#/configs"><span>{t.configs}</span><strong>{inventory.status === 'ready' ? inventory.configs.length : '—'}</strong></a><a href="#/vault"><span>{t.vault}</span><strong>{inventory.status === 'ready' ? inventory.vault.length : '—'}</strong></a></nav>
+            <nav aria-label={t.inventory}><a href="#/environments"><span>{t.environments}</span><strong>{inventory.status === 'ready' ? inventory.environments : '—'}</strong></a><a href="#/configs"><span>{t.configs}</span><strong>{inventory.status === 'ready' ? inventory.configs : '—'}</strong></a><a href="#/vault"><span>{t.vault}</span><strong>{inventory.status === 'ready' ? inventory.vault : '—'}</strong></a></nav>
           </section>
           <section className="panel overview-gaps">
-            <div className="section-heading"><h2>{t.configurationGaps}</h2><span>{gaps.length}</span></div>
-            {gaps.length === 0 ? <p>{t.noConfigurationGaps}</p> : gaps.slice(0, 6).map(item => <a href={`#/configs/${item.key}`} key={item.key}><code>{item.key}</code><span>{t.noActiveConfigContext}</span></a>)}
+            <div className="section-heading"><h2>{t.configurationGaps}</h2><span>{inventory.status === 'ready' ? inventory.gaps.total : '—'}</span></div>
+            {inventory.status !== 'ready' ? <p>{inventory.status === 'failed' ? t.loadFailed : '…'}</p> : gaps.length === 0 ? <p>{t.noConfigurationGaps}</p> : gaps.map(item => <a href={`#/configs/${item.key}`} key={item.key}><code>{item.key}</code><span>{t.noActiveConfigContext}</span></a>)}
+            {inventory.status === 'ready' && inventory.gaps.total > gaps.length && <a href="#/configs?unbound=true&status=active">{t.configs} →</a>}
           </section>
         </aside>
       </div>
@@ -1094,19 +1148,13 @@ function Overview({ inventory, t }) {
 }
 
 function Environments({ principal, t }) {
-  const [state, setState] = useState({ status: 'loading', items: [] });
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState('');
   const [confirming, setConfirming] = useState('');
   const [refresh, setRefresh] = useState(0);
   const [mutationError, setMutationError] = useState('');
-  useEffect(() => {
-    let live = true;
-    request('/v1/environments?include_archived=true')
-      .then(result => live && setState({ status: 'ready', items: result.items }))
-      .catch(() => live && setState({ status: 'failed', items: [] }));
-    return () => { live = false; };
-  }, [refresh]);
+  const [search, setSearch] = useState('');
+  const state = useInventory(`/v1/environments?include_archived=true&q=${encodeURIComponent(search)}`, refresh);
 
   const create = async event => {
     event.preventDefault();
@@ -1152,6 +1200,7 @@ function Environments({ principal, t }) {
   return (
     <ResourcePage eyebrow="ENV / peer contexts" title={t.environments} body={t.environmentBody}
       action={principal.role === 'admin' && <button className="primary-action compact-action" type="button" onClick={() => setCreating(value => !value)}>{t.newEnvironment}</button>}>
+      <label>{t.search}<input type="search" value={search} onChange={event => setSearch(event.target.value)} /></label>
       {creating && (
         <form className="create-panel" onSubmit={create}>
           <label>{t.resourceKey}<input name="key" required maxLength="63" pattern="[a-z][a-z0-9_-]{0,62}" autoComplete="off" /><small>{t.resourceKeyHint}</small></label>
@@ -1180,58 +1229,40 @@ function Environments({ principal, t }) {
           </tr>)}</tbody>
         </table></div>
       </CollectionState>}
+      <InventoryPagination collection={state} t={t} />
       {!creating && mutationError && <p className="inline-error" role="alert">{mutationError}</p>}
     </ResourcePage>
   );
 }
 
 function EnvironmentDetail({ environmentKey, t }) {
-  const [state, setState] = useState({ status: 'loading' });
-  useEffect(() => {
-    let live = true;
-    Promise.all([
-      request('/v1/environments?include_archived=true'),
-      request('/v1/configs?include_archived=true'),
-      request('/v1/vault-items?include_archived=true'),
-    ])
-      .then(([environments, configs, vault]) => live && setState({
-        status: 'ready',
-        environment: environments.items.find(item => item.key === environmentKey),
-        configs: configs.items,
-        vault: vault.items,
-      }))
-      .catch(() => live && setState({ status: 'failed' }));
-    return () => { live = false; };
-  }, [environmentKey]);
+  const state = useInventory(`/v1/environments?include_archived=true&key=${encodeURIComponent(environmentKey)}`);
+  const configs = useInventory(`/v1/configs?include_archived=true&environment=${encodeURIComponent(environmentKey)}`);
+  const vault = useInventory(`/v1/vault-items?include_archived=true&environment=${encodeURIComponent(environmentKey)}`);
 
   if (state.status === 'loading') return <div className="page collection-state"><span className="loading-line" /></div>;
-  if (state.status === 'failed') return <div className="page collection-state"><p>{t.loadFailed}</p></div>;
-  if (!state.environment) return <Pending route={`environments/${environmentKey}`} t={t} />;
-
-  const configs = state.configs.flatMap(config => {
-    const context = config.environments.find(environment => environment.key === environmentKey);
-    return context ? [{ ...config, context }] : [];
-  });
-  const vault = state.vault.filter(item => (item.environment_keys || []).includes(environmentKey));
-  const environment = state.environment;
+  if (state.status === 'failed') return <InventoryPagination collection={state} t={t} />;
+  if (!state.items.length) return <Pending route={`environments/${environmentKey}`} t={t} />;
+  const environment = state.items[0];
   return <ResourcePage className="environment-detail-page" eyebrow={`ENV / ${environment.key}`} title={environment.display_name} body={t.environmentDetailBody}
     action={<span className={environment.archived ? 'status archived' : 'status active'}>{environment.archived ? t.statusArchived : t.statusActive}</span>}>
-    <dl className="environment-summary"><div><dt>{t.resourceKey}</dt><dd><code>{environment.key}</code></dd></div><div><dt>{t.configs}</dt><dd>{configs.length}</dd></div><div><dt>{t.vault}</dt><dd>{vault.length}</dd></div><div><dt>{t.updated}</dt><dd><time>{formatDate(environment.updated_at, t.locale)}</time></dd></div></dl>
+    <dl className="environment-summary"><div><dt>{t.resourceKey}</dt><dd><code>{environment.key}</code></dd></div><div><dt>{t.configs}</dt><dd>{configs.status === 'ready' ? configs.total : '—'}</dd></div><div><dt>{t.vault}</dt><dd>{vault.status === 'ready' ? vault.total : '—'}</dd></div><div><dt>{t.updated}</dt><dd><time>{formatDate(environment.updated_at, t.locale)}</time></dd></div></dl>
     <div className="environment-resource-columns">
       <section className="panel environment-resource-section">
         <div className="section-heading"><h2>{t.configsInEnvironment}</h2><a href={`#/configs?environment=${encodeURIComponent(environment.key)}`} aria-label={t.viewAllConfigsIn.replace('{environment}', environment.display_name)}>{t.viewAllConfigsIn.replace('{environment}', environment.display_name)}</a></div>
-        {configs.length === 0 ? <p className="environment-empty">{t.noConfigsInEnvironment}</p> : <div className="table-frame"><table><thead><tr><th>{t.configIdentity}</th><th>{t.revision}</th><th>{t.status}</th></tr></thead><tbody>{configs.map(config => <tr key={config.key}><td><a href={`#/configs/${config.key}/${environment.key}`} aria-label={`${config.display_name} v${config.context.revision}`}><code>{config.key}</code><strong title={config.display_name}>{config.display_name}</strong></a></td><td><strong>v{config.context.revision}</strong></td><td><span className={config.archived || config.context.archived ? 'status archived' : 'status active'}>{config.archived || config.context.archived ? t.statusArchived : t.statusActive}</span></td></tr>)}</tbody></table></div>}
+        <CollectionState state={configs} t={t}><div className="table-frame"><table><thead><tr><th>{t.configIdentity}</th><th>{t.revision}</th><th>{t.status}</th></tr></thead><tbody>{configs.items.map(config => <tr key={config.key}><td><a href={`#/configs/${config.key}/${environment.key}`} aria-label={`${config.display_name} v${config.revision}`}><code>{config.key}</code><strong title={config.display_name}>{config.display_name}</strong></a></td><td><strong>v{config.revision}</strong></td><td><span className={config.archived || environment.archived ? 'status archived' : 'status active'}>{config.archived || environment.archived ? t.statusArchived : t.statusActive}</span></td></tr>)}</tbody></table></div></CollectionState>
+        <InventoryPagination collection={configs} t={t} />
       </section>
       <section className="panel environment-resource-section">
         <div className="section-heading"><h2>{t.vaultInEnvironment}</h2><a href={`#/vault?environment=${encodeURIComponent(environment.key)}`} aria-label={t.viewAllVaultIn.replace('{environment}', environment.display_name)}>{t.viewAllVaultIn.replace('{environment}', environment.display_name)}</a></div>
-        {vault.length === 0 ? <p className="environment-empty">{t.noVaultInEnvironment}</p> : <div className="table-frame"><table><thead><tr><th>{t.resource}</th><th>{t.revision}</th><th>{t.status}</th></tr></thead><tbody>{vault.map(item => <tr key={`${item.namespace_key}.${item.key}`}><td><a href={`#/vault/${item.namespace_key}/${item.key}`} aria-label={`${item.namespace_key}.${item.key} v${item.revision}`}><code>{item.namespace_key}.{item.key}</code><strong title={item.display_name}>{item.display_name}</strong></a></td><td><strong>v{item.revision}</strong></td><td><span className={item.archived ? 'status archived' : 'status active'}>{item.archived ? t.statusArchived : t.statusActive}</span></td></tr>)}</tbody></table></div>}
+        <CollectionState state={vault} t={t}><div className="table-frame"><table><thead><tr><th>{t.resource}</th><th>{t.revision}</th><th>{t.status}</th></tr></thead><tbody>{vault.items.map(item => <tr key={`${item.namespace_key}.${item.key}`}><td><a href={`#/vault/${item.namespace_key}/${item.key}`} aria-label={`${item.namespace_key}.${item.key} v${item.revision}`}><code>{item.namespace_key}.{item.key}</code><strong title={item.display_name}>{item.display_name}</strong></a></td><td><strong>v{item.revision}</strong></td><td><span className={item.archived ? 'status archived' : 'status active'}>{item.archived ? t.statusArchived : t.statusActive}</span></td></tr>)}</tbody></table></div></CollectionState>
+        <InventoryPagination collection={vault} t={t} />
       </section>
     </div>
   </ResourcePage>;
 }
 
 function Configs({ principal, filters = new URLSearchParams(), t }) {
-  const [state, setState] = useState({ status: 'loading', items: [], environments: [] });
   const [creating, setCreating] = useState(false);
   const [confirming, setConfirming] = useState('');
   const [error, setError] = useState('');
@@ -1240,25 +1271,17 @@ function Configs({ principal, filters = new URLSearchParams(), t }) {
   const [query, setQuery] = useState(() => filters.get('q') || '');
   const [statusFilter, setStatusFilter] = useState(() => filters.get('status') || 'all');
   const [environmentFilter, setEnvironmentFilter] = useState(() => filters.get('environment') || '');
-  const [page, setPage] = useState(() => Math.max(1, Number(filters.get('page')) || 1));
+  const [initialPage, setInitialPage] = useState(() => Math.max(1, Number.parseInt(filters.get('page'), 10) || 1));
   const [createFormat, setCreateFormat] = useState('yaml');
   const [createContent, setCreateContent] = useState('');
-  useEffect(() => {
-    let live = true;
-    Promise.all([
-      request('/v1/configs?include_archived=true'),
-      principal.role === 'admin' ? request('/v1/environments') : Promise.resolve({ items: [] }),
-    ])
-      .then(([configs, environments]) => live && setState({ status: 'ready', items: configs.items, environments: environments.items }))
-      .catch(() => live && setState({ status: 'failed', items: [], environments: [] }));
-    return () => { live = false; };
-  }, [principal.role, refresh]);
+  const [createEnvironment, setCreateEnvironment] = useState('');
+  const state = useInventory(`/v1/configs?${new URLSearchParams({ status: statusFilter, environment: environmentFilter, q: query, unbound: String(filters.get('unbound') === 'true') })}`, refresh, initialPage);
   const filterKey = filters.toString();
   useEffect(() => {
     setQuery(filters.get('q') || '');
     setStatusFilter(filters.get('status') || 'all');
     setEnvironmentFilter(filters.get('environment') || '');
-    setPage(Math.max(1, Number(filters.get('page')) || 1));
+    setInitialPage(Math.max(1, Number.parseInt(filters.get('page'), 10) || 1));
   }, [filterKey]);
   const create = async event => {
     event.preventDefault();
@@ -1288,45 +1311,29 @@ function Configs({ principal, filters = new URLSearchParams(), t }) {
       setError(t.operationFailed);
     }
   };
-  const filteredItems = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return state.items.filter(config => {
-      if (statusFilter === 'active' && config.archived) return false;
-      if (statusFilter === 'archived' && !config.archived) return false;
-      if (environmentFilter && !config.environments.some(environment => environment.key === environmentFilter)) return false;
-      return !needle || config.key.toLowerCase().includes(needle) || config.display_name.toLowerCase().includes(needle)
-        || config.environments.some(environment => environment.key.toLowerCase().includes(needle));
-    });
-  }, [environmentFilter, query, state.items, statusFilter]);
-  const environmentKeys = [...new Set(state.items.flatMap(config => config.environments.map(environment => environment.key)))].sort();
-  const pageSize = 50;
-  const totalPages = Math.max(1, Math.ceil(filteredItems.length / pageSize));
-  const currentPage = Math.min(page, totalPages);
-  const firstIndex = (currentPage - 1) * pageSize;
-  const pageItems = filteredItems.slice(firstIndex, firstIndex + pageSize);
   return (
     <ResourcePage className="config-index-page" eyebrow="CFG / canonical YAML + JSON" title={t.configs} body={t.configBody}
       action={principal.role === 'admin' && <button className="primary-action compact-action" type="button" onClick={() => { setCreating(value => !value); setCreateFormat('yaml'); setCreateContent(''); setWarnings([]); }}>{t.newConfig}</button>}>
       {creating && <form className="config-create-form" onSubmit={create}>
-        <label>{t.environment}<select name="environment" required>{state.environments.map(environment => <option key={environment.key} value={environment.key}>{environment.display_name} · {environment.key}</option>)}</select></label>
+        <EnvironmentSelect label={t.environment} name="environment" required value={createEnvironment} onChange={setCreateEnvironment} t={t} />
         <label>{t.resourceKey}<input name="key" required maxLength="63" pattern="[a-z][a-z0-9_-]{0,62}" autoComplete="off" /></label>
         <label>{t.displayName}<input name="display_name" required maxLength="255" autoComplete="off" /></label>
         <label>{t.format}<select name="format" value={createFormat} onChange={event => setCreateFormat(event.target.value)}><option value="yaml">YAML</option><option value="json">JSON</option></select></label>
         <div className="form-source"><span>{t.configurationSource}</span><ConfigCodeEditor label={t.configurationSource} value={createContent} format={createFormat} readOnly={false} onChange={setCreateContent} /></div>
         <div className="form-actions"><span className="inline-error" role="alert">{error}</span><button className="primary-action compact-action" type="submit" disabled={!createContent.trim()}>{t.createConfig}</button></div>
       </form>}
-      {(!creating || state.items.length > 0) && <CollectionState state={state} t={t}>
-        <div className="config-index">
+      <div className="config-index">
+          {filters.get('unbound') === 'true' && <p>{t.noActiveConfigContext} · <a href="#/configs">{t.configs}</a></p>}
           <div className="config-index-toolbar">
-            <label><span>{t.searchConfigs}</span><input type="search" value={query} placeholder={t.searchConfigsPlaceholder} onChange={event => { setQuery(event.target.value); setPage(1); replaceHashQuery({ q: event.target.value, page: 1 }); }} /></label>
-            <label><span>{t.environment}</span><select aria-label={t.environmentFilter} value={environmentFilter} onChange={event => { setEnvironmentFilter(event.target.value); setPage(1); replaceHashQuery({ environment: event.target.value, page: 1 }); }}><option value="">{t.allEnvironments}</option>{environmentKeys.map(environment => <option key={environment} value={environment}>{environment}</option>)}</select></label>
-            <label><span>{t.status}</span><select value={statusFilter} onChange={event => { setStatusFilter(event.target.value); setPage(1); replaceHashQuery({ status: event.target.value, page: 1 }); }}><option value="all">{t.allStatuses}</option><option value="active">{t.statusActive}</option><option value="archived">{t.statusArchived}</option></select></label>
-            <output>{filteredItems.length} {t.configs}</output>
+            <label><span>{t.searchConfigs}</span><input type="search" value={query} placeholder={t.searchConfigsPlaceholder} onChange={event => { setQuery(event.target.value); setInitialPage(1); replaceHashQuery({ q: event.target.value, page: 1 }); }} /></label>
+            <EnvironmentSelect label={t.environmentFilter} emptyLabel={t.allEnvironments} value={environmentFilter} includeArchived onChange={value => { setEnvironmentFilter(value); setInitialPage(1); replaceHashQuery({ environment: value, page: 1 }); }} t={t} />
+            <label><span>{t.status}</span><select value={statusFilter} onChange={event => { setStatusFilter(event.target.value); setInitialPage(1); replaceHashQuery({ status: event.target.value, page: 1 }); }}><option value="all">{t.allStatuses}</option><option value="active">{t.statusActive}</option><option value="archived">{t.statusArchived}</option></select></label>
+            <output>{state.status === 'ready' ? state.total : '…'} {t.configs}</output>
           </div>
-          {pageItems.length === 0 ? <p className="config-index-empty">{t.noMatchingConfigs}</p> : <div className="table-frame config-index-frame">
+          <CollectionState state={state} t={t}><div className="table-frame config-index-frame">
             <table className="config-index-table">
               <thead><tr><th>{t.configIdentity}</th><th>{t.environmentRevisions}</th><th>{t.updated}</th><th>{t.status}</th>{principal.role === 'admin' && <th />}</tr></thead>
-              <tbody>{pageItems.map(config => (
+              <tbody>{state.items.map(config => (
                 <tr key={config.key}>
                   <td><a className="config-resource-link" href={`#/configs/${config.key}`} aria-label={`${t.openConfig} ${config.display_name}`}><code title={config.key}>{config.key}</code><strong title={config.display_name}>{config.display_name}</strong></a></td>
                   <td><div className="environment-links config-environment-links">{config.environments.slice(0, 3).map(environment => {
@@ -1335,7 +1342,7 @@ function Configs({ principal, filters = new URLSearchParams(), t }) {
                     return config.archived || environment.archived
                       ? <span key={environment.key} aria-label={label}>{identity}</span>
                       : <a key={environment.key} href={`#/configs/${config.key}/${environment.key}`} aria-label={label}>{identity}</a>;
-                  })}{config.environments.length > 3 && <span aria-label={`${config.environments.length - 3} ${t.moreContexts}`}>+{config.environments.length - 3}</span>}</div></td>
+                  })}{config.environment_count > config.environments.length && <a href={`#/configs/${config.key}`} aria-label={`${config.environment_count - config.environments.length} ${t.moreContexts}`}>+{config.environment_count - config.environments.length}</a>}</div></td>
                   <td><time>{formatDate(config.updated_at, t.locale)}</time></td>
                   <td><span className={config.archived ? 'status archived' : 'status active'}>{config.archived ? t.statusArchived : t.statusActive}</span></td>
                   {principal.role === 'admin' && <td>{config.archived
@@ -1346,13 +1353,9 @@ function Configs({ principal, filters = new URLSearchParams(), t }) {
                 </tr>
               ))}</tbody>
             </table>
-          </div>}
-          <nav className="config-pagination" aria-label={t.pagination}>
-            <span>{filteredItems.length === 0 ? 0 : firstIndex + 1}–{Math.min(firstIndex + pageSize, filteredItems.length)} / {filteredItems.length}</span>
-            <div><button type="button" disabled={currentPage === 1} onClick={() => { setPage(currentPage - 1); replaceHashQuery({ page: currentPage - 1 }); }}>{t.previous}</button><code>{currentPage} / {totalPages}</code><button type="button" disabled={currentPage === totalPages} onClick={() => { setPage(currentPage + 1); replaceHashQuery({ page: currentPage + 1 }); }}>{t.next}</button></div>
-          </nav>
+          </div></CollectionState>
+          <InventoryPagination collection={state} t={t} onPageChange={page => replaceHashQuery({ page })} />
         </div>
-      </CollectionState>}
       {warnings.length > 0 && <div className="config-warning-list" role="status"><ConfigWarningLines warnings={warnings} t={t} /></div>}
       {!creating && error && <p className="inline-error" role="alert">{error}</p>}
     </ResourcePage>
@@ -1360,23 +1363,13 @@ function Configs({ principal, filters = new URLSearchParams(), t }) {
 }
 
 function ConfigHome({ configKey, t }) {
-  const [state, setState] = useState({ status: 'loading' });
-  useEffect(() => {
-    let live = true;
-    Promise.all([request('/v1/configs?include_archived=true'), request('/v1/environments?include_archived=true')])
-      .then(([configs, environments]) => {
-        if (!live) return;
-        const item = configs.items.find(candidate => candidate.key === configKey);
-        const environmentByKey = new Map(environments.items.map(environment => [environment.key, environment]));
-        setState({ status: item ? 'ready' : 'not-found', item, environmentByKey });
-      })
-      .catch(() => live && setState({ status: 'failed' }));
-    return () => { live = false; };
-  }, [configKey]);
+  const state = useInventory(`/v1/configs?include_archived=true&key=${encodeURIComponent(configKey)}`);
+  const [search, setSearch] = useState('');
+  const environments = useInventory(`/v1/environments?include_archived=true&config=${encodeURIComponent(configKey)}&q=${encodeURIComponent(search)}`);
 
-  if (state.status === 'not-found') return <Pending route={`configs/${configKey}`} t={t} />;
-  if (state.status !== 'ready') return <CollectionState state={{ status: state.status, items: [] }} t={t} />;
-  const { item, environmentByKey } = state;
+  if (state.status !== 'ready') return <><CollectionState state={state} t={t} /><InventoryPagination collection={state} t={t} /></>;
+  if (!state.items.length) return <Pending route={`configs/${configKey}`} t={t} />;
+  const item = state.items[0];
   return (
     <div className="page config-home">
       <div className="resource-heading config-home-heading">
@@ -1389,17 +1382,17 @@ function ConfigHome({ configKey, t }) {
       </div>
       <div className="config-home-summary">
         <span><small>{t.configIdentity}</small><code>{item.key}</code></span>
-        <span><small>{t.environments}</small><strong>{item.environments.length}</strong></span>
+        <span><small>{t.environments}</small><strong>{item.environment_count}</strong></span>
         <span><small>{t.updated}</small><time>{formatDate(item.updated_at, t.locale)}</time></span>
       </div>
       <section className="panel config-context-section" aria-labelledby="config-context-title">
         <div className="section-heading"><h2 id="config-context-title">{t.configContexts}</h2><span>{t.configContextHint}</span></div>
-        {item.environments.length === 0 ? <p className="config-context-empty">{t.noConfigContexts}</p> : <div className="table-frame config-context-table"><table>
+        <label>{t.search}<input type="search" value={search} onChange={event => setSearch(event.target.value)} /></label>
+        <CollectionState state={environments} t={t}><div className="table-frame config-context-table"><table>
           <thead><tr><th>{t.environment}</th><th>{t.displayName}</th><th>{t.revision}</th><th>{t.status}</th><th /></tr></thead>
-          <tbody>{item.environments.map(environment => {
-            const metadata = environmentByKey.get(environment.key);
-            const displayName = metadata?.display_name || environment.key;
-            const archived = item.archived || environment.archived || metadata?.archived;
+          <tbody>{environments.items.map(environment => {
+            const displayName = environment.display_name;
+            const archived = item.archived || environment.archived;
             const href = `#/configs/${item.key}/${environment.key}`;
             const label = `${displayName} · ${environment.key} · v${environment.revision}${archived ? ` · ${t.statusArchived}` : ''}`;
             return <tr key={environment.key} aria-label={archived ? label : undefined}>
@@ -1410,7 +1403,8 @@ function ConfigHome({ configKey, t }) {
               <td>{!archived && <a className="table-action" href={href}>{t.openContext} →</a>}</td>
             </tr>;
           })}</tbody>
-        </table></div>}
+        </table></div></CollectionState>
+        <InventoryPagination collection={environments} t={t} />
       </section>
     </div>
   );
@@ -1426,13 +1420,13 @@ function emptyVaultValue(type) {
   return type === 'file' ? { file: null } : { text: '' };
 }
 
-function newVaultDraft(environments) {
+function newVaultDraft() {
   const field = { key: '', name: '', type: 'secret', _id: vaultEditorID(), _existing: false };
   return {
     fields: [field],
     variants: [{
       id: vaultEditorID(),
-      environments: environments.slice(0, 1).map(environment => environment.key),
+      environments: [],
       values: { [field._id]: emptyVaultValue(field.type) },
     }],
   };
@@ -1461,12 +1455,6 @@ function serializeVaultDraft(draft) {
   };
 }
 
-function vaultUsageImpacts(draft, usages) {
-  const fields = new Set(draft.fields.map(field => field.key));
-  const environments = new Set(draft.variants.flatMap(variant => variant.environments));
-  return usages.filter(usage => !fields.has(usage.field_key) || !environments.has(usage.environment_key));
-}
-
 function base64ByteLength(value) {
   if (!value) return 0;
   return Math.floor(value.length * 3 / 4) - (value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0);
@@ -1489,20 +1477,13 @@ function validateVaultDraft(draft, t) {
   return new Blob([JSON.stringify(serializeVaultDraft(draft))]).size > 10 * 1024 * 1024 ? t.snapshotIncomplete : '';
 }
 
-function VaultSnapshotEditor({ draft, onChange, environments, namespaceKey, itemKey, t }) {
+function VaultSnapshotEditor({ draft, onChange, namespaceKey, itemKey, t }) {
   const [selected, setSelected] = useState(draft.variants[0]?.id || '');
   const [revealed, setRevealed] = useState({});
   const [fileError, setFileError] = useState('');
   useEffect(() => {
     if (!draft.variants.some(variant => variant.id === selected)) setSelected(draft.variants[0]?.id || '');
   }, [draft.variants, selected]);
-  const environmentOptions = useMemo(() => {
-    const options = new Map(environments.map(environment => [environment.key, environment]));
-    draft.variants.flatMap(variant => variant.environments).forEach(key => {
-      if (!options.has(key)) options.set(key, { key, display_name: key, archived: false });
-    });
-    return [...options.values()];
-  }, [draft.variants, environments]);
   const selectedIndex = draft.variants.findIndex(variant => variant.id === selected);
   const selectedVariant = draft.variants[selectedIndex];
   const copy = text => navigator.clipboard.writeText(text).catch(() => {});
@@ -1597,7 +1578,7 @@ function VaultSnapshotEditor({ draft, onChange, environments, namespaceKey, item
       </aside>
       {selectedVariant && <div className="vault-variant-form">
         <div className="vault-editor-heading"><div><h3>{t.variant} {selectedIndex + 1}</h3><p>{t.environmentMoveHint}</p></div><button className="danger-link" type="button" disabled={draft.variants.length === 1} onClick={() => removeVariant(selectedVariant.id)}>{t.removeVariant}</button></div>
-        <fieldset className="vault-environment-picker"><legend>{t.environmentBinding}</legend><div className="choice-grid">{environmentOptions.map(environment => <label className={environment.archived ? 'choice-disabled' : ''} key={environment.key}><input type="checkbox" checked={selectedVariant.environments.includes(environment.key)} disabled={environment.archived} aria-label={`${t.variant} ${selectedIndex + 1} ${environment.display_name} ${environment.key}`} onChange={event => setEnvironment(environment.key, event.target.checked)} /><span>{environment.display_name}<code>{environment.key}</code></span></label>)}</div></fieldset>
+        <EnvironmentChoices label={`${t.variant} ${selectedIndex + 1}`} checked={environment => selectedVariant.environments.includes(environment.key)} onChange={setEnvironment} t={t} />
         <div className="vault-editor-values"><h4>{t.value}</h4>{draft.fields.map((field, index) => {
           const value = selectedVariant.values[field._id];
           const name = field.name || `${t.fields} ${index + 1}`;
@@ -1616,7 +1597,6 @@ function VaultSnapshotEditor({ draft, onChange, environments, namespaceKey, item
 }
 
 function VaultItems({ principal, filters = new URLSearchParams(), t }) {
-  const [state, setState] = useState({ status: 'loading', items: [], environments: [] });
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState(null);
   const [newNamespaceKey, setNewNamespaceKey] = useState('');
@@ -1627,16 +1607,7 @@ function VaultItems({ principal, filters = new URLSearchParams(), t }) {
   const [confirming, setConfirming] = useState('');
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
-  useEffect(() => {
-    let live = true;
-    Promise.all([
-      request('/v1/vault-items?include_archived=true'),
-      principal.role === 'admin' ? request('/v1/environments') : Promise.resolve({ items: [] }),
-    ])
-      .then(([items, environments]) => live && setState({ status: 'ready', items: items.items, environments: environments.items }))
-      .catch(() => live && setState({ status: 'failed', items: [], environments: [] }));
-    return () => { live = false; };
-  }, [refresh]);
+  const state = useInventory(`/v1/vault-items?${new URLSearchParams({ include_archived: 'true', namespace: namespaceFilter, environment: environmentFilter, q: search })}`, refresh);
   const filterKey = filters.toString();
   useEffect(() => {
     setNamespaceFilter(filters.get('namespace') || '');
@@ -1645,7 +1616,7 @@ function VaultItems({ principal, filters = new URLSearchParams(), t }) {
   }, [filterKey]);
   const toggleCreate = () => {
     if (!creating) {
-      setDraft(newVaultDraft(state.environments));
+      setDraft(newVaultDraft());
       setNewNamespaceKey('');
       setNewItemKey('');
     }
@@ -1681,30 +1652,24 @@ function VaultItems({ principal, filters = new URLSearchParams(), t }) {
       setError(t.operationFailed);
     }
   };
-  const namespaces = [...new Set(state.items.map(item => item.namespace_key))].sort();
-  const environmentKeys = [...new Set(state.items.flatMap(item => item.environment_keys || []))].sort();
-  const needle = search.trim().toLowerCase();
-  const visibleItems = state.items.filter(item => (!namespaceFilter || item.namespace_key === namespaceFilter)
-    && (!environmentFilter || (item.environment_keys || []).includes(environmentFilter))
-    && (!needle || `${item.namespace_key}.${item.key} ${item.display_name}`.toLowerCase().includes(needle)));
   return (
     <ResourcePage eyebrow="VLT / encrypted revisions" title={t.vault} body={t.vaultBody}
       action={principal.role === 'admin' && <button className="primary-action compact-action" type="button" onClick={toggleCreate}>{t.newVaultItem}</button>}>
       {creating && draft && <form className="vault-structured-form" onSubmit={create}>
-        <section className="vault-item-basics"><div className="vault-editor-heading"><h2>{t.itemDetails}</h2></div><div className="vault-item-identity"><label>{t.namespace}<input required list="vault-namespace-options" maxLength="63" pattern="[a-z][a-z0-9_-]{0,62}" autoComplete="off" value={newNamespaceKey} onChange={event => setNewNamespaceKey(event.target.value)} /><small>{t.namespaceHint}</small></label><datalist id="vault-namespace-options">{namespaces.map(namespace => <option key={namespace} value={namespace} />)}</datalist><label>{t.resourceKey}<input required maxLength="63" pattern="[a-z][a-z0-9_-]{0,62}" autoComplete="off" value={newItemKey} onChange={event => setNewItemKey(event.target.value)} /><small>{t.resourceKeyHint}</small></label><label>{t.displayName}<input name="display_name" required maxLength="255" autoComplete="off" /></label></div></section>
-        <VaultSnapshotEditor draft={draft} onChange={setDraft} environments={state.environments} namespaceKey={newNamespaceKey} itemKey={newItemKey} t={t} />
+        <section className="vault-item-basics"><div className="vault-editor-heading"><h2>{t.itemDetails}</h2></div><div className="vault-item-identity"><label>{t.namespace}<input required maxLength="63" pattern="[a-z][a-z0-9_-]{0,62}" autoComplete="off" value={newNamespaceKey} onChange={event => setNewNamespaceKey(event.target.value)} /><small>{t.namespaceHint}</small></label><label>{t.resourceKey}<input required maxLength="63" pattern="[a-z][a-z0-9_-]{0,62}" autoComplete="off" value={newItemKey} onChange={event => setNewItemKey(event.target.value)} /><small>{t.resourceKeyHint}</small></label><label>{t.displayName}<input name="display_name" required maxLength="255" autoComplete="off" /></label></div></section>
+        <VaultSnapshotEditor draft={draft} onChange={setDraft} namespaceKey={newNamespaceKey} itemKey={newItemKey} t={t} />
         <div className="vault-editor-footer"><span className="inline-error" role="alert">{error}</span><div className="row-actions"><button type="button" onClick={toggleCreate}>{t.cancel}</button><button className="primary-action compact-action" type="submit">{t.createVaultItem}</button></div></div>
       </form>}
-      {state.status === 'ready' && state.items.length > 0 && <div className="vault-index-tools">
+      <div className="vault-index-tools">
         <label><span>{t.searchVault}</span><input type="search" aria-label={t.searchVault} placeholder={t.searchVaultPlaceholder} value={search} onChange={event => { setSearch(event.target.value); replaceHashQuery({ q: event.target.value }); }} /></label>
-        <label><span>{t.environment}</span><select aria-label={t.environmentFilter} value={environmentFilter} onChange={event => { setEnvironmentFilter(event.target.value); replaceHashQuery({ environment: event.target.value }); }}><option value="">{t.allEnvironments}</option>{environmentKeys.map(environment => <option key={environment} value={environment}>{environment}</option>)}</select></label>
-        <label><span>{t.namespace}</span><select aria-label={t.namespaceFilter} value={namespaceFilter} onChange={event => { setNamespaceFilter(event.target.value); replaceHashQuery({ namespace: event.target.value }); }}><option value="">{t.allNamespaces}</option>{namespaces.map(namespace => <option key={namespace} value={namespace}>{namespace}</option>)}</select></label>
-      </div>}
+        <EnvironmentSelect label={t.environmentFilter} emptyLabel={t.allEnvironments} value={environmentFilter} includeArchived onChange={value => { setEnvironmentFilter(value); replaceHashQuery({ environment: value }); }} t={t} />
+        <label><span>{t.namespace}</span><input type="search" aria-label={t.namespaceFilter} placeholder={t.allNamespaces} value={namespaceFilter} onChange={event => { setNamespaceFilter(event.target.value); replaceHashQuery({ namespace: event.target.value }); }} /></label>
+      </div>
       {(!creating || state.items.length > 0) && <CollectionState state={state} t={t}>
-        {visibleItems.length === 0 ? <div className="collection-state"><p>{t.noMatchingVaultItems}</p></div> : <div className="table-frame vault-index-table"><table><thead><tr><th>{t.namespace}</th><th>{t.resource}</th><th>{t.displayName}</th><th>{t.boundEnvironments}</th><th>{t.revision}</th><th>{t.updated}</th><th>{t.status}</th>{principal.role === 'admin' && <th />}</tr></thead>
-          <tbody>{visibleItems.map(item => <tr key={`${item.namespace_key}.${item.key}`}>
+        <div className="table-frame vault-index-table"><table><thead><tr><th>{t.namespace}</th><th>{t.resource}</th><th>{t.displayName}</th><th>{t.boundEnvironments}</th><th>{t.revision}</th><th>{t.updated}</th><th>{t.status}</th>{principal.role === 'admin' && <th />}</tr></thead>
+          <tbody>{state.items.map(item => <tr key={`${item.namespace_key}.${item.key}`}>
             <td><code>{item.namespace_key}</code></td><td><a href={`#/vault/${item.namespace_key}/${item.key}`} aria-label={`${item.namespace_key}.${item.key} · ${item.display_name} · v${item.revision}`}><code>{item.key}</code></a></td>
-            <td><strong title={item.display_name}>{item.display_name}</strong></td><td><div className="environment-links">{(item.environment_keys || []).map(environment => <a href={`#/environments/${environment}`} key={environment}><code>{environment}</code></a>)}</div></td><td><strong>v{item.revision}</strong></td><td><time>{formatDate(item.updated_at, t.locale)}</time></td>
+            <td><strong title={item.display_name}>{item.display_name}</strong></td><td><div className="environment-links">{item.environment_keys.map(environment => <a href={`#/environments/${environment}`} key={environment}><code>{environment}</code></a>)}{item.environment_count > item.environment_keys.length && <a href={`#/vault/${item.namespace_key}/${item.key}`}>+{item.environment_count - item.environment_keys.length}</a>}</div></td><td><strong>v{item.revision}</strong></td><td><time>{formatDate(item.updated_at, t.locale)}</time></td>
             <td><span className={item.archived ? 'status archived' : 'status active'}>{item.archived ? t.statusArchived : t.statusActive}</span></td>
             {principal.role === 'admin' && <td>{item.archived
               ? <button type="button" aria-label={`${t.unarchive} ${item.display_name}`} onClick={() => changeLifecycle(item, 'unarchive')}>{t.unarchive}</button>
@@ -1712,8 +1677,9 @@ function VaultItems({ principal, filters = new URLSearchParams(), t }) {
                 ? <button className="danger-link" type="button" aria-label={`${t.confirmArchive} ${item.display_name}`} onClick={() => changeLifecycle(item, 'archive')}>{t.confirmArchive}</button>
                 : <button className="danger-link" type="button" aria-label={`${t.archive} ${item.display_name}`} onClick={() => setConfirming(`${item.namespace_key}.${item.key}`)}>{t.archive}</button>}</td>}
           </tr>)}</tbody>
-        </table></div>}
+        </table></div>
       </CollectionState>}
+      <InventoryPagination collection={state} t={t} />
       {!creating && error && <p className="inline-error" role="alert">{error}</p>}
     </ResourcePage>
   );
@@ -1721,7 +1687,6 @@ function VaultItems({ principal, filters = new URLSearchParams(), t }) {
 
 function VaultDetail({ principal, namespaceKey, itemKey, t }) {
   const [state, setState] = useState({ status: 'loading' });
-  const [editorEnvironments, setEditorEnvironments] = useState([]);
   const [tab, setTab] = useState('fields');
   const [selected, setSelected] = useState('');
   const [viewedRevision, setViewedRevision] = useState(0);
@@ -1732,16 +1697,20 @@ function VaultDetail({ principal, namespaceKey, itemKey, t }) {
   const [notice, setNotice] = useState('');
   const [restoring, setRestoring] = useState(0);
   const [refresh, setRefresh] = useState(0);
+  const history = useRevisionHistory(`/v1/vault-items/${encodeURIComponent(namespaceKey)}/${encodeURIComponent(itemKey)}/revisions`, refresh);
   const [fieldQuery, setFieldQuery] = useState('');
   const [fieldPage, setFieldPage] = useState(0);
+  const basePath = `/v1/vault-items/${encodeURIComponent(namespaceKey)}/${encodeURIComponent(itemKey)}`;
+  const impactBody = editor.status === 'ready' ? JSON.stringify({ fields: editor.draft.fields.map(field => field.key), environments: editor.draft.variants.flatMap(variant => variant.environments) }) : null;
+  const impact = useInventory(impactBody === null ? null : `${basePath}/impact-preview`, refresh, 1, impactBody);
   const editorDirty = editor.status === 'ready' && editor.original !== JSON.stringify({ displayName: editor.displayName, snapshot: serializeVaultDraft(editor.draft) });
   const confirmDiscard = useUnsavedChanges(editorDirty, t.unsavedChanges);
   useEffect(() => {
     let live = true;
-    Promise.all([request(`/v1/vault-items/${encodeURIComponent(namespaceKey)}/${encodeURIComponent(itemKey)}`), request(`/v1/vault-items/${encodeURIComponent(namespaceKey)}/${encodeURIComponent(itemKey)}/revisions`), request(`/v1/vault-items/${encodeURIComponent(namespaceKey)}/${encodeURIComponent(itemKey)}/usages`)])
-      .then(([item, revisions, usages]) => {
+    request(`/v1/vault-items/${encodeURIComponent(namespaceKey)}/${encodeURIComponent(itemKey)}`)
+      .then(item => {
         if (!live) return;
-        setState({ status: 'ready', item, revisions: revisions.items, usages: usages.items || [] });
+        setState({ status: 'ready', item });
         setViewedRevision(item.revision);
         setInspection({ status: 'idle' });
       })
@@ -1757,12 +1726,6 @@ function VaultDetail({ principal, namespaceKey, itemKey, t }) {
       .catch(() => live && setInspection({ status: 'failed', revision: viewedRevision }));
     return () => { live = false; };
   }, [itemKey, namespaceKey, state.status, state.item?.revision, viewedRevision]);
-  useEffect(() => {
-    if (principal.role !== 'admin') return undefined;
-    let live = true;
-    request('/v1/environments?include_archived=true').then(result => live && setEditorEnvironments(result.items)).catch(() => {});
-    return () => { live = false; };
-  }, [principal.role]);
   const readValues = async () => {
     const revision = viewedRevision;
     setValues({ status: 'loading', revision });
@@ -1789,16 +1752,20 @@ function VaultDetail({ principal, namespaceKey, itemKey, t }) {
   };
   const saveItem = async event => {
     event.preventDefault();
+    if (editor.saving || impact.status !== 'ready') return;
     const validationError = validateVaultDraft(editor.draft, t);
     if (validationError) return setEditor(current => ({ ...current, error: { message: validationError, requestID: '' } }));
-    const impacts = vaultUsageImpacts(editor.draft, state.usages);
-    if (impacts.length > 0 && !editor.impactConfirmed) {
-      setEditor(current => ({ ...current, impactConfirmed: true }));
-      return;
-    }
     const snapshot = serializeVaultDraft(editor.draft);
     setEditor(current => ({ ...current, saving: true, error: null }));
     try {
+      // Recheck all references at save time, never infer safety from the visible page.
+      const latest = await request(`${basePath}/impact-preview?limit=1`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: impactBody });
+      if (!Number.isSafeInteger(latest.total) || latest.total < 0 || !Array.isArray(latest.items)) throw new Error('invalid impact response');
+      if (latest.total > 0 && (!editor.impactConfirmed || latest.total !== impact.total)) {
+        setEditor(current => ({ ...current, saving: false, impactConfirmed: true }));
+        impact.retry();
+        return;
+      }
       const result = await request(`/v1/vault-items/${encodeURIComponent(namespaceKey)}/${encodeURIComponent(itemKey)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
@@ -1831,7 +1798,6 @@ function VaultDetail({ principal, namespaceKey, itemKey, t }) {
   if (state.status !== 'ready') return <CollectionState state={{ status: state.status, items: [] }} t={t} />;
   const viewingCurrent = viewedRevision === state.item.revision;
   const viewedItem = viewingCurrent ? state.item : inspection.item;
-  const usageImpacts = editor.status === 'ready' ? vaultUsageImpacts(editor.draft, state.usages) : [];
   const variantID = viewedItem?.snapshot.variants.some(candidate => candidate.id === selected) ? selected : viewedItem?.snapshot.variants[0]?.id;
   const valuesReady = values.status === 'ready' && values.revision === viewedRevision;
   const valuedVariant = valuesReady
@@ -1859,26 +1825,29 @@ function VaultDetail({ principal, namespaceKey, itemKey, t }) {
       {notice && <p className="success-note vault-save-notice" role="status">{notice}</p>}
       {editor.status === 'ready' && <form className="vault-structured-form vault-detail-editor" onSubmit={saveItem}>
         <div className="vault-edit-warning">{t.valueAccessWarning}</div>
+        <fieldset className="vault-save-fields" disabled={editor.saving}>
         <section className="vault-item-basics"><div className="vault-editor-heading"><h2>{t.itemDetails}</h2></div><div className="vault-item-identity"><label>{t.namespace}<input readOnly value={namespaceKey} /><small>{t.namespaceHint}</small></label><label>{t.resourceKey}<input readOnly value={itemKey} /></label><label>{t.displayName}<input required maxLength="255" value={editor.displayName} onChange={event => setEditor(current => ({ ...current, displayName: event.target.value, error: null, impactConfirmed: false }))} autoComplete="off" /></label></div></section>
-        <VaultSnapshotEditor draft={editor.draft} onChange={update => setEditor(current => ({ ...current, draft: typeof update === 'function' ? update(current.draft) : update, error: null, impactConfirmed: false }))} environments={editorEnvironments} namespaceKey={namespaceKey} itemKey={itemKey} t={t} />
-        {usageImpacts.length > 0 && <div className="vault-impact-warning" role="alert"><strong>{t.vaultImpactWarning}</strong>{usageImpacts.map(usage => <a href={`#/configs/${usage.config_key}/${usage.environment_key}`} key={`${usage.field_key}-${usage.environment_key}-${usage.config_key}`}><span>{usage.config_name}</span><code>{usage.environment_key} / {usage.config_key} @ v{usage.config_revision} · {usage.field_key}</code></a>)}</div>}
-        <div className="vault-editor-footer"><ActionError error={editor.error} t={t} /><div className="row-actions"><button type="button" onClick={() => { if (confirmDiscard()) setEditor({ status: 'idle' }); }}>{t.cancel}</button><button className="primary-action compact-action" type="submit" disabled={!editorDirty || editor.saving}>{editor.impactConfirmed && usageImpacts.length > 0 ? t.confirmImpactSave : t.saveItem}</button></div></div>
+        <VaultSnapshotEditor draft={editor.draft} onChange={update => setEditor(current => ({ ...current, draft: typeof update === 'function' ? update(current.draft) : update, error: null, impactConfirmed: false }))} namespaceKey={namespaceKey} itemKey={itemKey} t={t} />
+        </fieldset>
+        {impact.total > 0 && <div className="vault-impact-warning" role="alert"><strong>{t.vaultImpactWarning.replace('{total}', impact.total)}</strong>{impact.items.map(usage => <a href={`#/configs/${usage.config_key}/${usage.environment_key}`} key={`${usage.field_key}-${usage.environment_key}-${usage.config_key}`}><span>{usage.config_name}</span><code>{usage.environment_key} / {usage.config_key} @ v{usage.config_revision} · {usage.field_key}</code></a>)}</div>}
+        <InventoryPagination collection={impact} t={t} hideSinglePage />
+        <div className="vault-editor-footer"><ActionError error={editor.error} t={t} /><div className="row-actions"><button type="button" disabled={editor.saving} onClick={() => { if (confirmDiscard()) setEditor({ status: 'idle' }); }}>{t.cancel}</button><button className="primary-action compact-action" type="submit" disabled={!editorDirty || editor.saving || impact.status !== 'ready'}>{editor.impactConfirmed && impact.total > 0 ? t.confirmImpactSave : t.saveItem}</button></div></div>
       </form>}
       {editor.status === 'failed' && <p className="inline-error" role="alert">{t.operationFailed}</p>}
       <div className="revision-track vault-revision-track" aria-label={t.revisionHistory}>
-        {state.revisions.slice(0, 8).reverse().map(revision => <button type="button" className={`${revision.revision === state.item.revision ? 'current-revision ' : ''}${revision.revision === viewedRevision ? 'selected-revision' : ''}`} aria-pressed={revision.revision === viewedRevision} onClick={() => inspectRevision(revision.revision)} key={revision.revision}><b>v{revision.revision}</b><small>{revision.revision === state.item.revision ? t.current : formatDate(revision.created_at, t.locale).split(',')[0]}</small></button>)}
+        {history.latest.slice(0, 8).reverse().map(revision => <button type="button" className={`${revision.revision === state.item.revision ? 'current-revision ' : ''}${revision.revision === viewedRevision ? 'selected-revision' : ''}`} aria-pressed={revision.revision === viewedRevision} onClick={() => inspectRevision(revision.revision)} key={revision.revision}><b>v{revision.revision}</b><small>{revision.revision === state.item.revision ? t.current : formatDate(revision.created_at, t.locale).split(',')[0]}</small></button>)}
       </div>
       <div className="tabbar" role="tablist" aria-label={t.vaultView}>
         <button type="button" role="tab" aria-selected={tab === 'fields'} onClick={() => setTab('fields')}>{t.fields}</button>
         <button type="button" role="tab" aria-selected={tab === 'history'} onClick={() => setTab('history')}>{t.history}</button>
       </div>
-      {tab === 'fields' && viewingCurrent && editor.status !== 'ready' && <VaultUsagePanel usages={state.usages} t={t} />}
+      {tab === 'fields' && viewingCurrent && editor.status !== 'ready' && <VaultUsagePanel path={`${basePath}/usages`} refresh={refresh} t={t} />}
       {tab === 'history' ? (
-        <div className="table-frame history-table"><table><thead><tr><th>{t.revision}</th><th>{t.actor}</th><th>{t.created}</th>{principal.role === 'admin' && <th />}</tr></thead>
-          <tbody>{state.revisions.map(revision => <tr className={revision.revision === viewedRevision ? 'selected-history-row' : ''} key={revision.revision}><td><button className="revision-link" type="button" aria-label={t.viewRevision.replace('{revision}', revision.revision)} onClick={() => inspectRevision(revision.revision)}>v{revision.revision}</button></td><td><ActorIdentity actorID={revision.actor_id} principal={principal} /></td><td><time>{formatDate(revision.created_at, t.locale)}</time></td>{principal.role === 'admin' && <td>{!state.item.archived && revision.revision !== state.item.revision && (restoring === revision.revision
+        <section className="history-view"><div className="table-frame history-table"><table><thead><tr><th>{t.revision}</th><th>{t.actor}</th><th>{t.created}</th>{principal.role === 'admin' && <th />}</tr></thead>
+          <tbody>{history.items.map(revision => <tr className={revision.revision === viewedRevision ? 'selected-history-row' : ''} key={revision.revision}><td><button className="revision-link" type="button" aria-label={t.viewRevision.replace('{revision}', revision.revision)} onClick={() => inspectRevision(revision.revision)}>v{revision.revision}</button></td><td><ActorIdentity actorID={revision.actor_id} principal={principal} /></td><td><time>{formatDate(revision.created_at, t.locale)}</time></td>{principal.role === 'admin' && <td>{!state.item.archived && revision.revision !== state.item.revision && (restoring === revision.revision
             ? <button className="danger-link" type="button" aria-label={t.confirmRestore.replace('{revision}', revision.revision)} onClick={() => restoreRevision(revision.revision)}>{t.confirmRestore.replace('{revision}', revision.revision)}</button>
             : <button type="button" aria-label={t.restoreRevision.replace('{revision}', revision.revision)} onClick={() => setRestoring(revision.revision)}>{t.restore}</button>)}</td>}</tr>)}</tbody>
-        </table></div>
+        </table></div><RevisionPagination history={history} t={t} /></section>
       ) : !viewingCurrent && inspection.status === 'loading' ? <div className="collection-state"><span className="loading-line" /></div>
         : !viewingCurrent && inspection.status === 'failed' ? <p className="inline-error" role="alert">{t.operationFailed}</p>
           : viewedItem && (
@@ -1905,7 +1874,7 @@ function VaultDetail({ principal, namespaceKey, itemKey, t }) {
             <summary>{t.itemDetails}</summary>
             <section><h2>{t.versionIdentity}</h2><dl><div><dt>{t.namespace}</dt><dd><code>{namespaceKey}</code></dd></div><div><dt>{t.resourceKey}</dt><dd><code>{itemKey}</code></dd></div><div><dt>{t.revision}</dt><dd><strong>v{viewedRevision}</strong>{viewingCurrent && ` · ${t.current}`}</dd></div><div><dt>{t.fields}</dt><dd>{viewedItem.snapshot.fields.length}</dd></div></dl></section>
             <section><h2>{t.environmentBinding}</h2>{viewedItem.snapshot.variants.map((candidate, index) => <div className="binding-row" key={candidate.id}><span>{t.variant} {index + 1}</span><div>{candidate.environments.map(environment => <code key={environment}>{environment}</code>)}</div></div>)}</section>
-            <section><h2>{t.history}</h2>{state.revisions.slice(0, 4).map(revision => <div className="history-row" key={revision.revision}><strong>v{revision.revision}</strong><time>{formatDate(revision.created_at, t.locale)}</time></div>)}</section>
+            <section><h2>{t.history}</h2>{history.latest.slice(0, 4).map(revision => <div className="history-row" key={revision.revision}><strong>v{revision.revision}</strong><time>{formatDate(revision.created_at, t.locale)}</time></div>)}</section>
           </details>
         </div>
       )}
@@ -1913,14 +1882,19 @@ function VaultDetail({ principal, namespaceKey, itemKey, t }) {
   );
 }
 
-function VaultUsagePanel({ usages, t }) {
+function VaultUsagePanel({ path, refresh, t }) {
+  const [search, setSearch] = useState('');
+  const collection = useInventory(`${path}?q=${encodeURIComponent(search)}`, refresh);
+  const usages = collection.items;
   const groups = usages.reduce((result, usage) => {
     (result[usage.field_key] ||= []).push(usage);
     return result;
   }, {});
-  return <section className="panel vault-usage-panel" data-empty={usages.length === 0} aria-labelledby="vault-usage-title">
-    <div className="section-heading"><div><h2 id="vault-usage-title">{t.currentReferences}</h2><p>{t.currentReferencesBody}</p></div><span>{usages.length}</span></div>
-    {usages.length === 0 ? <p className="environment-empty">{t.noCurrentReferences}</p> : <div className="vault-usage-groups">{Object.entries(groups).map(([field, items]) => <section key={field}><h3><code>{field}</code><span>{items.length}</span></h3>{items.map(usage => <a href={`#/configs/${usage.config_key}/${usage.environment_key}`} aria-label={`${usage.config_name} ${usage.environment_key} v${usage.config_revision}`} key={`${usage.environment_key}-${usage.config_key}`}><strong title={usage.config_name}>{usage.config_name}</strong><code>{usage.environment_key} / {usage.config_key} @ v{usage.config_revision}</code></a>)}</section>)}</div>}
+  return <section className="panel vault-usage-panel" aria-labelledby="vault-usage-title">
+    <div className="section-heading"><div><h2 id="vault-usage-title">{t.currentReferences}</h2><p>{t.currentReferencesBody}</p></div><span>{collection.status === 'ready' ? collection.total : '…'}</span></div>
+    <label className="credential-search"><span>{t.search} · {t.currentReferences}</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} /></label>
+    {collection.status === 'loading' ? <span className="loading-line" /> : collection.status === 'ready' && (usages.length === 0 ? <p className="environment-empty">{t.noCurrentReferences}</p> : <div className="vault-usage-groups">{Object.entries(groups).map(([field, items]) => <section key={field}><h3><code>{field}</code><span>{items.length}</span></h3>{items.map(usage => <a href={`#/configs/${usage.config_key}/${usage.environment_key}`} aria-label={`${usage.config_name} ${usage.environment_key} v${usage.config_revision}`} key={`${usage.environment_key}-${usage.config_key}`}><strong title={usage.config_name}>{usage.config_name}</strong><code>{usage.environment_key} / {usage.config_key} @ v{usage.config_revision}</code></a>)}</section>)}</div>)}
+    <InventoryPagination collection={collection} t={t} />
   </section>;
 }
 
@@ -1971,13 +1945,12 @@ function Administration({ t }) {
         <button type="button" role="tab" aria-selected={tab === 'notifications'} onClick={() => setTab('notifications')}>{t.notifications}</button>
         <button type="button" role="tab" aria-selected={tab === 'deployment'} onClick={() => setTab('deployment')}>{t.deploymentStatus}</button>
       </div>
-      {tab === 'tokens' ? <TokensPanel t={t} /> : tab === 'certificates' ? <CertificateManagement request={request} t={t} onAuthorities={() => setTab('authorities')} /> : tab === 'authorities' ? <AuthorityManagement request={request} t={t} onCertificates={() => setTab('certificates')} /> : tab === 'notifications' ? <Notifications t={t} embedded /> : <DeploymentPanel t={t} />}
+      {tab === 'tokens' ? <TokensPanel t={t} /> : tab === 'certificates' ? <CertificateManagement t={t} onAuthorities={() => setTab('authorities')} /> : tab === 'authorities' ? <AuthorityManagement t={t} onCertificates={() => setTab('certificates')} /> : tab === 'notifications' ? <Notifications t={t} embedded /> : <DeploymentPanel t={t} />}
     </div>
   );
 }
 
 function TokensPanel({ t }) {
-  const [state, setState] = useState({ status: 'loading', items: [], environments: [] });
   const [creating, setCreating] = useState(false);
   const [neverExpires, setNeverExpires] = useState(false);
   const [created, setCreated] = useState(null);
@@ -1985,20 +1958,19 @@ function TokensPanel({ t }) {
   const [confirming, setConfirming] = useState('');
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
-  useEffect(() => {
-    let live = true;
-    Promise.all([request('/v1/api-tokens?include_revoked=true'), request('/v1/environments')])
-      .then(([tokens, environments]) => live && setState({ status: 'ready', items: tokens.items, environments: environments.items }))
-      .catch(() => live && setState({ status: 'failed', items: [], environments: [] }));
-    return () => { live = false; };
-  }, [refresh]);
+  const [search, setSearch] = useState('');
+  const [environmentKeys, setEnvironmentKeys] = useState([]);
+  const [grants, setGrants] = useState({});
+  const [saving, setSaving] = useState(false);
+  const confirmDiscard = useUnsavedChanges(Object.keys(grants).length > 0, t.unsavedChanges);
+  const state = useInventory(`/v1/api-tokens?include_revoked=true&q=${encodeURIComponent(search)}`, refresh);
   const create = async event => {
     event.preventDefault();
     setError('');
     const data = new FormData(event.currentTarget);
     const body = {
       display_name: data.get('display_name'),
-      environment_keys: state.environments.filter(environment => data.has(`environment:${environment.key}`)).map(environment => environment.key),
+      environment_keys: environmentKeys,
       allow_without_mtls: data.has('allow_without_mtls'),
       never_expires: neverExpires,
     };
@@ -2018,17 +1990,21 @@ function TokensPanel({ t }) {
   };
   const saveGrants = async event => {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
+    setSaving(true);
+    setError('');
     try {
-      await request(`/v1/api-tokens/${encodeURIComponent(editing)}/environments`, {
-        method: 'PUT',
+      await request(`/v1/api-tokens/${encodeURIComponent(editing.public_id)}/environments`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify({ environment_keys: state.environments.filter(environment => data.has(`grant:${environment.key}`)).map(environment => environment.key) }),
+        body: JSON.stringify({ add: Object.keys(grants).filter(key => grants[key]), remove: Object.keys(grants).filter(key => !grants[key]) }),
       });
       setEditing('');
+      setGrants({});
       setRefresh(value => value + 1);
     } catch {
       setError(t.operationFailed);
+    } finally {
+      setSaving(false);
     }
   };
   const revoke = async publicID => {
@@ -2042,28 +2018,31 @@ function TokensPanel({ t }) {
   };
   return (
     <section className="admin-panel tokens-panel">
-      <div className="panel-actions"><span>{t.tokenEnvironmentGrant}</span><button className="primary-action compact-action" type="button" onClick={() => setCreating(value => !value)}>{t.newAPIToken}</button></div>
+      <div className="panel-actions"><span>{t.tokenEnvironmentGrant}</span><button className="primary-action compact-action" type="button" onClick={() => { setCreating(value => !value); setEnvironmentKeys([]); }}>{t.newAPIToken}</button></div>
+      <label>{t.search}<input type="search" value={search} onChange={event => setSearch(event.target.value)} /></label>
       {created && <div className="one-time-secret" role="alert"><strong>{t.tokenOnce}</strong><code>{created}</code><button type="button" onClick={() => navigator.clipboard.writeText(created).catch(() => {})}>{t.copy}</button></div>}
       {creating && (
         <form className="token-form" onSubmit={create}>
           <label>{t.tokenName}<input name="display_name" required maxLength="255" autoComplete="off" /></label>
-          <fieldset><legend>{t.allowedEnvironments}</legend><div className="choice-grid">{state.environments.map(environment => <label key={environment.key}><input type="checkbox" name={`environment:${environment.key}`} /><span>{environment.display_name}<code>{environment.key}</code></span></label>)}</div></fieldset>
+          <EnvironmentChoices label={t.allowedEnvironments} checked={environment => environmentKeys.includes(environment.key)} onChange={(key, checked) => setEnvironmentKeys(current => checked ? [...current, key] : current.filter(value => value !== key))} t={t} />
           <label className="check-line"><input type="checkbox" name="allow_without_mtls" />{t.allowWithoutMTLS}</label>
           <label className="check-line"><input type="checkbox" checked={neverExpires} onChange={event => setNeverExpires(event.target.checked)} />{t.neverExpires}</label>
           {!neverExpires && <label>{t.expiresAt}<input type="datetime-local" name="expires_at" /><small>{t.locale.startsWith('zh') ? '留空使用默认的 90 天有效期。' : 'Leave empty for the default 90-day lifetime.'}</small></label>}
           <div className="form-actions"><span className="inline-error" role="alert">{error}</span><button className="primary-action compact-action" type="submit">{t.createAPIToken}</button></div>
         </form>
       )}
-      {editing && (() => {
-        const token = state.items.find(item => item.public_id === editing);
-        return token && <form className="grant-form" onSubmit={saveGrants}><strong>{token.display_name}</strong><div className="choice-grid">{state.environments.map(environment => <label key={environment.key}><input type="checkbox" name={`grant:${environment.key}`} defaultChecked={token.environment_keys.includes(environment.key)} /><span>{environment.display_name}<code>{environment.key}</code></span></label>)}</div><button className="primary-action compact-action" type="submit">{t.saveEnvironmentGrants}</button></form>;
-      })()}
+      {editing && <form className="grant-form" onSubmit={saveGrants}><strong>{editing.display_name}</strong>
+        <EnvironmentChoices key={editing.public_id} label={t.allowedEnvironments} scope={`&token=${encodeURIComponent(editing.public_id)}`} checked={environment => Object.hasOwn(grants, environment.key) ? grants[environment.key] : Boolean(environment.granted)} onChange={(key, checked) => setGrants(current => ({ ...current, [key]: checked }))} t={t} />
+        <button className="primary-action compact-action" type="submit" disabled={saving || !Object.keys(grants).length}>{t.saveEnvironmentGrants}</button>
+        <button type="button" disabled={saving} onClick={() => { if (confirmDiscard()) { setEditing(''); setGrants({}); } }}>{t.cancel}</button>
+      </form>}
       {!creating && error && <p className="inline-error" role="alert">{error}</p>}
       <CollectionState state={state} t={t}>
         <div className="table-frame"><table><thead><tr><th>{t.tokenName}</th><th>{t.prefix}</th><th>{t.environments}</th><th>mTLS</th><th>{t.expiresAt}</th><th>{t.status}</th><th /></tr></thead>
-          <tbody>{state.items.map(token => <tr key={token.public_id}><td><strong title={token.display_name}>{token.display_name}</strong><code className="row-subkey">{token.public_id}</code></td><td><code title={token.display_prefix}>{token.display_prefix}</code></td><td><div className="environment-links">{token.environment_keys.map(environment => <code key={environment}>{environment}</code>)}</div></td><td>{token.allow_without_mtls ? t.tokenOnlyAllowed : t.mtlsRequired}</td><td><time>{token.expires_at ? formatDate(token.expires_at, t.locale) : t.neverExpires}</time></td><td><span className={token.revoked ? 'status archived' : 'status active'}>{token.revoked ? t.revoked : t.statusActive}</span></td><td>{!token.revoked && <div className="row-actions"><button type="button" aria-label={`${t.editEnvironments} ${token.display_name}`} onClick={() => setEditing(token.public_id)}>{t.editEnvironments}</button>{confirming === token.public_id ? <button className="danger-link" type="button" aria-label={`${t.confirmRevoke} ${token.display_name}`} onClick={() => revoke(token.public_id)}>{t.confirmRevoke}</button> : <button className="danger-link" type="button" aria-label={`${t.revoke} ${token.display_name}`} onClick={() => setConfirming(token.public_id)}>{t.revoke}</button>}</div>}</td></tr>)}</tbody>
+          <tbody>{state.items.map(token => <tr key={token.public_id}><td><strong title={token.display_name}>{token.display_name}</strong><code className="row-subkey">{token.public_id}</code></td><td><code title={token.display_prefix}>{token.display_prefix}</code></td><td><div className="environment-links">{token.environment_keys.map(environment => <code key={environment}>{environment}</code>)}{token.environment_count > token.environment_keys.length && <span>+{token.environment_count - token.environment_keys.length}</span>}</div></td><td>{token.allow_without_mtls ? t.tokenOnlyAllowed : t.mtlsRequired}</td><td><time>{token.expires_at ? formatDate(token.expires_at, t.locale) : t.neverExpires}</time></td><td><span className={token.revoked ? 'status archived' : 'status active'}>{token.revoked ? t.revoked : t.statusActive}</span></td><td>{!token.revoked && <div className="row-actions"><button type="button" disabled={saving} aria-label={`${t.editEnvironments} ${token.display_name}`} onClick={() => { if (confirmDiscard()) { setEditing(token); setGrants({}); } }}>{t.editEnvironments}</button>{confirming === token.public_id ? <button className="danger-link" type="button" aria-label={`${t.confirmRevoke} ${token.display_name}`} onClick={() => revoke(token.public_id)}>{t.confirmRevoke}</button> : <button className="danger-link" type="button" aria-label={`${t.revoke} ${token.display_name}`} onClick={() => setConfirming(token.public_id)}>{t.revoke}</button>}</div>}</td></tr>)}</tbody>
         </table></div>
       </CollectionState>
+      <InventoryPagination collection={state} t={t} />
     </section>
   );
 }
@@ -2092,19 +2071,14 @@ function DeploymentPanel({ t }) {
 }
 
 function Notifications({ t, embedded = false }) {
-  const [state, setState] = useState({ status: 'loading', items: [] });
+  const [search, setSearch] = useState('');
+  const [subscriptions, setSubscriptions] = useState('');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
   const [deliveries, setDeliveries] = useState({ status: 'idle', destination: '', items: [] });
   const [confirming, setConfirming] = useState('');
   const [refresh, setRefresh] = useState(0);
-  useEffect(() => {
-    let live = true;
-    request('/v1/notification-destinations?include_archived=true')
-      .then(result => live && setState({ status: 'ready', items: result.items }))
-      .catch(() => live && setState({ status: 'failed', items: [] }));
-    return () => { live = false; };
-  }, [refresh]);
+  const state = useInventory(`/v1/notification-destinations?include_archived=true&q=${encodeURIComponent(search)}`, refresh);
   const save = async event => {
     event.preventDefault();
     setError('');
@@ -2172,14 +2146,25 @@ function Notifications({ t, embedded = false }) {
         </form>
       )}
       {!creating && error && <p className="inline-error" role="alert">{error}</p>}
+      <label className="credential-search"><span>{t.search}</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} /></label>
       <CollectionState state={state} t={t}>
         <div className="table-frame"><table><thead><tr><th>{t.destinationName}</th><th>{t.provider}</th><th>{t.endpoint}</th><th>{t.eventTypes}</th><th>{t.status}</th><th /></tr></thead>
-          <tbody>{state.items.map(destination => <tr key={destination.key}><td><strong title={destination.display_name}>{destination.display_name}</strong><code className="row-subkey">{destination.key}</code></td><td><code>{destination.provider}</code></td><td><strong title={destination.safe_host}>{destination.safe_host}</strong> <code>{destination.masked_suffix}</code></td><td><div className="environment-links">{destination.event_types.map(eventType => <code key={eventType}>{eventType}</code>)}</div></td><td><span className={destination.archived || !destination.enabled ? 'status archived' : 'status active'}>{destination.archived ? t.statusArchived : destination.enabled ? t.enabled : t.disabled}</span></td><td>{destination.archived ? <button type="button" aria-label={`${t.unarchive} ${destination.display_name}`} onClick={() => unarchive(destination.key)}>{t.unarchive}</button> : <div className="row-actions"><button type="button" aria-label={`${t.sendTest} ${destination.display_name}`} onClick={() => mutate(`/v1/notification-destinations/${encodeURIComponent(destination.key)}/test`)}>{t.sendTest}</button><button type="button" aria-label={`${t.viewDeliveries} ${destination.display_name}`} onClick={() => loadDeliveries(destination.key)}>{t.viewDeliveries}</button>{confirming === destination.key ? <button className="danger-link" type="button" aria-label={`${t.confirmArchive} ${destination.display_name}`} onClick={() => archive(destination.key)}>{t.confirmArchive}</button> : <button className="danger-link" type="button" aria-label={`${t.archive} ${destination.display_name}`} onClick={() => setConfirming(destination.key)}>{t.archive}</button>}</div>}</td></tr>)}</tbody>
+          <tbody>{state.items.map(destination => <tr key={destination.key}><td><strong title={destination.display_name}>{destination.display_name}</strong><code className="row-subkey">{destination.key}</code></td><td><code>{destination.provider}</code></td><td><strong title={destination.safe_host}>{destination.safe_host}</strong> <code>{destination.masked_suffix}</code></td><td><div className="environment-links">{destination.event_types.map(eventType => <code key={eventType}>{eventType}</code>)}{destination.event_type_count > destination.event_types.length && <button type="button" aria-label={`${t.eventTypes} ${destination.display_name}`} onClick={() => setSubscriptions(destination.key)}>+{destination.event_type_count - destination.event_types.length}</button>}</div></td><td><span className={destination.archived || !destination.enabled ? 'status archived' : 'status active'}>{destination.archived ? t.statusArchived : destination.enabled ? t.enabled : t.disabled}</span></td><td>{destination.archived ? <button type="button" aria-label={`${t.unarchive} ${destination.display_name}`} onClick={() => unarchive(destination.key)}>{t.unarchive}</button> : <div className="row-actions"><button type="button" aria-label={`${t.sendTest} ${destination.display_name}`} onClick={() => mutate(`/v1/notification-destinations/${encodeURIComponent(destination.key)}/test`)}>{t.sendTest}</button><button type="button" aria-label={`${t.viewDeliveries} ${destination.display_name}`} onClick={() => loadDeliveries(destination.key)}>{t.viewDeliveries}</button>{confirming === destination.key ? <button className="danger-link" type="button" aria-label={`${t.confirmArchive} ${destination.display_name}`} onClick={() => archive(destination.key)}>{t.confirmArchive}</button> : <button className="danger-link" type="button" aria-label={`${t.archive} ${destination.display_name}`} onClick={() => setConfirming(destination.key)}>{t.archive}</button>}</div>}</td></tr>)}</tbody>
         </table></div>
       </CollectionState>
+      <InventoryPagination collection={state} t={t} />
+      {subscriptions && <NotificationSubscriptions key={subscriptions} destination={subscriptions} t={t} onClose={() => setSubscriptions("")} />}
       {deliveries.status === 'ready' && <section className="delivery-section"><div className="section-heading"><h2>{t.deliveryHistory}</h2><code>{deliveries.destination}</code></div><div className="table-frame"><table><thead><tr><th>{t.eventTypes}</th><th>{t.attempt}</th><th>{t.status}</th><th>HTTP</th><th>{t.latencyMS}</th><th>{t.error}</th><th /></tr></thead><tbody>{deliveries.items.map(delivery => <tr key={delivery.id}><td><code>{delivery.event_type}</code></td><td>{delivery.attempt}</td><td>{delivery.status}</td><td>{delivery.http_status || '—'}</td><td>{delivery.latency_ms}</td><td><code>{delivery.error_code || '—'}</code></td><td>{delivery.status !== 'succeeded' && <button className="danger-link" type="button" aria-label={`${t.redeliver} ${delivery.event_type}`} onClick={() => mutate(`/v1/notification-destinations/${encodeURIComponent(deliveries.destination)}/deliveries/${delivery.id}/redeliver`)}>{t.redeliver}</button>}</td></tr>)}</tbody></table></div></section>}
     </ResourcePage>
   );
+}
+
+function NotificationSubscriptions({ destination, onClose, t }) {
+  const collection = useInventory(`/v1/notification-destinations/${encodeURIComponent(destination)}/event-types`);
+  return <section className="delivery-section"><div className="section-heading"><h2>{t.eventTypes} · {destination}</h2><button type="button" onClick={onClose}>{t.cancel}</button></div>
+    <CollectionState state={collection} t={t}><div className="environment-links">{collection.items.map(event => <code key={event}>{event}</code>)}</div></CollectionState>
+    <InventoryPagination collection={collection} t={t} />
+  </section>;
 }
 
 function AccessPage({ t }) {
@@ -2240,7 +2225,7 @@ function AuditPage({ principal, t }) {
 }
 
 
-function ConfigDetail({ principal, configKey, environmentKey, inventory, t }) {
+function ConfigDetail({ principal, configKey, environmentKey, t }) {
   const [state, setState] = useState({ status: 'loading' });
   const [source, setSource] = useState('');
   const [tab, setTab] = useState('raw');
@@ -2253,22 +2238,18 @@ function ConfigDetail({ principal, configKey, environmentKey, inventory, t }) {
   const [inspection, setInspection] = useState({ status: 'idle' });
   const [restoring, setRestoring] = useState(0);
   const path = `/v1/environments/${encodeURIComponent(environmentKey)}/configs/${encodeURIComponent(configKey)}`;
+  const history = useRevisionHistory(`${path}/revisions`, refresh);
   const dirty = state.status === 'ready' && source !== state.config.content;
   const confirmDiscard = useUnsavedChanges(dirty, t.unsavedChanges);
-  const environments = useMemo(() => {
-    const contexts = inventory.status === 'ready'
-      ? inventory.configs.find(config => config.key === configKey)?.environments.filter(environment => !environment.archived) || []
-      : [];
-    return contexts.some(environment => environment.key === environmentKey)
-      ? contexts
-      : [{ key: environmentKey }, ...contexts];
-  }, [configKey, environmentKey, inventory]);
+  const contexts = useInventory(`/v1/environments?config=${encodeURIComponent(configKey)}`, refresh);
+  const environments = contexts.items.some(environment => environment.key === environmentKey)
+    ? contexts.items : [{ key: environmentKey }, ...contexts.items];
   useEffect(() => {
     let live = true;
-    Promise.all([request(path), request(`${path}/revisions`)])
-      .then(([config, revisions]) => {
+    request(path)
+      .then(config => {
         if (!live) return;
-        setState({ status: 'ready', config, revisions: revisions.items });
+        setState({ status: 'ready', config });
         setSource(config.content);
         setViewedRevision(config.revision);
         setInspection({ status: 'idle' });
@@ -2324,7 +2305,7 @@ function ConfigDetail({ principal, configKey, environmentKey, inventory, t }) {
     }
   };
   const compare = revision => {
-    setCompareSeed({ environment: environmentKey, revision });
+    setCompareSeed({ environment: environmentKey, revision, format: history.items.find(item => item.revision === revision)?.format });
     setTab('compare');
   };
   const inspectRevision = revision => {
@@ -2360,7 +2341,7 @@ function ConfigDetail({ principal, configKey, environmentKey, inventory, t }) {
   };
 
   if (state.status !== 'ready') return <CollectionState state={{ status: state.status, items: [] }} t={t} />;
-  const selectedRevision = state.revisions.find(revision => revision.revision === viewedRevision);
+  const selectedRevision = history.items.find(revision => revision.revision === viewedRevision) || history.latest.find(revision => revision.revision === viewedRevision);
   const viewingCurrent = viewedRevision === state.config.revision;
   const viewedFormat = viewingCurrent ? state.config.format : inspection.config?.format || selectedRevision?.format || state.config.format;
   const viewedContent = viewingCurrent ? source : inspection.config?.content || '';
@@ -2380,7 +2361,7 @@ function ConfigDetail({ principal, configKey, environmentKey, inventory, t }) {
           <div className="config-title-line"><h1 title={state.config.config_name}>{state.config.config_name}</h1><code title={configKey}>{configKey}</code><span>{t.current} v{state.config.revision}</span></div>
         </div>
         <div className="detail-heading-actions">
-          <label className="config-environment-select"><span>{t.environment}</span><select aria-label={t.environment} value={environmentKey} onChange={event => { if (confirmDiscard()) window.location.hash = `/configs/${configKey}/${event.target.value}`; }}>{environments.map(environment => <option key={environment.key} value={environment.key}>{environment.key}</option>)}</select></label>
+          <EnvironmentSelect label={t.environment} value={environmentKey} scope={`&config=${encodeURIComponent(configKey)}`} onChange={value => { if (value && confirmDiscard()) window.location.hash = `/configs/${configKey}/${value}`; }} t={t} />
           <div className="detail-action-group">
             <div className="config-operation-switch">
               <button type="button" aria-pressed={tab === 'compare'} onClick={() => { setCompareSeed(null); setTab('compare'); }}>{t.compare}</button>
@@ -2393,7 +2374,7 @@ function ConfigDetail({ principal, configKey, environmentKey, inventory, t }) {
         </div>
       </div>
       {!operationMode && <div className="revision-track" aria-label={t.revisionHistory}>
-        {state.revisions.slice(0, 8).reverse().map(revision => (
+        {history.latest.slice(0, 8).reverse().map(revision => (
           <button type="button" className={`${revision.revision === state.config.revision ? 'current-revision ' : ''}${revision.revision === viewedRevision ? 'selected-revision' : ''}`} aria-pressed={revision.revision === viewedRevision} onClick={() => inspectRevision(revision.revision)} key={revision.revision}><b>v{revision.revision}</b><small>{revision.revision === state.config.revision ? t.current : formatDate(revision.created_at, t.locale).split(',')[0]}</small></button>
         ))}
       </div>}
@@ -2424,12 +2405,15 @@ function ConfigDetail({ principal, configKey, environmentKey, inventory, t }) {
           ) : tab === 'history' ? (
             <section className="history-view">
               <div className="table-frame history-table"><table><thead><tr><th>{t.revision}</th><th>{t.format}</th><th>{t.actor}</th><th>{t.created}</th><th>{t.action}</th></tr></thead>
-                <tbody>{state.revisions.map(revision => <tr className={revision.revision === viewedRevision ? 'selected-history-row' : ''} key={revision.revision}><td><button className="revision-link" type="button" aria-label={t.viewRevision.replace('{revision}', revision.revision)} onClick={() => inspectRevision(revision.revision)}>v{revision.revision}</button></td><td><code>{revision.format}</code></td><td><ActorIdentity actorID={revision.actor_id} principal={principal} /></td><td><time>{formatDate(revision.created_at, t.locale)}</time></td><td><div className="row-actions"><button type="button" aria-label={t.compareRevision.replace('{revision}', revision.revision)} onClick={() => compare(revision.revision)}>{t.compare}</button>{principal.role === 'admin' && revision.revision !== state.config.revision && (restoring === revision.revision
+                <tbody>{history.items.map(revision => <tr className={revision.revision === viewedRevision ? 'selected-history-row' : ''} key={revision.revision}><td><button className="revision-link" type="button" aria-label={t.viewRevision.replace('{revision}', revision.revision)} onClick={() => inspectRevision(revision.revision)}>v{revision.revision}</button></td><td><code>{revision.format}</code></td><td><ActorIdentity actorID={revision.actor_id} principal={principal} /></td><td><time>{formatDate(revision.created_at, t.locale)}</time></td><td><div className="row-actions"><button type="button" aria-label={t.compareRevision.replace('{revision}', revision.revision)} onClick={() => compare(revision.revision)}>{t.compare}</button>{principal.role === 'admin' && revision.revision !== state.config.revision && (restoring === revision.revision
                   ? <button className="danger-link" type="button" aria-label={t.confirmRestore.replace('{revision}', revision.revision)} onClick={() => restore(revision.revision)}>{t.confirmRestore.replace('{revision}', revision.revision)}</button>
                   : <button type="button" aria-label={t.restoreRevision.replace('{revision}', revision.revision)} onClick={() => setRestoring(revision.revision)}>{t.restore}</button>)}</div></td></tr>)}</tbody>
               </table></div>
+              <RevisionPagination history={history} t={t} />
               <ActionError error={saveError} t={t} />
             </section>
+          ) : operationMode && contexts.status !== 'ready' ? (
+            <><CollectionState state={contexts} t={t} /><InventoryPagination collection={contexts} t={t} hideSinglePage /></>
           ) : tab === 'compare' ? (
             <ConfigRevisionWorkbench
               key={`${environmentKey}/${configKey}@${state.config.revision}/${compareSeed?.revision || 0}`}
@@ -2437,7 +2421,6 @@ function ConfigDetail({ principal, configKey, environmentKey, inventory, t }) {
               configKey={configKey}
               currentEnvironment={environmentKey}
               currentRevision={state.config.revision}
-              currentRevisions={state.revisions}
               currentContent={state.config.content}
               currentFormat={state.config.format}
               environments={environments}
@@ -2445,7 +2428,7 @@ function ConfigDetail({ principal, configKey, environmentKey, inventory, t }) {
               t={t}
             />
           ) : tab === 'transfer' ? (
-            <ConfigRevisionWorkbench key={`${environmentKey}/${configKey}/${transferMode}`} mode={transferMode} configKey={configKey} currentEnvironment={environmentKey} currentRevision={state.config.revision} currentRevisions={state.revisions} currentContent={state.config.content} currentFormat={state.config.format} environments={environments} t={t}
+            <ConfigRevisionWorkbench key={`${environmentKey}/${configKey}@${state.config.revision}/${transferMode}`} mode={transferMode} configKey={configKey} currentEnvironment={environmentKey} currentRevision={state.config.revision} currentContent={state.config.content} currentFormat={state.config.format} environments={environments} t={t}
               onCommitted={(result, targetEnvironment) => {
                 setValidation({ status: 'saved', warnings: result.warnings || [] });
                 showCurrent('raw');
@@ -2462,7 +2445,7 @@ function ConfigDetail({ principal, configKey, environmentKey, inventory, t }) {
             <div><dt>{t.resourceKey}</dt><dd><code>{configKey}</code></dd></div>
             <div><dt>{t.environment}</dt><dd><code>{environmentKey}</code></dd></div>
             <div><dt>{t.revision}</dt><dd><strong>v{viewedRevision}</strong>{viewingCurrent && ` · ${t.current}`}</dd></div>
-            <div><dt>{t.format}</dt><dd>{(selectedRevision?.format || state.config.format).toUpperCase()}</dd></div>
+            <div><dt>{t.format}</dt><dd>{viewedFormat.toUpperCase()}</dd></div>
             {selectedRevision && <><div><dt>{t.created}</dt><dd><time>{formatDate(selectedRevision.created_at, t.locale)}</time></dd></div><div><dt>{t.actor}</dt><dd><ActorIdentity actorID={selectedRevision.actor_id} principal={principal} /></dd></div></>}
           </dl>
         </aside>}
@@ -2471,22 +2454,22 @@ function ConfigDetail({ principal, configKey, environmentKey, inventory, t }) {
   );
 }
 
-function CompareRevisionLane({ side, environment, environments, currentRevision, pool, source, target, onEnvironmentChange, onChoose, t }) {
+function CompareRevisionLane({ side, configKey, environment, currentRevision, source, target, onEnvironmentChange, onChoose, t }) {
+  const history = useRevisionHistory(`/v1/environments/${encodeURIComponent(environment)}/configs/${encodeURIComponent(configKey)}/revisions`);
+  const latestRevision = history.latest[0]?.revision || currentRevision;
   return <section className="compare-revision-lane">
-    <label><span>{side === 'left' ? t.leftEnvironment : t.rightEnvironment}</span><select value={environment} onChange={event => onEnvironmentChange(event.target.value)}>{environments.map(item => <option key={item.key} value={item.key}>{item.key}</option>)}</select></label>
+    <EnvironmentSelect label={side === 'left' ? t.leftEnvironment : t.rightEnvironment} value={environment} scope={`&config=${encodeURIComponent(configKey)}`} onChange={value => { if (value) onEnvironmentChange(value); }} t={t} />
     <small>{t.revisionPool}</small>
     <div className="compare-revision-list">
-      {pool?.status === 'loading' && <span className="loading-line" />}
-      {pool?.status === 'failed' && <p className="inline-error">{t.operationFailed}</p>}
-      {pool?.items?.map(revision => {
-        const selection = { environment, revision: revision.revision };
+      {history.items.map(revision => {
+        const selection = { environment, revision: revision.revision, format: revision.format };
         const identity = `${environment}@v${revision.revision}`;
         const selectedAs = source?.environment === environment && source.revision === revision.revision
           ? t.source
           : target?.environment === environment && target.revision === revision.revision
             ? t.target
             : '';
-        const isCurrent = revision.revision === currentRevision;
+        const isCurrent = revision.revision === latestRevision;
         return <article className={selectedAs ? 'compare-revision-card selected' : 'compare-revision-card'} draggable onDragStart={event => { event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData('application/x-configra-revision', JSON.stringify(selection)); }} data-testid={`revision-${environment}-${revision.revision}`} key={revision.revision}>
           <div><strong>v{revision.revision}</strong><code>{revision.format.toUpperCase()}</code>{isCurrent && <span>{t.current}</span>}{selectedAs && <span>{selectedAs}</span>}</div>
           <time>{formatDate(revision.created_at, t.locale)}</time>
@@ -2494,36 +2477,20 @@ function CompareRevisionLane({ side, environment, environments, currentRevision,
         </article>;
       })}
     </div>
+    <RevisionPagination history={history} t={t} />
   </section>;
 }
 
-function ConfigRevisionWorkbench({ mode, configKey, currentEnvironment, currentRevision, currentRevisions, currentContent, currentFormat, environments, initialSource, t, onCommitted }) {
+function ConfigRevisionWorkbench({ mode, configKey, currentEnvironment, currentRevision, currentContent, currentFormat, environments, initialSource, t, onCommitted }) {
   const otherEnvironment = environments.find(environment => environment.key !== currentEnvironment)?.key || currentEnvironment;
   const [leftEnvironment, setLeftEnvironment] = useState(currentEnvironment);
   const [rightEnvironment, setRightEnvironment] = useState(otherEnvironment);
-  const [pools, setPools] = useState({});
   const [source, setSource] = useState(initialSource || null);
   const [target, setTarget] = useState(null);
   const [comparison, setComparison] = useState({ status: 'idle' });
   const [actionError, setActionError] = useState('');
   const environmentOptions = environments.length > 0 ? environments : [{ key: currentEnvironment }];
   const declaredCurrent = Object.fromEntries(environmentOptions.map(environment => [environment.key, environment.key === currentEnvironment ? currentRevision : environment.revision]));
-  const currentFor = environment => declaredCurrent[environment] || Math.max(0, ...(pools[environment]?.items || []).map(revision => revision.revision));
-
-  useEffect(() => {
-    let live = true;
-    const keys = [...new Set([leftEnvironment, rightEnvironment])];
-    setPools(current => ({ ...current, ...Object.fromEntries(keys.map(key => [key, { status: 'loading', items: [] }])) }));
-    Promise.all(keys.map(async environment => {
-      if (environment === currentEnvironment) return [environment, currentRevisions];
-      const result = await request(`/v1/environments/${encodeURIComponent(environment)}/configs/${encodeURIComponent(configKey)}/revisions`);
-      return [environment, result.items];
-    })).then(results => {
-      if (!live) return;
-      setPools(current => ({ ...current, ...Object.fromEntries(results.map(([key, items]) => [key, { status: 'ready', items }])) }));
-    }).catch(() => live && setPools(current => ({ ...current, ...Object.fromEntries(keys.map(key => [key, { status: 'failed', items: [] }])) })));
-    return () => { live = false; };
-  }, [configKey, currentEnvironment, currentRevisions, leftEnvironment, rightEnvironment]);
 
   useEffect(() => {
     if (!source || !target) {
@@ -2572,13 +2539,15 @@ function ConfigRevisionWorkbench({ mode, configKey, currentEnvironment, currentR
     event.preventDefault();
     try {
       const selection = JSON.parse(event.dataTransfer.getData('application/x-configra-revision'));
-      if (selection.environment && Number.isInteger(selection.revision)) choose(slot, selection);
+      if ([leftEnvironment, rightEnvironment].includes(selection?.environment)
+          && Number.isSafeInteger(selection.revision) && selection.revision > 0
+          && ['yaml', 'json'].includes(selection.format)) choose(slot, selection);
     } catch {
       // Ignore drags from outside this workbench.
     }
   };
   const identity = selection => selection ? `${selection.environment}/${configKey}@v${selection.revision}` : '—';
-  const selectedFormat = selection => pools[selection?.environment]?.items.find(revision => revision.revision === selection.revision)?.format || (selection?.environment === currentEnvironment && selection.revision === currentRevision ? currentFormat : '');
+  const selectedFormat = selection => selection?.format || (selection?.environment === currentEnvironment && selection.revision === currentRevision ? currentFormat : '');
   const commit = async () => {
     setActionError('');
     setComparison(current => ({ ...current, saving: true }));
@@ -2598,7 +2567,7 @@ function ConfigRevisionWorkbench({ mode, configKey, currentEnvironment, currentR
   return <section className="config-compare-workbench">
     <p className="compare-drag-hint">{mode === 'compare' ? t.compareDragHint : t.transferDragHint}</p>
     <div className="compare-picker">
-      <CompareRevisionLane side="left" environment={leftEnvironment} environments={environmentOptions} currentRevision={currentFor(leftEnvironment)} pool={pools[leftEnvironment]} source={source} target={target} onEnvironmentChange={setLeftEnvironment} onChoose={choose} t={t} />
+      <CompareRevisionLane side="left" configKey={configKey} environment={leftEnvironment} currentRevision={declaredCurrent[leftEnvironment]} source={source} target={target} onEnvironmentChange={setLeftEnvironment} onChoose={choose} t={t} />
       <div className="compare-drop-stack">
         {['source', 'target'].map(slot => {
           const selection = slot === 'source' ? source : target;
@@ -2608,7 +2577,7 @@ function ConfigRevisionWorkbench({ mode, configKey, currentEnvironment, currentR
           </div>;
         })}
       </div>
-      <CompareRevisionLane side="right" environment={rightEnvironment} environments={environmentOptions} currentRevision={currentFor(rightEnvironment)} pool={pools[rightEnvironment]} source={source} target={target} onEnvironmentChange={setRightEnvironment} onChoose={choose} t={t} />
+      <CompareRevisionLane side="right" configKey={configKey} environment={rightEnvironment} currentRevision={declaredCurrent[rightEnvironment]} source={source} target={target} onEnvironmentChange={setRightEnvironment} onChoose={choose} t={t} />
     </div>
     {actionError && <p className="inline-error compare-action-error" role="alert">{actionError}</p>}
     {comparison.status === 'loading' && <div className="collection-state compare-loading"><span className="loading-line" /></div>}

@@ -119,6 +119,53 @@ func TestSDKReadsRealMachineAPIAndRetainsLastKnownGoodAfterTokenRevocation(t *te
 	if updated.ConfigRevision() != 1 || updated.VaultRevisions()["platform.redis"] != 2 || snapshotPassword(t, updated) != "resolved-secret-two" {
 		t.Fatalf("updated Snapshot revision = %d/%v", updated.ConfigRevision(), updated.VaultRevisions())
 	}
+	file, err = client.ReadFile(ctx, "a", "platform", "redis", "tls_cert", "")
+	if err != nil || string(file.Bytes) != "file-two" {
+		t.Fatal("updated File read failed")
+	}
+	checkReadStatus := func(want int) {
+		t.Helper()
+		changed, configErr := handler.Reload(ctx)
+		_, fileErr := client.ReadFile(ctx, "a", "platform", "redis", "tls_cert", file.ETag)
+		if changed || handler.Current() != updated || snapshotPassword(t, handler.Current()) != "resolved-secret-two" {
+			t.Fatal("permission/lifecycle change replaced the last-known-good Snapshot")
+		}
+		if want == 0 {
+			if configErr != nil || !errors.Is(fileErr, configrago.ErrNotModified) {
+				t.Fatal("restored access did not retain unchanged Config/File ETags")
+			}
+			return
+		}
+		for _, readErr := range []error{configErr, fileErr} {
+			var apiError *configrago.APIError
+			if !errors.As(readErr, &apiError) || apiError.StatusCode != want {
+				t.Fatalf("conditional Config/File read did not return HTTP %d", want)
+			}
+			for _, sentinel := range []string{token.Token, "resolved-secret-two", "file-two"} {
+				if strings.Contains(readErr.Error(), sentinel) {
+					t.Fatal("authorization error leaked credentials or content")
+				}
+			}
+		}
+	}
+	// Keep the same SDK client, handler and ETags: neither a warm connection nor
+	// an unchanged resource may bypass a newly removed grant or archived Env.
+	grantPath := "/v1/api-tokens/" + token.PublicID + "/environments"
+	for _, step := range []struct {
+		name, method, path, body string
+		readStatus               int
+	}{
+		{"remove-grant", http.MethodPatch, grantPath, `{"remove":["a"]}`, http.StatusForbidden},
+		{"restore-grant", http.MethodPatch, grantPath, `{"add":["a"]}`, 0},
+		{"archive", http.MethodPost, "/v1/environments/a/archive", "", http.StatusNotFound},
+		{"unarchive", http.MethodPost, "/v1/environments/a/unarchive", "", 0},
+	} {
+		response := auditRequest(managementAPI, humanauth.RoleAdmin, step.method, step.path, "sdk-auth-"+step.name, step.body)
+		if response.Code != http.StatusOK {
+			t.Fatalf("%s Management mutation: HTTP %d", step.name, response.Code)
+		}
+		checkReadStatus(step.readStatus)
+	}
 
 	revokeTokenRequest := httptest.NewRequest(http.MethodPost, "https://management.test/v1/api-tokens/"+token.PublicID+"/revoke", nil)
 	revokeTokenRequest.Header.Set("Idempotency-Key", "e2e-token-revoke")
@@ -130,15 +177,7 @@ func TestSDKReadsRealMachineAPIAndRetainsLastKnownGoodAfterTokenRevocation(t *te
 	if revokeTokenResponse.Code != http.StatusOK {
 		t.Fatalf("revoke API Token = %d %q", revokeTokenResponse.Code, revokeTokenResponse.Body.String())
 	}
-	changed, err = handler.Reload(ctx)
-	var apiError *configrago.APIError
-	if changed || !errors.As(err, &apiError) || apiError.StatusCode != http.StatusUnauthorized ||
-		handler.Current() != updated || snapshotPassword(t, handler.Current()) != "resolved-secret-two" {
-		t.Fatalf("revoked Reload = %v, %#v; current changed = %v", changed, apiError, handler.Current() != updated)
-	}
-	if strings.Contains(err.Error(), token.Token) || strings.Contains(err.Error(), "resolved-secret-two") {
-		t.Fatalf("revoked error leaked credentials or values: %v", err)
-	}
+	checkReadStatus(http.StatusUnauthorized)
 }
 
 func newStore(t *testing.T, ctx context.Context) *mysqlstore.Store {

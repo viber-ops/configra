@@ -1,6 +1,7 @@
 package configdoc_test
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -8,6 +9,44 @@ import (
 	"github.com/viber-ops/configra/internal/configdoc"
 	"go.yaml.in/yaml/v3"
 )
+
+func TestResolveStopsBeforeExpandingAnOversizedDocument(t *testing.T) {
+	value := strings.Repeat("x", 512<<10)
+	for _, format := range []configdoc.Format{configdoc.JSON, configdoc.YAML} {
+		t.Run(string(format), func(t *testing.T) {
+			// A small valid document would expand to 8 MiB. Stop the old code's
+			// lookup before encoding it so this regression never needs a huge buffer.
+			source := []byte("[" + strings.Repeat(`"{vault.platform.redis.password}",`, 15) + `"{vault.platform.redis.password}"]`)
+			calls := 0
+			content, err := configdoc.Resolve(format, source, func(configdoc.Reference) (string, error) {
+				calls++
+				if calls > 11 {
+					return "", errors.New("lookup continued past the document budget")
+				}
+				return value, nil
+			})
+			if !errors.Is(err, configdoc.ErrTooLarge) || len(content) != 0 || calls != 11 {
+				t.Fatalf("oversized expansion: calls=%d bytes=%d error=%v; want an early, value-free size error", calls, len(content), err)
+			}
+		})
+	}
+}
+
+func BenchmarkResolveOversizedReferences(b *testing.B) {
+	value := strings.Repeat("x", 512<<10)
+	source := []byte("[" + strings.Repeat(`"{vault.platform.redis.password}",`, 15) + `"{vault.platform.redis.password}"]`)
+	for _, format := range []configdoc.Format{configdoc.JSON, configdoc.YAML} {
+		b.Run(string(format), func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				content, err := configdoc.Resolve(format, source, func(configdoc.Reference) (string, error) { return value, nil })
+				if !errors.Is(err, configdoc.ErrTooLarge) || len(content) != 0 {
+					b.Fatalf("oversized document: bytes=%d error=%v", len(content), err)
+				}
+			}
+		})
+	}
+}
 
 func TestResolveYAMLReplacesFullScalarVaultReferencesAndPreservesEscapes(t *testing.T) {
 	canonical := []byte("# application database\ndatabase:\n  username: \"{vault.platform.redis.username}\"\n  password: \"{vault.platform.redis.password}\"\nliteral: \"{{vault.platform.redis.password}}\"\n")

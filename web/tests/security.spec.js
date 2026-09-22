@@ -9,7 +9,7 @@ test('Vault navigation requires a new explicit reveal for each item', async ({ p
   });
   await page.route('**/v1/**', async route => {
     const path = new URL(route.request().url()).pathname;
-    let body = { items: [] };
+    let body = { items: [], total: 0 };
     if (path === '/v1/me') body = principal;
     else if (path.startsWith('/v1/vault-items/platform/')) {
       const key = path.split('/')[4];
@@ -36,7 +36,7 @@ test('API token creation uses the server expiry default unless explicitly overri
   let created;
   await page.route('**/v1/**', async route => {
     const path = new URL(route.request().url()).pathname;
-    let body = path === '/v1/me' ? principal : { items: [] };
+    let body = path === '/v1/me' ? principal : { items: [], total: 0 };
     if (path === '/v1/api-tokens' && route.request().method() === 'POST') {
       created = route.request().postDataJSON();
       body = { outcome: 'success', token: 'one-time-test-token' };

@@ -132,3 +132,84 @@ func TestCryptoSentinelRejectsDifferentMasterKey(t *testing.T) {
 		t.Fatalf("VerifySentinel with wrong key = %v, want ErrIntegrity", err)
 	}
 }
+
+func TestRewrapAuthenticatesPayloadAndPreservesEncryptedContent(t *testing.T) {
+	old, err := vaultcrypto.NewLocalKeyProvider(bytes.Repeat([]byte{1}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, err := vaultcrypto.NewLocalKeyProvider(bytes.Repeat([]byte{2}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity := vaultcrypto.SnapshotIdentity{ItemID: "item", Revision: 3}
+	for _, secret := range []bool{false, true} {
+		encode := func() (vaultcrypto.EncryptedSnapshot, error) {
+			return old.EncryptSnapshot(identity, []byte("secret-sentinel"))
+		}
+		rewrap := func(value vaultcrypto.EncryptedSnapshot, provider *vaultcrypto.LocalKeyProvider) ([]byte, error) {
+			return old.RewrapSnapshot(identity, value, provider)
+		}
+		decode := func(provider *vaultcrypto.LocalKeyProvider, value vaultcrypto.EncryptedSnapshot) ([]byte, error) {
+			return provider.DecryptSnapshot(identity, value)
+		}
+		if secret {
+			encode = func() (vaultcrypto.EncryptedSnapshot, error) {
+				return old.EncryptSecret("ca:identity", []byte("secret-sentinel"))
+			}
+			rewrap = func(value vaultcrypto.EncryptedSnapshot, provider *vaultcrypto.LocalKeyProvider) ([]byte, error) {
+				return old.RewrapSecret("ca:identity", value, provider)
+			}
+			decode = func(provider *vaultcrypto.LocalKeyProvider, value vaultcrypto.EncryptedSnapshot) ([]byte, error) {
+				return provider.DecryptSecret("ca:identity", value)
+			}
+		}
+		encrypted, err := encode()
+		if err != nil {
+			t.Fatal(err)
+		}
+		ciphertext, nonce := bytes.Clone(encrypted.Ciphertext), bytes.Clone(encrypted.Nonce)
+		wrapped, err := rewrap(encrypted, next)
+		if err != nil || bytes.Equal(wrapped, encrypted.EncryptedDEK) || !bytes.Equal(ciphertext, encrypted.Ciphertext) || !bytes.Equal(nonce, encrypted.Nonce) {
+			t.Fatal("rewrap changed payload or retained old key wrapping", err)
+		}
+		rotated := encrypted
+		rotated.EncryptedDEK = wrapped
+		plain, err := decode(next, rotated)
+		if err != nil || string(plain) != "secret-sentinel" {
+			t.Fatal("new key cannot decrypt rewrapped data", err)
+		}
+		clear(plain)
+		if value, err := decode(old, rotated); !errors.Is(err, vaultcrypto.ErrIntegrity) || value != nil {
+			t.Fatal("old key decrypts rotated data")
+		}
+		for _, mutate := range []func(*vaultcrypto.EncryptedSnapshot){
+			func(value *vaultcrypto.EncryptedSnapshot) {
+				value.Ciphertext = bytes.Clone(value.Ciphertext)
+				value.Ciphertext[0] ^= 1
+			},
+			func(value *vaultcrypto.EncryptedSnapshot) {
+				value.EncryptedDEK = bytes.Clone(value.EncryptedDEK)
+				value.EncryptedDEK[0] ^= 1
+			},
+			func(value *vaultcrypto.EncryptedSnapshot) { value.Nonce = nil },
+			func(value *vaultcrypto.EncryptedSnapshot) { value.KeyVersion = "other" },
+			func(value *vaultcrypto.EncryptedSnapshot) { value.Algorithm = "other" },
+		} {
+			bad := encrypted
+			mutate(&bad)
+			if value, err := rewrap(bad, next); !errors.Is(err, vaultcrypto.ErrIntegrity) || value != nil {
+				t.Fatal("rewrapped corrupt data")
+			}
+		}
+		if value, err := rewrap(encrypted, nil); !errors.Is(err, vaultcrypto.ErrIntegrity) || value != nil {
+			t.Fatal("accepted missing replacement provider")
+		}
+		if _, err := old.RewrapSnapshot(vaultcrypto.SnapshotIdentity{ItemID: "other", Revision: 3}, encrypted, next); !errors.Is(err, vaultcrypto.ErrIntegrity) {
+			t.Fatal("rewrap lost identity/domain binding")
+		}
+		if _, err := old.RewrapSecret("other", encrypted, next); !errors.Is(err, vaultcrypto.ErrIntegrity) {
+			t.Fatal("rewrap lost secret identity/domain binding")
+		}
+	}
+}

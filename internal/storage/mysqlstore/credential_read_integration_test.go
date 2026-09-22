@@ -39,8 +39,9 @@ func TestCredentialListsExposeMetadataAndFilterRevokedRecords(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateToken: %v", err)
 	}
-	tokens, err := store.ListTokens(ctx, false)
-	if err != nil || len(tokens) != 1 || tokens[0].PublicID != created.PublicID || tokens[0].DisplayName != "Datacenter A" ||
+	page, err := store.ListTokens(ctx, InventoryQuery{Limit: 50})
+	tokens := page.Items
+	if err != nil || page.Total != 1 || len(tokens) != 1 || tokens[0].PublicID != created.PublicID || tokens[0].DisplayName != "Datacenter A" ||
 		len(tokens[0].EnvironmentKeys) != 1 || tokens[0].EnvironmentKeys[0] != "a" || !tokens[0].AllowWithoutMTLS || tokens[0].Revoked {
 		t.Fatalf("ListTokens = %#v, %v", tokens, err)
 	}
@@ -51,10 +52,10 @@ func TestCredentialListsExposeMetadataAndFilterRevokedRecords(t *testing.T) {
 	if _, err := store.RevokeToken(ctx, TokenRevoke{OperationID: "credential-list-token-revoke", Actor: actor, PublicID: created.PublicID}); err != nil {
 		t.Fatalf("RevokeToken: %v", err)
 	}
-	if active, err := store.ListTokens(ctx, false); err != nil || len(active) != 0 {
+	if active, err := store.ListTokens(ctx, InventoryQuery{Limit: 50}); err != nil || active.Total != 0 || len(active.Items) != 0 {
 		t.Fatalf("active Tokens = %#v, %v", active, err)
 	}
-	if all, err := store.ListTokens(ctx, true); err != nil || len(all) != 1 || !all[0].Revoked {
+	if all, err := store.ListTokens(ctx, InventoryQuery{Limit: 50, IncludeInactive: true}); err != nil || all.Total != 1 || len(all.Items) != 1 || !all.Items[0].Revoked {
 		t.Fatalf("all Tokens = %#v, %v", all, err)
 	}
 
@@ -65,9 +66,9 @@ func TestCredentialListsExposeMetadataAndFilterRevokedRecords(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RegisterVerifiedClientCertificate: %v", err)
 	}
-	certificates, err := store.ListClientCertificates(ctx, false)
-	if err != nil || len(certificates) != 1 || certificates[0].FingerprintSHA256 != registered.FingerprintSHA256 ||
-		certificates[0].Subject == "" || certificates[0].Revoked {
+	certificates, err := store.ListClientCertificates(ctx, InventoryQuery{Limit: 50})
+	if err != nil || certificates.Total != 1 || len(certificates.Items) != 1 || certificates.Items[0].FingerprintSHA256 != registered.FingerprintSHA256 ||
+		certificates.Items[0].Subject == "" || certificates.Items[0].Revoked {
 		t.Fatalf("ListClientCertificates = %#v, %v", certificates, err)
 	}
 	if _, err := store.RevokeClientCertificate(ctx, ClientCertificateRevoke{
@@ -75,10 +76,10 @@ func TestCredentialListsExposeMetadataAndFilterRevokedRecords(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("RevokeClientCertificate: %v", err)
 	}
-	if active, err := store.ListClientCertificates(ctx, false); err != nil || len(active) != 0 {
+	if active, err := store.ListClientCertificates(ctx, InventoryQuery{Limit: 50}); err != nil || active.Total != 0 || len(active.Items) != 0 {
 		t.Fatalf("active Client Certificates = %#v, %v", active, err)
 	}
-	if all, err := store.ListClientCertificates(ctx, true); err != nil || len(all) != 1 || !all[0].Revoked {
+	if all, err := store.ListClientCertificates(ctx, InventoryQuery{Limit: 50, IncludeInactive: true}); err != nil || all.Total != 1 || len(all.Items) != 1 || !all.Items[0].Revoked {
 		t.Fatalf("all Client Certificates = %#v, %v", all, err)
 	}
 }

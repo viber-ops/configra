@@ -4,7 +4,6 @@ go 1.25.13
 
 require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.48.0
-	github.com/alexedwards/scs/mysqlstore v0.0.0-20251002162104-209de6e426de
 	github.com/alexedwards/scs/v2 v2.9.0
 	github.com/coreos/go-oidc/v3 v3.20.0
 	github.com/go-jose/go-jose/v4 v4.1.4

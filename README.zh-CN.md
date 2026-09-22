@@ -6,7 +6,7 @@
 
 Configra 是面向研发与运维的自托管配置服务。如果你正在多个仓库、部署脚本和集群之间反复复制配置，它可以提供统一工作台：管理多环境 YAML / JSON、引用共享 Vault 值，再通过 Go SDK 或 Kubernetes 交给应用。
 
-> 当前为 **v0.1.0-rc.2 预发布**，用于评估和试用，尚未完成生产验收。请使用文档指定的标签。
+> 当前稳定版为 **v1.0.0**。请使用文档指定的标签，并在自己的部署环境验证入口、容量和恢复流程。
 
 ![Configra Vault 工作台：资源导航、条目、环境变体与字段详情](https://viber-ops.github.io/assets/configra/vault-light.png)
 
@@ -43,8 +43,8 @@ database:
 准备 Docker Compose、Go 1.25.13+、Node.js 24、npm、Make 和 OpenSSL：
 
 ```sh
-git clone --branch v0.1.0-rc.2 https://github.com/viber-ops/configra.git
-git clone --branch v0.1.0-rc.2 https://github.com/viber-ops/configra-go.git
+git clone --branch v1.0.0 https://github.com/viber-ops/configra.git
+git clone --branch v1.0.0 https://github.com/viber-ops/configra-go.git
 cd configra
 make local-run
 ```
@@ -65,7 +65,9 @@ Configra 自身可运行在 Kubernetes 中，Management 与 API 分开部署。M
 
 Token 按 **Environment** 授权，Admin / Viewer 为工作区级角色，Vault Namespace 不是多租户隔离机制。不提供动态数据库凭据、HSM/KMS、应用自动重启或 Master Key 自动轮换。
 
-本轮 1000 QPS 验收尚未通过，部分早期拒绝请求的持久审计和后端列表分页仍需改进。生产前先阅读[安全与发布状态](https://viber-ops.github.io/docs/configra/security/)，并完成自己的负载与恢复验证。
+当前源码镜像已在 8 vCPU Linux 主机上通过十分钟 1000 QPS 测试，API 限制为 2 CPU / 512 MiB。[测试记录](docs/verification/2026-09-22.md#native-linux-default-profile-ten-minute-gate)包含具体环境和失败记录，不能直接作为所有部署的容量保证。
+
+v1.0.0 新增后端列表分页、只读恢复检查和[维护窗口内的主密钥轮换](deploy/backup/README.md#offline-master-key-rotation)。从 rc.2 升级时，自编 Management 客户端需要[适配分页](docs/ui.md)；机器读取接口和 SDK 调用方式不变。生产入口、跨主机故障仍需在自己的环境验证。上线前请查看[当前验收状态](docs/production-readiness.md)。
 
 [本地体验](https://viber-ops.github.io/docs/configra/quickstart/) · [服务部署](https://viber-ops.github.io/docs/configra/deployment/) · [备份与排障](https://viber-ops.github.io/docs/configra/operations/)
 

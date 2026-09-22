@@ -8,6 +8,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -98,15 +99,29 @@ func TestNativeSynchronizationAndCSIRotationWithMTLS(t *testing.T) {
 	secret := make([]byte, 32)
 	rand.Read(secret)
 	token := "cfg_testnode_" + base64.RawURLEncoding.EncodeToString(secret)
+	var activeToken, activeCertificate atomic.Value
+	activeToken.Store(token)
+	activeCertificate.Store(sha256.Sum256(clientPair.Certificate[0]))
 	var revision atomic.Int64
 	revision.Store(1)
 	var reads atomic.Int64
+	var failedCSIReads atomic.Int64
+	var unavailable atomic.Bool
+	const privateFailureMarker = "configra-private-upstream-failure"
 	upstream := httptest.NewUnstartedServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		if request.Header.Get("Authorization") != "Bearer "+token || request.TLS == nil || len(request.TLS.VerifiedChains) == 0 {
+		if request.Header.Get("Authorization") != "Bearer "+activeToken.Load().(string) || request.TLS == nil || len(request.TLS.VerifiedChains) == 0 ||
+			sha256.Sum256(request.TLS.PeerCertificates[0].Raw) != activeCertificate.Load().([32]byte) {
 			response.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 		reads.Add(1)
+		if unavailable.Load() {
+			http.Error(response, privateFailureMarker, http.StatusServiceUnavailable)
+			if request.URL.Path == "/v1/environments/production/configs/app" {
+				failedCSIReads.Add(1)
+			}
+			return
+		}
 		value := revision.Load()
 		content := fmt.Sprintf("VERSION: %d\nPORT: %d\n", value, 8080+value)
 		response.Header().Set("Content-Type", "application/json")
@@ -163,10 +178,18 @@ func TestNativeSynchronizationAndCSIRotationWithMTLS(t *testing.T) {
 	render("../deploy/provider", "configra-provider", providerNamespace)
 	command("-n", namespace, "rollout", "status", "deployment/configra-sync", "--timeout=150s")
 	command("-n", providerNamespace, "rollout", "status", "daemonset/"+providerNamespace, "--timeout=150s")
+	var adapters []corev1.Pod
+	for _, name := range []string{namespace, providerNamespace} {
+		pods, err := kube.CoreV1().Pods(name).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		adapters = append(adapters, pods.Items...)
+	}
 	binding := func(name, kind, mode string) map[string]any {
 		return map[string]any{
 			"apiVersion": "configra.viber-ops.github.io/v1alpha1", "kind": "ConfigraBinding", "metadata": map[string]any{"name": name, "namespace": namespace},
-			"spec": map[string]any{"credentialsSecretRef": map[string]any{"name": "configra-credentials"}, "target": map[string]any{"name": name, "kind": kind, "mode": mode}, "refreshInterval": "5s", "objects": []any{map[string]any{"type": "config", "environment": "production", "config": "app", "path": "app.yaml"}}},
+			"spec": map[string]any{"credentialsSecretRef": map[string]any{"name": "configra-credentials"}, "target": map[string]any{"name": name, "kind": kind, "mode": mode}, "refreshInterval": "5s", "objects": []any{map[string]any{"type": "config", "environment": "production", "config": "native_app", "path": "app.yaml"}}},
 		}
 	}
 	apply(binding("native-file", "Secret", "files"), binding("native-env", "ConfigMap", "env"))
@@ -202,6 +225,89 @@ func TestNativeSynchronizationAndCSIRotationWithMTLS(t *testing.T) {
 		output, err := cmd.CombinedOutput()
 		return err == nil && bytes.Contains(output, []byte("VERSION: 2"))
 	}, "CSI file rotation")
+
+	// Observe failures in both adapters before checking their last delivered data.
+	unavailable.Store(true)
+	revision.Store(3)
+	command("-n", namespace, "wait", "configrabinding/native-file", "--for=condition=Ready=false", "--timeout=150s")
+	// Native bindings use native_app so only CSI contributes to this counter.
+	// Kubelet republish failures do not necessarily emit Pod Warning events.
+	waitFor(t, ctx, func() bool { return failedCSIReads.Load() > 0 }, "CSI refresh failure during the upstream outage")
+	if value := command("-n", namespace, "get", "configrabinding/native-file", "-o", "json"); bytes.Contains(value, []byte(privateFailureMarker)) {
+		t.Fatal("binding status disclosed an upstream response body")
+	}
+	file, err := kube.CoreV1().Secrets(namespace).Get(ctx, "native-file", metav1.GetOptions{})
+	if err != nil || !bytes.Contains(file.Data["app.yaml"], []byte("VERSION: 2")) {
+		t.Fatal("upstream failure replaced the last native target")
+	}
+	if value := command("-n", namespace, "exec", "consumer", "--", "cat", "/etc/application/app.yaml"); !bytes.Contains(value, []byte("VERSION: 2")) {
+		t.Fatal("upstream failure replaced the last CSI content")
+	}
+
+	// A new Token and client certificate must work without restarting either adapter.
+	rotatedPair, rotatedPEM, _ := certificate(t, false, ca.certificate, ca.key)
+	rotatedKey, err := x509.MarshalPKCS8PrivateKey(rotatedPair.PrivateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(rotatedKey)
+	rand.Read(secret)
+	token = "cfg_testnode_" + base64.RawURLEncoding.EncodeToString(secret)
+	activeToken.Store(token)
+	activeCertificate.Store(sha256.Sum256(rotatedPair.Certificate[0]))
+	credential, err := kube.CoreV1().Secrets(namespace).Get(ctx, "configra-credentials", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	credential.Data = map[string][]byte{"token": []byte(token), "tls.crt": rotatedPEM, "tls.key": pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: rotatedKey})}
+	if _, err := kube.CoreV1().Secrets(namespace).Update(ctx, credential, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	unavailable.Store(false)
+	waitFor(t, ctx, func() bool {
+		file, err := kube.CoreV1().Secrets(namespace).Get(ctx, "native-file", metav1.GetOptions{})
+		environment, other := kube.CoreV1().ConfigMaps(namespace).Get(ctx, "native-env", metav1.GetOptions{})
+		return err == nil && other == nil && bytes.Contains(file.Data["app.yaml"], []byte("VERSION: 3")) && environment.Data["PORT"] == "8083"
+	}, "native recovery with rotated credentials")
+	waitFor(t, ctx, func() bool {
+		return bytes.Contains(command("-n", namespace, "exec", "consumer", "--", "cat", "/etc/application/app.yaml"), []byte("VERSION: 3"))
+	}, "CSI recovery with rotated credentials")
+	command("-n", namespace, "wait", "configrabinding/native-file", "--for=condition=Ready", "--timeout=150s")
+	for _, before := range adapters {
+		pod, err := kube.CoreV1().Pods(before.Namespace).Get(ctx, before.Name, metav1.GetOptions{})
+		if err != nil || pod.UID != before.UID {
+			t.Fatal("adapter was replaced during credential rotation")
+		}
+		for _, container := range pod.Status.ContainerStatuses {
+			if container.RestartCount != 0 {
+				t.Fatal("adapter restarted during credential rotation")
+			}
+		}
+	}
+
+	lease, err := kube.CoordinationV1().Leases(namespace).Get(ctx, "configra-binding-controller", metav1.GetOptions{})
+	if err != nil || lease.Spec.HolderIdentity == nil {
+		t.Fatal("sync controller has no elected leader")
+	}
+	previousLeader := *lease.Spec.HolderIdentity
+	leaderName, _, _ := strings.Cut(previousLeader, "_")
+	leader, err := kube.CoreV1().Pods(namespace).Get(ctx, leaderName, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := kube.CoreV1().Pods(namespace).Delete(ctx, leader.Name, metav1.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &leader.UID}}); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, ctx, func() bool {
+		lease, err := kube.CoordinationV1().Leases(namespace).Get(ctx, "configra-binding-controller", metav1.GetOptions{})
+		return err == nil && lease.Spec.HolderIdentity != nil && *lease.Spec.HolderIdentity != previousLeader
+	}, "sync controller leader replacement")
+	revision.Store(4)
+	waitFor(t, ctx, func() bool {
+		file, err := kube.CoreV1().Secrets(namespace).Get(ctx, "native-file", metav1.GetOptions{})
+		environment, other := kube.CoreV1().ConfigMaps(namespace).Get(ctx, "native-env", metav1.GetOptions{})
+		return err == nil && other == nil && bytes.Contains(file.Data["app.yaml"], []byte("VERSION: 4")) && environment.Data["PORT"] == "8084"
+	}, "native synchronization after leader replacement")
 	pod, err := kube.CoreV1().Pods(namespace).Get(ctx, "consumer", metav1.GetOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -217,7 +323,7 @@ func TestNativeSynchronizationAndCSIRotationWithMTLS(t *testing.T) {
 	if reads.Load() < 4 {
 		t.Fatal("expected authenticated reads for synchronization and rotation")
 	}
-	t.Logf("Native file/env synchronization and CSI rotation passed with %d authenticated mTLS reads", reads.Load())
+	t.Logf("Native/CSI updates, outage retention, credential rotation and leader replacement passed with %d authenticated mTLS reads", reads.Load())
 }
 
 type authority struct {

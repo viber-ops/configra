@@ -62,32 +62,48 @@ type ClientCertificateIssueResult struct {
 	ExportBundle string                  `json:"export_bundle,omitempty"`
 }
 
-func (store *Store) ListCertificateAuthorities(ctx context.Context, includeRevoked bool) ([]CertificateAuthority, error) {
+type AuthorityQuery struct {
+	InventoryQuery
+	Usable bool
+}
+
+func (store *Store) ListCertificateAuthorities(ctx context.Context, query AuthorityQuery) (InventoryPage[CertificateAuthority], error) {
+	page := InventoryPage[CertificateAuthority]{Items: make([]CertificateAuthority, 0)}
+	if !query.valid() || (query.Usable && query.OnlyInactive) {
+		return page, ErrValidation
+	}
+	where, arguments := query.filter("LOWER(HEX(authority.id))", "authority.revoked_at", "authority.display_name", "LOWER(HEX(authority.id))")
+	if query.Usable {
+		where += " AND authority.revoked_at IS NULL AND authority.not_before <= UTC_TIMESTAMP(6) AND authority.not_after > UTC_TIMESTAMP(6)"
+	}
+	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM certificate_authorities AS authority WHERE `+where, arguments...).Scan(&page.Total); err != nil {
+		return page, errors.New("count certificate authorities")
+	}
 	rows, err := store.db.QueryContext(ctx, `SELECT authority.id, authority.display_name, authority.certificate_der,
-		authority.revoked_at IS NOT NULL, authority.created_at, COUNT(certificate.id)
-		FROM certificate_authorities AS authority LEFT JOIN client_certificates AS certificate ON certificate.authority_id = authority.id
-		WHERE authority.revoked_at IS NULL OR ? GROUP BY authority.id ORDER BY authority.created_at DESC, authority.id`, includeRevoked)
+		authority.revoked_at IS NOT NULL, authority.created_at,
+		(SELECT COUNT(*) FROM client_certificates AS certificate WHERE certificate.authority_id = authority.id)
+		FROM certificate_authorities AS authority WHERE `+where+`
+		ORDER BY authority.created_at DESC, authority.id LIMIT ? OFFSET ?`, append(arguments, query.Limit, query.Offset)...)
 	if err != nil {
-		return nil, errors.New("list certificate authorities")
+		return page, errors.New("list certificate authorities")
 	}
 	defer rows.Close()
-	result := make([]CertificateAuthority, 0)
 	for rows.Next() {
 		var authority CertificateAuthority
 		var id, der []byte
 		if err := rows.Scan(&id, &authority.DisplayName, &der, &authority.Revoked, &authority.CreatedAt, &authority.ClientCertificateCount); err != nil {
-			return nil, errors.New("read certificate authority metadata")
+			return page, errors.New("read certificate authority metadata")
 		}
 		certificate, err := x509.ParseCertificate(der)
 		if err != nil || len(id) != 16 || !certificate.IsCA {
-			return nil, vaultcrypto.ErrIntegrity
+			return page, vaultcrypto.ErrIntegrity
 		}
 		authority.ID = hex.EncodeToString(id)
 		setAuthorityCertificate(&authority, certificate)
 		authority.CreatedAt = authority.CreatedAt.UTC()
-		result = append(result, authority)
+		page.Items = append(page.Items, authority)
 	}
-	return result, rows.Err()
+	return page, rows.Err()
 }
 
 func (store *Store) ActiveCertificateAuthorities(ctx context.Context) ([][]byte, error) {
@@ -117,6 +133,10 @@ func (store *Store) CreateCertificateAuthority(ctx context.Context, request Auth
 		return AuthorityResult{}, errors.New("begin Authority creation")
 	}
 	defer transaction.Rollback()
+	// The exclusive Sentinel lock also serializes the active-CA limit check.
+	if err := store.lockMasterKey(ctx, transaction, true); err != nil {
+		return AuthorityResult{}, err
+	}
 	replayed, replay, err := beginOperation(ctx, transaction, request.OperationID, pkiDigest("authority.create", request), request.Actor)
 	if err != nil {
 		return AuthorityResult{}, err
@@ -127,11 +147,6 @@ func (store *Store) CreateCertificateAuthority(ctx context.Context, request Auth
 			return AuthorityResult{}, vaultcrypto.ErrIntegrity
 		}
 		return previous, outcomeError(previous.Outcome)
-	}
-	// Serialize rare CA creation across Management replicas to enforce the active-CA limit.
-	var singleton int
-	if err := transaction.QueryRowContext(ctx, "SELECT id FROM crypto_sentinel WHERE id = 1 FOR UPDATE").Scan(&singleton); err != nil {
-		return AuthorityResult{}, errors.New("lock Authority creation")
 	}
 	var active int
 	if err := transaction.QueryRowContext(ctx, "SELECT COUNT(*) FROM certificate_authorities WHERE revoked_at IS NULL AND not_after > UTC_TIMESTAMP(6)").Scan(&active); err != nil {

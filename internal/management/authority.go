@@ -9,7 +9,7 @@ import (
 )
 
 type AuthorityRepository interface {
-	ListCertificateAuthorities(context.Context, bool) ([]mysqlstore.CertificateAuthority, error)
+	ListCertificateAuthorities(context.Context, mysqlstore.AuthorityQuery) (mysqlstore.InventoryPage[mysqlstore.CertificateAuthority], error)
 	ActiveCertificateAuthorities(context.Context) ([][]byte, error)
 	CreateCertificateAuthority(context.Context, mysqlstore.AuthorityCreate) (mysqlstore.AuthorityResult, error)
 	RevokeCertificateAuthority(context.Context, mysqlstore.AuthorityRevoke) (mysqlstore.AuthorityResult, error)
@@ -20,18 +20,21 @@ func (server *server) listCertificateAuthorities(response http.ResponseWriter, r
 	if _, ok := requireAdmin(response, request); !ok {
 		return
 	}
-	includeRevoked, ok := parseBooleanQuery(response, request, "include_revoked")
+	query, values, ok := parseInventoryQuery(response, request, "include_revoked", "usable")
 	if !ok {
 		return
 	}
-	items, err := server.configs.ListCertificateAuthorities(request.Context(), includeRevoked)
-	if err != nil {
-		writeError(response, http.StatusServiceUnavailable, "service_unavailable")
+	usable := values.Get("usable")
+	if values.Has("usable") && usable != "true" && usable != "false" {
+		writeError(response, http.StatusBadRequest, "invalid_request")
 		return
 	}
-	writeJSON(response, struct {
-		Items []mysqlstore.CertificateAuthority `json:"items"`
-	}{items})
+	page, err := server.configs.ListCertificateAuthorities(request.Context(), mysqlstore.AuthorityQuery{InventoryQuery: query, Usable: usable == "true"})
+	if err != nil {
+		writeReadError(response, err)
+		return
+	}
+	writeJSON(response, page)
 }
 
 func (server *server) createCertificateAuthority(response http.ResponseWriter, request *http.Request) {

@@ -67,7 +67,8 @@ func (store *Store) Close() error {
 }
 
 func (store *Store) Ping(ctx context.Context) error {
-	return store.db.PingContext(ctx)
+	// A replica with a stale mounted key must not remain ready after rotation.
+	return verifySentinel(ctx, store.db, store.provider)
 }
 
 func (store *Store) SchemaVersion(ctx context.Context) (uint64, error) {
@@ -128,6 +129,16 @@ func verifyInitialized(ctx context.Context, db *sql.DB, provider *vaultcrypto.Lo
 		return fmt.Errorf("reserve verification connection: %w", err)
 	}
 	defer connection.Close()
+	return verifyDatabase(ctx, connection, provider)
+}
+
+// Both startup connections and the recovery check's consistent snapshot use
+// the same schema and Sentinel verification.
+type verificationReader interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+func verifyDatabase(ctx context.Context, connection verificationReader, provider *vaultcrypto.LocalKeyProvider) error {
 	var version uint64
 	if err := connection.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		return fmt.Errorf("read schema version: %w", err)
@@ -176,23 +187,42 @@ func initializeSchema(ctx context.Context, connection *sql.Conn, provider *vault
 	return nil
 }
 
-func verifySentinel(ctx context.Context, connection *sql.Conn, provider *vaultcrypto.LocalKeyProvider) error {
+func verifySentinel(ctx context.Context, connection verificationReader, provider *vaultcrypto.LocalKeyProvider) error {
+	sentinel, err := readSentinel(ctx, connection, "")
+	if err != nil {
+		return err
+	}
+	return provider.VerifySentinel(sentinel)
+}
+
+// Encrypted writes take this lock before any resource/Operation locks. Rotation
+// takes the exclusive form, so a stale writer cannot commit old-key data after it.
+func (store *Store) lockMasterKey(ctx context.Context, transaction *sql.Tx, exclusive bool) error {
+	lock := " FOR SHARE"
+	if exclusive {
+		lock = " FOR UPDATE"
+	}
+	sentinel, err := readSentinel(ctx, transaction, lock)
+	if err != nil {
+		return err
+	}
+	return store.provider.VerifySentinel(sentinel)
+}
+
+func readSentinel(ctx context.Context, connection verificationReader, lock string) (vaultcrypto.EncryptedSentinel, error) {
 	var sentinel vaultcrypto.EncryptedSentinel
 	err := connection.QueryRowContext(ctx, `
 		SELECT algorithm, key_version, nonce, ciphertext
 		FROM crypto_sentinel
 		WHERE id = 1
-	`).Scan(&sentinel.Algorithm, &sentinel.KeyVersion, &sentinel.Nonce, &sentinel.Ciphertext)
+	`+lock).Scan(&sentinel.Algorithm, &sentinel.KeyVersion, &sentinel.Nonce, &sentinel.Ciphertext)
 	if errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("crypto sentinel is missing: %w", vaultcrypto.ErrIntegrity)
+		return sentinel, fmt.Errorf("crypto sentinel is missing: %w", vaultcrypto.ErrIntegrity)
 	}
 	if err != nil {
-		return fmt.Errorf("read crypto sentinel: %w", err)
+		return sentinel, fmt.Errorf("read crypto sentinel: %w", err)
 	}
-	if err := provider.VerifySentinel(sentinel); err != nil {
-		return fmt.Errorf("verify crypto sentinel: %w", err)
-	}
-	return nil
+	return sentinel, nil
 }
 
 func releaseMigrationLock(connection *sql.Conn) {

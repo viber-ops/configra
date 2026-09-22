@@ -58,6 +58,12 @@ namespace. If the server uses public Web PKI, remove `--server-ca-file` and its
 mount to use the image's system trust roots. Set `--configra-url` to the hostname
 covered by the API server certificate; the service's standard HTTPS port is 443.
 
+Workload Tokens and client certificates are reread from the credential Secret on
+each synchronization or CSI fetch. Replace that Secret to rotate them; the
+adapters need no restart. The API URL and server CA bundle are startup settings:
+roll out the adapters after changing them. A server-CA rollover needs an overlap
+period in the trust bundle so existing and replacement servers remain trusted.
+
 Machine authorization is currently Environment-wide. Separate workload Tokens
 provide independent rotation/revocation, but Tokens granting the same Environment
 can read the same Configs and Vault values. Kubernetes namespaces do not narrow
@@ -77,7 +83,10 @@ kubectl apply -f kubernetes/examples/provider.yaml
 
 Replace the example image and API URL in an overlay before applying. Set the
 driver's `enableSecretRotation=true` and an appropriate `rotationPollInterval`.
-Kubelet republish cadence determines actual refresh timing. The provider defaults
+From driver v1.6, this interval is a minimum cache duration, not a refresh
+deadline: rotation waits for kubelet's next republish call. See the
+[upstream rotation behavior](https://secrets-store-csi-driver.sigs.k8s.io/topics/secret-auto-rotation.html).
+The provider defaults
 to `fileMode: "0440"`; allowed alternatives are `"0400"` and `"0444"` (all
 read-only). The non-root example explicitly uses `"0444"`, making files readable
 by all UIDs inside the selected Pod mount. Use `0400`/`0440` when the consumer's
@@ -92,7 +101,8 @@ protocol follows the upstream [provider interface](https://secrets-store-csi-dri
 
 `parameters.objects` is a YAML or JSON list. Each entry has a unique relative
 `path`; absolute paths, backslashes, traversal, and `..`-prefixed elements are
-rejected. Example File field:
+rejected. Paths cannot overlap as a file and directory: `database` and
+`database/client.pem` cannot appear in the same mount. Example File field:
 
 ```yaml
 - type: file
@@ -109,6 +119,12 @@ Config read is consistent internally; multiple objects do not imply one shared
 database snapshot. Existing mounted values can remain usable after credentials
 are revoked; revocation prevents further authorized reads, not use of bytes
 already delivered.
+
+During a Configra outage, an existing mount keeps its last delivered files, but
+a new CSI mount cannot fetch its initial content. Native targets already written
+to Kubernetes remain available to new Pods; the controller marks a failed refresh
+as `Ready=False` and retries. Neither mode updates a running application's parsed
+configuration automatically.
 
 ## Native Secret / ConfigMap synchronization
 
@@ -128,10 +144,24 @@ write access to its native targets. Keep it out of the namespace containing
 Configra's bootstrap Master Key. Two replicas use leader election. A binding
 cannot reference credentials or targets in another namespace.
 
+Two replicas are not a node-failure guarantee. Check their `NODE` columns with
+`kubectl -n configra-app get pods -l app.kubernetes.io/name=configra-sync -o wide`.
+Use your overlay's [placement rules](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/)
+to keep replicas on different nodes. The included PodDisruptionBudget limits
+evictions that honor it; it does not prevent a sudden node failure or direct Pod
+deletion. See [Kubernetes disruptions](https://kubernetes.io/docs/concepts/workloads/pods/disruptions/).
+
 The controller creates a target with a controller owner reference and refuses
 to overwrite an unrelated object, even if that object has a similar label. It
 updates the complete target atomically, retains previous content on read errors,
 and removes an old owned target after a successful target-name/kind change.
+Deletion checks both UID and resource version; an object replaced or taken over
+between the ownership check and deletion is left untouched.
+v1.0.0 also retains the target version observed before its
+Configra fetch. If another reconciliation updates or creates the target during
+that fetch, Kubernetes rejects the older write and the controller retries. Each
+reconciliation has a 45-second total deadline, with the existing 30-second
+Configra fetch limit inside it. Upgrade from rc.2 to receive these protections.
 Deleting the binding lets Kubernetes garbage collection remove its owned targets.
 Unchanged data does not create a write loop. Status exposes synchronization
 conditions and revision digest, never content or private upstream errors.
@@ -162,9 +192,11 @@ process does not acquire new environment variables until its Pod is replaced.
 
 Unit tests exercise real provider gRPC calls, credential/path validation, complete
 responses, owner protection, namespace restriction, native text/binary mapping,
-idempotency, and retention on failure. The opt-in cluster suite also exercises a
-real mTLS endpoint, native synchronization, non-root CSI reads, rotation, and the
-unchanged environment of an already-running container:
+idempotency, and retention on failure. The opt-in adapter suite uses a temporary
+mTLS HTTP fixture, not the Configra backend. It exercises native synchronization,
+non-root CSI reads, upstream-failure
+retention, Token/certificate rotation without adapter restarts, controller leader
+replacement, and the unchanged environment of an already-running container:
 
 ```sh
 CONFIGRA_K8S_TEST_KUBECONFIG=/path/to/disposable-kind.kubeconfig \
@@ -178,3 +210,33 @@ and BusyBox 1.37.0 into that cluster first, install the CSI driver with rotation
 enabled and `fsGroupPolicy: File`, and use a reachable host IP for the temporary
 HTTPS fixture. The suite creates and removes its own namespaces; it is not a
 production-cluster test.
+
+For the complete local backend path, run from the repository root:
+
+```sh
+make kubernetes-service-test
+```
+
+This creates a new kind cluster with one control plane and two workers, and runs
+two replicas each of the real Management/API image using
+`deploy/kubernetes/base`, with external disposable MySQL 8.0.22, NATS, ClickHouse
+and HTTPS Casdoor containers. It issues credentials through Management HTTP,
+reads rendered Configs and binary Files through the real API, and exercises
+both adapters, credential revocation/rotation, API outages and rolling updates.
+Consumers mount on both workers. The test pauses the worker holding the sync
+leader, waits for Kubernetes to mark it unavailable and remove its endpoints,
+then checks leadership transfer, native/CSI refresh and a new CSI mount on the
+healthy worker. It resumes the paused worker in cleanup and verifies both
+consumers converge after recovery. It does not assert zero failed requests
+during node detection or accelerate Kubernetes' eviction timers.
+It also runs offline Master Key rotation after stopping all service Pods,
+verifies the new key before replacing the bootstrap Secret, and checks both
+adapters consume a new revision after the services restart.
+The file-only CSI fixture does not enable CSI Secret sync or grant its driver
+access to Kubernetes Secrets; native synchronization is handled by Configra's
+namespace-scoped controller.
+
+See [prerequisites and cleanup](../CONTRIBUTING.md#work-locally). The test owns its
+kubeconfig and never switches your current context. A passing local run does not
+prove production ingress, physical-host/zone loss, database HA, capacity or
+release readiness. All three test nodes still share one Docker host.

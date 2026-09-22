@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { inventoryPage } from './inventory.js';
 
 test('readers can open original open-source license notices from either sign-in locale', async ({ page }) => {
   const backgroundDownloads = [];
@@ -70,12 +71,12 @@ test('authenticated overview shows observed health, real changes, and configurat
   const mobile = process.env.CONFIGRA_UI_MOBILE === '1';
   if (mobile) await page.setViewportSize({ width: 390, height: 844 });
   await page.route('**/v1/me', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ subject: 'admin-1', email: 'alex@example.com', role: 'admin' }) }));
-  await page.route('**/v1/environments', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [{ key: 'production', display_name: 'Production' }] }) }));
-  await page.route('**/v1/configs', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [
+  await page.route('**/v1/environments*', route => route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, [{ key: 'production', display_name: 'Production' }]) }));
+  await page.route('**/v1/configs*', route => route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, [
     { key: 'payment', display_name: 'Payment', updated_at: '2026-08-27T01:00:00Z', environments: [{ key: 'production', revision: 17 }] },
     { key: 'orphan', display_name: 'Orphan', updated_at: '2026-08-27T00:30:00Z', environments: [{ key: 'retired', revision: 2, archived: true }] },
-  ] }) }));
-  await page.route('**/v1/vault-items', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [{ namespace_key: 'platform', key: 'database', display_name: 'Database', revision: 8, updated_at: '2026-08-27T01:01:00Z' }] }) }));
+  ]) }));
+  await page.route('**/v1/vault-items*', route => route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, [{ namespace_key: 'platform', key: 'database', display_name: 'Database', revision: 8, updated_at: '2026-08-27T01:01:00Z' }]) }));
   await page.route('**/v1/audit?limit=8', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [
     { id: 'vault-change', time: '2026-08-27T01:01:00Z', action: 'vault.commit', outcome: 'success', environment: '', namespace: 'platform', resource_type: 'vault_item', resource: 'database', revision: 8 },
     { id: 'config-change', time: '2026-08-27T01:00:00Z', action: 'config.commit', outcome: 'success', environment: 'production', resource_type: 'config', resource: 'payment', revision: 17 },
@@ -120,9 +121,9 @@ test('authenticated overview shows observed health, real changes, and configurat
 test('authenticated workspace follows the selected Chinese locale', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('configra-language', 'zh'));
   await page.route('**/v1/me', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ subject: 'viewer-1', email: 'viewer@example.com', role: 'viewer' }) }));
-  await page.route('**/v1/environments', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[]}' }));
-  await page.route('**/v1/configs', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[]}' }));
-  await page.route('**/v1/vault-items', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[]}' }));
+  await page.route('**/v1/environments', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[],"total":0}' }));
+  await page.route('**/v1/configs', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[],"total":0}' }));
+  await page.route('**/v1/vault-items', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[],"total":0}' }));
   await page.goto('/ui/');
 
   await expect(page.getByRole('heading', { name: '概览' })).toBeVisible();

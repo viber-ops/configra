@@ -26,12 +26,12 @@ var (
 )
 
 type Token struct {
-	PublicID            string
-	SecretDigest        [sha256.Size]byte
-	AllowedEnvironments []string
-	AllowWithoutMTLS    bool
-	ExpiresAt           time.Time
-	Revoked             bool
+	PublicID           string
+	SecretDigest       [sha256.Size]byte
+	EnvironmentGranted bool // For the Environment passed to TokenForEnvironment.
+	AllowWithoutMTLS   bool
+	ExpiresAt          time.Time
+	Revoked            bool
 }
 
 type ResolvedConfig struct {
@@ -51,7 +51,7 @@ type FileContent struct {
 }
 
 type Repository interface {
-	TokenByPublicID(context.Context, string) (Token, error)
+	TokenForEnvironment(context.Context, string, string) (Token, error)
 	IsCertificateActive(context.Context, [sha256.Size]byte) (bool, error)
 	ReadResolvedConfig(context.Context, string, string, string) (ResolvedConfig, error)
 	ReadFile(context.Context, string, string, string, string, string) (FileContent, error)
@@ -225,7 +225,7 @@ func (server *server) authorize(request *http.Request, environment string) (Auth
 	if !ok {
 		return "", http.StatusUnauthorized
 	}
-	token, err := server.repository.TokenByPublicID(request.Context(), publicID)
+	token, err := server.repository.TokenForEnvironment(request.Context(), publicID, environment)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return "", http.StatusUnauthorized
@@ -239,7 +239,7 @@ func (server *server) authorize(request *http.Request, environment string) (Auth
 		(!token.ExpiresAt.IsZero() && !server.now().Before(token.ExpiresAt)) {
 		return "", http.StatusUnauthorized
 	}
-	if !contains(token.AllowedEnvironments, environment) {
+	if !token.EnvironmentGranted {
 		return "", http.StatusForbidden
 	}
 	if request.TLS == nil {
@@ -308,15 +308,6 @@ func validResourceKey(value string) bool {
 		}
 	}
 	return true
-}
-
-func contains(values []string, wanted string) bool {
-	for _, value := range values {
-		if value == wanted {
-			return true
-		}
-	}
-	return false
 }
 
 func statusCode(status int) string {

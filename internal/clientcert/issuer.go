@@ -56,17 +56,9 @@ func GenerateClient(authority *x509.Certificate, privateKeyDER []byte, name stri
 		now.Before(authority.NotBefore) || !now.Before(authority.NotAfter) {
 		return GeneratedCertificate{}, errors.New("invalid Client Certificate name, lifetime, or Authority")
 	}
-	parsed, err := x509.ParsePKCS8PrivateKey(privateKeyDER)
+	signer, err := ParseAuthorityKey(authority, privateKeyDER)
 	if err != nil {
-		return GeneratedCertificate{}, errors.New("invalid Authority signing key")
-	}
-	signer, ok := parsed.(crypto.Signer)
-	if !ok {
-		return GeneratedCertificate{}, errors.New("invalid Authority signing key")
-	}
-	public, err := x509.MarshalPKIXPublicKey(signer.Public())
-	if err != nil || !bytes.Equal(public, authority.RawSubjectPublicKeyInfo) {
-		return GeneratedCertificate{}, errors.New("Authority key does not match certificate")
+		return GeneratedCertificate{}, err
 	}
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -91,6 +83,27 @@ func GenerateClient(authority *x509.Certificate, privateKeyDER []byte, name stri
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	}
 	return createCertificate(template, authority, key, signer)
+}
+
+// ParseAuthorityKey verifies the stored pair without requiring a currently valid
+// certificate. Recovery must also verify expired and revoked authorities.
+func ParseAuthorityKey(authority *x509.Certificate, privateKeyDER []byte) (crypto.Signer, error) {
+	if authority == nil || !authority.IsCA || !authority.BasicConstraintsValid || authority.KeyUsage&x509.KeyUsageCertSign == 0 {
+		return nil, errors.New("invalid Authority certificate")
+	}
+	parsed, err := x509.ParsePKCS8PrivateKey(privateKeyDER)
+	if err != nil {
+		return nil, errors.New("invalid Authority signing key")
+	}
+	signer, ok := parsed.(crypto.Signer)
+	if !ok {
+		return nil, errors.New("invalid Authority signing key")
+	}
+	public, err := x509.MarshalPKIXPublicKey(signer.Public())
+	if err != nil || !bytes.Equal(public, authority.RawSubjectPublicKeyInfo) {
+		return nil, errors.New("Authority key does not match certificate")
+	}
+	return signer, nil
 }
 
 func CertificatePEM(certificate *x509.Certificate) string {

@@ -34,6 +34,7 @@ var mutationAuditRoutes = map[string]mutationAuditRoute{
 	"POST /v1/vault-items/{namespace}/{item}/unarchive":                                {"vault.unarchive", "vault_item", "item"},
 	"POST /v1/api-tokens":                                                              {"token.create", "api_token", "public_id"},
 	"PUT /v1/api-tokens/{public_id}/environments":                                      {"token.set_environments", "api_token", "public_id"},
+	"PATCH /v1/api-tokens/{public_id}/environments":                                    {"token.patch_environments", "api_token", "public_id"},
 	"POST /v1/api-tokens/{public_id}/revoke":                                           {"token.revoke", "api_token", "public_id"},
 	"POST /v1/client-certificates":                                                     {"client_certificate.register", "client_certificate", "fingerprint"},
 	"POST /v1/client-certificates/issue":                                               {"client_certificate.issue", "client_certificate", "fingerprint"},
@@ -59,7 +60,7 @@ func (server *server) auditRejections(mux *http.ServeMux, next http.Handler) htt
 			return
 		}
 		_, pattern := mux.Handler(request)
-		if pattern == "POST /v1/configs/validate" || pattern == "POST /v1/environments/{environment}/configs/{config}/transfer-preview" {
+		if pattern == "POST /v1/configs/validate" || pattern == "POST /v1/environments/{environment}/configs/{config}/transfer-preview" || pattern == "POST /v1/vault-items/{namespace}/{item}/impact-preview" {
 			next.ServeHTTP(response, request)
 			return
 		}

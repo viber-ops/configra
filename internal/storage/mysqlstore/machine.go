@@ -20,19 +20,26 @@ import (
 	"github.com/viber-ops/configra/internal/vaultdoc"
 )
 
-func (store *Store) TokenByPublicID(ctx context.Context, publicID string) (machine.Token, error) {
+func (store *Store) TokenForEnvironment(ctx context.Context, publicID, environmentKey string) (machine.Token, error) {
+	token := machine.Token{PublicID: publicID}
 	var (
-		tokenID     []byte
-		digest      []byte
-		allowNoMTLS bool
-		expiresAt   sql.NullTime
-		revokedAt   sql.NullTime
+		tokenID   []byte
+		digest    []byte
+		expiresAt sql.NullTime
+		revokedAt sql.NullTime
 	)
+	// Check only the requested grant using the existing unique indexes. Keep
+	// archived grants: resource reads still return 404 until unarchived.
 	err := store.db.QueryRowContext(ctx, `
-		SELECT id, secret_digest, allow_without_mtls, expires_at, revoked_at
-		FROM api_tokens
-		WHERE public_id = ?
-	`, publicID).Scan(&tokenID, &digest, &allowNoMTLS, &expiresAt, &revokedAt)
+		SELECT token.id, token.secret_digest, token.allow_without_mtls, token.expires_at, token.revoked_at,
+		       EXISTS (
+		           SELECT 1 FROM api_token_environments AS grant_record
+		           JOIN environments AS environment ON environment.id = grant_record.environment_id
+		           WHERE grant_record.token_id = token.id AND environment.resource_key = ?
+		       )
+		FROM api_tokens AS token
+		WHERE token.public_id = ?
+	`, environmentKey, publicID).Scan(&tokenID, &digest, &token.AllowWithoutMTLS, &expiresAt, &revokedAt, &token.EnvironmentGranted)
 	if errors.Is(err, sql.ErrNoRows) {
 		return machine.Token{}, machine.ErrNotFound
 	}
@@ -42,35 +49,10 @@ func (store *Store) TokenByPublicID(ctx context.Context, publicID string) (machi
 	if len(tokenID) != 16 || len(digest) != sha256.Size {
 		return machine.Token{}, errors.New("API Token record failed integrity validation")
 	}
-	token := machine.Token{
-		PublicID:         publicID,
-		AllowWithoutMTLS: allowNoMTLS,
-		Revoked:          revokedAt.Valid,
-	}
+	token.Revoked = revokedAt.Valid
 	copy(token.SecretDigest[:], digest)
 	if expiresAt.Valid {
 		token.ExpiresAt = expiresAt.Time.UTC()
-	}
-	rows, err := store.db.QueryContext(ctx, `
-		SELECT environment.resource_key
-		FROM api_token_environments AS grant_record
-		JOIN environments AS environment ON environment.id = grant_record.environment_id
-		WHERE grant_record.token_id = ?
-		ORDER BY environment.resource_key
-	`, tokenID)
-	if err != nil {
-		return machine.Token{}, fmt.Errorf("read API Token Environment grants: %w", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var environment string
-		if err := rows.Scan(&environment); err != nil {
-			return machine.Token{}, fmt.Errorf("scan API Token Environment grant: %w", err)
-		}
-		token.AllowedEnvironments = append(token.AllowedEnvironments, environment)
-	}
-	if err := rows.Err(); err != nil {
-		return machine.Token{}, fmt.Errorf("iterate API Token Environment grants: %w", err)
 	}
 	return token, nil
 }
@@ -232,7 +214,10 @@ func (store *Store) ReadFile(
 		return result, machine.ErrNotModified
 	}
 	fieldTypes, err := readFieldTypes(ctx, transaction, metadata, []string{fieldKey})
-	if err != nil || fieldTypes[fieldKey] != "file" {
+	if err != nil {
+		return machine.FileContent{}, err
+	}
+	if fieldTypes[fieldKey] != "file" {
 		return machine.FileContent{}, machine.ErrNotFound
 	}
 	payload, err := store.decryptVaultPayload(ctx, transaction, metadata)

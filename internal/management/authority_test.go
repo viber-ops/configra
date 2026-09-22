@@ -19,8 +19,8 @@ type recordingAuthorityWriter struct {
 	revokes []mysqlstore.AuthorityRevoke
 }
 
-func (writer *recordingAuthorityWriter) ListCertificateAuthorities(context.Context, bool) ([]mysqlstore.CertificateAuthority, error) {
-	return []mysqlstore.CertificateAuthority{{ID: "00112233445566778899aabbccddeeff", DisplayName: "Workloads"}}, nil
+func (writer *recordingAuthorityWriter) ListCertificateAuthorities(context.Context, mysqlstore.AuthorityQuery) (mysqlstore.InventoryPage[mysqlstore.CertificateAuthority], error) {
+	return mysqlstore.InventoryPage[mysqlstore.CertificateAuthority]{Items: []mysqlstore.CertificateAuthority{{ID: "00112233445566778899aabbccddeeff", DisplayName: "Workloads"}}, Total: 1}, nil
 }
 func (writer *recordingAuthorityWriter) CreateCertificateAuthority(_ context.Context, request mysqlstore.AuthorityCreate) (mysqlstore.AuthorityResult, error) {
 	writer.creates = append(writer.creates, request)
