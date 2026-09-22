@@ -118,7 +118,14 @@ jobs:
         if: '!cancelled() && github.event_name == ''workflow_dispatch'' && inputs.acceptance != ''capacity'''
         run: |
           go install sigs.k8s.io/kind@v0.33.0
-          kubectl version --client
+          mkdir -p "$RUNNER_TEMP/configra-kubernetes-tools"
+          curl --fail --silent --show-error --location --retry 3 https://dl.k8s.io/release/v1.35.0/bin/linux/amd64/kubectl -o "$RUNNER_TEMP/configra-kubernetes-tools/kubectl"
+          printf '%s  %s\n' "$(curl --fail --silent --show-error --location --retry 3 https://dl.k8s.io/release/v1.35.0/bin/linux/amd64/kubectl.sha256)" "$RUNNER_TEMP/configra-kubernetes-tools/kubectl" | sha256sum --check
+          chmod 755 "$RUNNER_TEMP/configra-kubernetes-tools/kubectl"
+          printf '%s\n' "$RUNNER_TEMP/configra-kubernetes-tools" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/configra-kubernetes-tools/kubectl" version --client
+          docker version
+          docker pull busybox:1.37.0
       - name: Three-node Kubernetes services, providers, failure recovery and offline key rotation
         if: '!cancelled() && github.event_name == ''workflow_dispatch'' && inputs.acceptance != ''capacity'''
         run: make kubernetes-service-test
