@@ -1055,17 +1055,17 @@ test('administrator selects a Vault Variant, copies references, and explicitly r
   expect(valueReads).toBe(2);
 });
 
-test('Vault current references are value-free and destructive edits require impact confirmation', async ({ page }) => {
+for (const fieldKey of ['password', 'constructor']) test(`Vault current references are value-free and destructive edits require impact confirmation (${fieldKey})`, async ({ page }) => {
   await mockIdentity(page);
   const metadata = {
     namespace_key: 'platform', key: 'redis', display_name: 'Redis connection', revision: 4, archived: false,
     snapshot: {
-      fields: [{ key: 'password', name: 'Password', type: 'secret' }, { key: 'host', name: 'Host', type: 'text' }],
+      fields: [{ key: fieldKey, name: 'Password', type: 'secret' }, { key: 'host', name: 'Host', type: 'text' }],
       variants: [{ id: '01010101010101010101010101010101', environments: ['production'] }],
     },
   };
   const valued = structuredClone(metadata);
-  valued.snapshot.variants[0].values = { password: { text: 'secret-never-rendered' }, host: { text: 'redis.internal' } };
+  valued.snapshot.variants[0].values = { [fieldKey]: { text: 'secret-never-rendered' }, host: { text: 'redis.internal' } };
   let commit;
   await page.route('**/v1/environments*', route => route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, [{ key: 'production', display_name: 'Production', archived: false }]) }));
   await page.route('**/v1/vault-items/platform/redis**', async route => {
@@ -1073,7 +1073,7 @@ test('Vault current references are value-free and destructive edits require impa
     const pathname = new URL(request.url()).pathname;
     if (pathname.endsWith('/revisions')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [{ revision: 4, actor_id: 'admin@example.com', created_at: '2026-08-27T01:00:00Z' }] }) });
     if (pathname.endsWith('/usages') || pathname.endsWith('/impact-preview')) {
-      const items = !pathname.endsWith('/impact-preview') || !request.postDataJSON().fields.includes('password') ? [{ field_key: 'password', environment_key: 'production', config_key: 'payment', config_name: 'Payment service', config_revision: 7 }] : [];
+      const items = !pathname.endsWith('/impact-preview') || !request.postDataJSON().fields.includes(fieldKey) ? [{ field_key: fieldKey, environment_key: 'production', config_key: 'payment', config_name: 'Payment service', config_revision: 7 }] : [];
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items, total: items.length }) });
     }
     if (pathname.endsWith('/values')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(valued) });

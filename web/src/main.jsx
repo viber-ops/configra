@@ -1889,7 +1889,7 @@ function VaultUsagePanel({ path, refresh, t }) {
   const groups = usages.reduce((result, usage) => {
     (result[usage.field_key] ||= []).push(usage);
     return result;
-  }, {});
+  }, Object.create(null));
   return <section className="panel vault-usage-panel" aria-labelledby="vault-usage-title">
     <div className="section-heading"><div><h2 id="vault-usage-title">{t.currentReferences}</h2><p>{t.currentReferencesBody}</p></div><span>{collection.status === 'ready' ? collection.total : '…'}</span></div>
     <label className="credential-search"><span>{t.search} · {t.currentReferences}</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} /></label>

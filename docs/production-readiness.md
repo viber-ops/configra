@@ -169,7 +169,7 @@ nodes share one Docker host. This does not prove uninterrupted reads during node
 detection, production ingress or independent-host/zone resilience.
 
 The latest recorded build/browser run passed
-[50 Playwright flows](verification/2026-09-22.md#review-regression-fixes-and-stable-release-preparation), covering both locales,
+[51 Playwright flows](verification/2026-09-22.md#review-regression-fixes-and-stable-release-preparation), covering both locales,
 Viewer/Admin boundaries, lifecycle operations,
 Environment detail and exact inventory filters, arbitrary historical Revision inspection,
 Config validate/format and same- or cross-Environment Revision compare/restore/clone,
