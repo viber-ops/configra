@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -95,6 +98,36 @@ func TestNativeSyncIsOwnedIdempotentAndRetainsLastGoodOnFailure(t *testing.T) {
 	status, _ := json.Marshal(latest.Object["status"])
 	if strings.Contains(string(status), "sensitive-value-sentinel") || !strings.Contains(string(status), "FetchFailed") {
 		t.Fatal("binding status exposed private errors or missed failure")
+	}
+}
+
+func TestDocumentedYAMLAndJSONProjectTheSameEnvironment(t *testing.T) {
+	document, err := os.ReadFile("../../README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string][]byte{"PORT": []byte("8080"), "LOG_LEVEL": []byte("info"), "ENABLE_METRICS": []byte("true")}
+	checked := 0
+	for _, block := range regexp.MustCompile("(?ms)^```(yaml|json)\\n(.*?)^```").FindAllStringSubmatch(string(document), -1) {
+		if !strings.Contains(block[2], "ENABLE_METRICS") {
+			continue
+		}
+		t.Run(block[1], func(t *testing.T) {
+			reconciler, kube, _, upstream := fixture(t, "Secret", "env")
+			upstream.contents = block[2]
+			reconcile(t, reconciler)
+			var target corev1.Secret
+			if err := kube.Get(context.Background(), types.NamespacedName{Namespace: "apps", Name: "application-config"}, &target); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(target.Data, want) {
+				t.Fatal("documented Config must produce exactly the three promised environment strings")
+			}
+		})
+		checked++
+	}
+	if checked != 2 {
+		t.Fatalf("expected YAML and JSON examples, checked %d", checked)
 	}
 }
 

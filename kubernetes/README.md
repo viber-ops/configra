@@ -167,26 +167,81 @@ Unchanged data does not create a write loop. Status exposes synchronization
 conditions and revision digest, never content or private upstream errors.
 
 `target.mode: files` uses each object's flat filename as a key. `target.mode: env`
-projects Config documents into environment entries:
+projects Config documents into environment entries. For a complete walkthrough
+with image/CA setup, overlays, Deployments, expected output and an update drill,
+see the [English guide](https://viber-ops.github.io/en/docs/configra/kubernetes/)
+or [Chinese guide](https://viber-ops.github.io/docs/configra/kubernetes/).
+
+For example, save this **Configra document** as YAML Config `application_env`
+in Environment `production` (do not apply it with kubectl):
 
 ```yaml
-target:
-  name: application-environment
-  kind: ConfigMap
-  mode: env
-objects:
-  - type: config
-    environment: production
-    config: application_env
-    path: environment.yaml
+PORT: 8080
+LOG_LEVEL: info
+ENABLE_METRICS: true
 ```
 
-The Config document should be a flat mapping such as `PORT: 8080` and
-`LOG_LEVEL: info`. Portable environment names are required; nested values, nulls,
+The equivalent JSON Config works with the same Binding:
+
+```json
+{
+  "PORT": 8080,
+  "LOG_LEVEL": "info",
+  "ENABLE_METRICS": true
+}
+```
+
+After installing the native controller and creating `configra-credentials`,
+apply this **Kubernetes manifest**:
+
+```yaml
+apiVersion: configra.viber-ops.github.io/v1alpha1
+kind: ConfigraBinding
+metadata:
+  name: application-env
+  namespace: configra-app
+spec:
+  credentialsSecretRef:
+    name: configra-credentials
+  target:
+    name: application-env
+    kind: Secret
+    mode: env
+  refreshInterval: 30s
+  objects:
+    - type: config
+      environment: production
+      config: application_env
+      path: environment.yaml
+```
+
+The controller creates Secret `application-env` with keys `PORT`, `LOG_LEVEL`
+and `ENABLE_METRICS`. Their values are strings, including `"8080"` and `"true"`.
+`path` is a required source identifier, not an output file or environment name in
+env mode. Do not pre-create the target Secret: an unowned target causes
+`TargetCollision`. Add this fragment to the application's container spec:
+
+```yaml
+envFrom:
+  - secretRef:
+      name: application-env
+```
+
+Wait for the Binding before starting the consumer. For later edits, inspect a
+known non-sensitive target field first: a previously `Ready=True` Binding does
+not prove that the latest Configra edit has arrived. An existing container keeps
+its old environment until the application Pod is replaced. Explicit container
+`env` entries override the same names from `envFrom`; restarting the sync
+controller does not restart or reload the application.
+
+Portable environment names are required (`[A-Za-z_][A-Za-z0-9_]*`). The adapter
+does not flatten `database.host` into `DATABASE_HOST`. Nested values, nulls,
 duplicate keys, and collisions across objects are rejected. Env documents are
 limited to 128 KiB each. Native targets are limited to 900 KiB in total, leaving
-room below Kubernetes' object limit. File fields use `files` mode. A running
-process does not acquire new environment variables until its Pod is replaced.
+room below Kubernetes' object limit. File fields use `files` mode. Use a new
+target name when migrating an existing Secret/ConfigMap; the controller does not
+take it over. Keep Secret for Vault-derived values, and avoid printing all of a
+container's environment during troubleshooting.
 
 ## Verification
 
