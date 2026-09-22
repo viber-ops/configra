@@ -4,9 +4,9 @@ package mysqlstore
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -105,6 +105,11 @@ func TestCommitConfigIsCanonicalOptimisticAndIdempotent(t *testing.T) {
 	if resolved.ConfigRevision != 2 || resolved.Content != "database:\n  port: 6380\n" {
 		t.Fatalf("Config changed after no-change/conflict/validation failure: %#v", resolved)
 	}
+	// Make the timestamp/port collision deterministic without changing the
+	// production clock or any value-bearing Config data.
+	if _, err := store.db.ExecContext(ctx, `UPDATE outbox_events SET payload = JSON_SET(payload, '$.time', '2026-09-22T06:49:08.63796380Z')`); err != nil {
+		t.Fatalf("set collision fixture timestamp: %v", err)
+	}
 	audits, err := store.ClaimOutbox(ctx, OutboxAudit, 100, time.Minute)
 	if err != nil {
 		t.Fatalf("Claim Audit Outbox: %v", err)
@@ -119,10 +124,39 @@ func TestCommitConfigIsCanonicalOptimisticAndIdempotent(t *testing.T) {
 	if len(notifications) != 2 {
 		t.Fatalf("Notification Outbox Events = %d, want 2", len(notifications))
 	}
+	wantResults := map[string]ConfigCommitResult{
+		create.OperationID:   created,
+		update.OperationID:   updated,
+		noChange.OperationID: unchanged,
+		stale.OperationID:    {Outcome: OutcomeConflict},
+		invalid.OperationID:  {Outcome: OutcomeValidationFailed},
+	}
 	for _, event := range append(audits, notifications...) {
-		payload := string(event.Payload)
-		if strings.Contains(payload, "6379") || strings.Contains(payload, "6380") || strings.Contains(payload, "database:") {
-			t.Fatalf("Outbox Event leaked Config content: %s", payload)
+		var payload map[string]any
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			t.Fatal("Outbox Event must be JSON")
+		}
+		stamp, ok := payload["time"].(string)
+		if _, err := time.Parse(time.RFC3339Nano, stamp); !ok || err != nil {
+			t.Fatal("Outbox Event must have a valid timestamp")
+		}
+		// Port digits can occur in timestamp fractions. Compare exact metadata
+		// instead of scanning the serialized event for short numeric substrings.
+		delete(payload, "time")
+		result, ok := wantResults[event.OperationID]
+		if !ok {
+			t.Fatal("unexpected Outbox Operation")
+		}
+		want := map[string]any{
+			"operation_id": event.OperationID, "actor": map[string]any{"id": create.Actor.ID, "type": create.Actor.Type},
+			"action": "config.commit", "outcome": string(result.Outcome),
+			"environment_key": create.EnvironmentKey, "resource_type": "config", "resource_key": create.ConfigKey,
+		}
+		if result.Outcome == OutcomeSuccess {
+			want["revision"] = float64(result.Revision)
+		}
+		if !reflect.DeepEqual(payload, want) {
+			t.Fatalf("Outbox Event for %s contains unexpected metadata or Config content", event.OperationID)
 		}
 	}
 }
