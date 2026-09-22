@@ -60,7 +60,7 @@ build from the tagged source under your organization's software policy.
 
 ## Deployment checks
 
-v1.0.0 is the first stable release. Review the documented security boundaries and
+v1.0.1 is the first stable release. Review the documented security boundaries and
 run an environment-specific rollout, backup/restore drill and load test before
 production. The tested hardware and Kubernetes topology do not establish an
 availability or throughput SLA for another deployment. Do not use Configra to

@@ -4,14 +4,14 @@ This document is the completion contract for Configra V1. A capability is comple
 
 ## Current status — 2026-09-22
 
-The release target is **v1.0.0** for the server and Go SDK. This page records
+The release target is **v1.0.1** for the server and **v1.0.0** for the Go SDK. This page records
 release acceptance, not a blanket approval of every production deployment.
 The final runtime passes native Linux integration, capacity and recovery checks,
 three-node Kubernetes acceptance on native Linux and the Mac, and the complete
 [hosted CI run](https://github.com/viber-ops/configra/actions/runs/35694430155).
 Dated results and failed attempts remain in the
 [verification record](verification/2026-09-22.md). Tagged archive/download checks
-are completed before publishing the [release](https://github.com/viber-ops/configra/releases/tag/v1.0.0);
+are completed before publishing the [release](https://github.com/viber-ops/configra/releases/tag/v1.0.1);
 their post-tag evidence is recorded there.
 
 Production ingress, capacity on your hardware, independent-host/zone failures,
@@ -31,7 +31,7 @@ and checksums remain unchanged.
 | Production process and Kubernetes | Exact runtime images, readiness/shutdown, TLS pass-through, rollout, CSI/sync and dependency failure tests | Native Linux, Mac and hosted three-node checks pass for both providers, credential/API/controller/worker faults, rolling updates, offline rotation and fresh delivery. Native Linux verifies 111 no-retry reads during three complete API rollouts. Production ingress and independent-host/zone checks remain deployment-specific |
 | 1000 QPS for ten minutes | Production image, real encrypted Vault reference, mTLS, 2 CPU/512 MiB limit, unchanged gate, leakage checks and recorded host | [Final runtime passes](verification/2026-09-22.md#final-runtime-native-linux-acceptance) on four-vCPU Linux: 600,000 HTTP 200, 999.997 completed/s, p99 31.935 ms, all Access and leakage checks pass. API limit stays 2 CPU/512 MiB. Earlier Mac/two-vCPU/hosted-runner failures remain recorded |
 | Usable instructions, not slogans | Clean-environment walkthroughs of quickstart, SDK, installation, Kubernetes and backup/restore; failures fixed | Real local startup/seed, OIDC browser operations, SDK example and native-image backup/restore/rotation pass. Kubernetes checks exercise the deployment base and CSI example. Exact downloaded-binary installation is checked before publication |
-| Chinese and English website | Same-page language switching, corresponding guides, locale-correct links/metadata, build and content checks | Both languages use v1.0.0 instructions. Type check, 28-page build, 36 tests and Chromium checks of 26 routes at desktop/mobile widths pass. Published-site checking follows release publication |
+| Chinese and English website | Same-page language switching, corresponding guides, locale-correct links/metadata, build and content checks | Both languages distinguish server v1.0.1 and SDK v1.0.0. Type check, 28-page build, 36 tests and Chromium checks of 26 routes at desktop/mobile widths are repeated after version updates. Published-site checking follows release publication |
 | Release integrity | Clean commit/tag mapping, tests, license/notices/SBOM and downloadable multi-platform artifacts | SDK v1.0.0 is published and verified against four Linux/macOS CI jobs and its module checksum. Server archives are built from the tag, held as a draft and independently downloaded/verified before publication |
 
 The full sequence of fixes, failing reproductions and earlier image/host runs is

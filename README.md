@@ -4,14 +4,14 @@
 
 [Website](https://viber-ops.github.io/en/configra/) ·
 [Documentation](https://viber-ops.github.io/en/docs/configra/) ·
-[Downloads](https://github.com/viber-ops/configra/releases/tag/v1.0.0) ·
+[Downloads](https://github.com/viber-ops/configra/releases/tag/v1.0.1) ·
 [Go SDK](https://github.com/viber-ops/configra-go) · [中文](README.zh-CN.md)
 
 Configra stores versioned YAML/JSON and shared Vault values for each environment.
 Applications read resolved configuration through the Go SDK, CSI file mounts,
 or native Kubernetes Secret/ConfigMap synchronization.
 
-> **Stable release: v1.0.0.** Use the tag for these guides.
+> **Stable release: v1.0.1.** Use the tag for these guides.
 > Validate ingress, capacity and recovery in your own deployment before rollout.
 > [Read the limits](https://viber-ops.github.io/en/docs/configra/security/).
 
@@ -53,7 +53,7 @@ must occupy the complete scalar; File fields are read separately.
 With Docker Compose, Go 1.25.13+, Node.js 24, npm, Make and OpenSSL installed:
 
 ```sh
-git clone --branch v1.0.0 https://github.com/viber-ops/configra.git
+git clone --branch v1.0.1 https://github.com/viber-ops/configra.git
 git clone --branch v1.0.0 https://github.com/viber-ops/configra-go.git
 cd configra
 make local-run
@@ -91,11 +91,11 @@ workspace-wide. Vault Namespaces organize items; they do not isolate untrusted
 tenants. Configra is not a dynamic database-credential engine, HSM/KMS, or an
 application restart controller.
 
-The v1.0.0 runtime passed the ten-minute 1000 QPS gate on a four-vCPU
+The v1.0.1 runtime passed the ten-minute 1000 QPS gate on a four-vCPU
 Linux host, with the API limited to two CPUs/512 MiB. The
 [results and failed runs](docs/verification/2026-09-22.md#final-runtime-native-linux-acceptance)
 record the exact hardware, query profile and scope; they are not a capacity
-guarantee for every deployment. v1.0.0 adds bounded inventory pages, a read-only recovery check and
+guarantee for every deployment. v1.0.1 adds bounded inventory pages, a read-only recovery check and
 [offline Master Key rotation](deploy/backup/README.md#offline-master-key-rotation).
 Custom Management clients must [follow pagination](docs/ui.md) when upgrading from rc.2;
 machine reads and SDK calls are unchanged.

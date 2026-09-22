@@ -13,7 +13,7 @@ private contact **without disclosing the vulnerability**.
 
 ## Supported releases
 
-The supported stable line starts at v1.0.0. Use its latest patch release when
+The supported stable line starts at v1.0.1. Use its latest patch release when
 reporting an issue. Older `-rc` versions are superseded by the stable release.
 Security fixes are published in new versions; existing tags are not rewritten.
 We do not promise a fixed response or remediation SLA.

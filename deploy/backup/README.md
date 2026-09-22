@@ -72,7 +72,7 @@ isolated service and exercise actual reads.
 
 ## Encrypted-state verification / 检查加密数据
 
-`doctor` is included in v1.0.0; rc.2 does not contain it. The commands below run
+`doctor` is included in v1.0.1; rc.2 does not contain it. The commands below run
 from the unpacked release root, where `./configra` is the verified release
 binary. A source build may use its own binary path instead.
 
@@ -127,7 +127,7 @@ read a known resolved Config and File, exercise required authorization, issue a
 test client from a restored active CA, and test an explicitly approved notification
 destination. Keep test delivery away from real incident channels.
 
-中文说明：这个命令检查恢复库，不替你恢复或修改数据。v1.0.0 发布包已包含
+中文说明：这个命令检查恢复库，不替你恢复或修改数据。v1.0.1 发布包已包含
 此命令，不需要自行编译；使用只读数据库账号、恢复库的 DSN 和单独保管的
 主密钥执行。不需要准备 OIDC、TLS、NATS 或 ClickHouse 才能检查。
 成功时输出三类记录数量；失败、取消或超时返回非零退出码，不输出成功结果。
@@ -141,7 +141,7 @@ destination. Keep test delivery away from real incident channels.
 
 ## Offline Master Key rotation
 
-`rotate-master-key` is included in v1.0.0, not rc.2. It changes the
+`rotate-master-key` is included in v1.0.1, not rc.2. It changes the
 database key wrapping, not application passwords, CA signing keys, client
 certificates or Tokens. If the old key may have been stolen together with a
 database copy, treat the exposed values and CA keys as compromised: rewrapping
