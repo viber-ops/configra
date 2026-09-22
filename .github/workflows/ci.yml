@@ -129,6 +129,24 @@ jobs:
       - name: Three-node Kubernetes services, providers, failure recovery and offline key rotation
         if: '!cancelled() && github.event_name == ''workflow_dispatch'' && inputs.acceptance != ''capacity'''
         run: make kubernetes-service-test
+      - name: Report service check status and source locations without private error values
+        if: always()
+        run: |
+          node --input-type=module <<'JS'
+          import { existsSync, readdirSync, readFileSync } from 'node:fs';
+          if (!existsSync('.cache')) process.exit(0);
+          for (const directory of readdirSync('.cache').filter((name) => /^service-smoke-[A-Za-z0-9]+$/.test(name))) {
+            const base = `.cache/${directory}`;
+            if (existsSync(`${base}/result.json`)) {
+              const { passed, failed_stage, checks } = JSON.parse(readFileSync(`${base}/result.json`, 'utf8'));
+              console.log(JSON.stringify({ passed, failed_stage, checks }));
+            }
+            for (const file of readdirSync(base).filter((name) => /failure\.txt$/.test(name))) {
+              const locations = [...new Set(readFileSync(`${base}/${file}`, 'utf8').match(/scripts\/(?:service-smoke|kubernetes-smoke|docs-smoke)\.mjs:\d+:\d+/g) ?? [])];
+              console.log(JSON.stringify({ diagnostic: file, locations }));
+            }
+          }
+          JS
 
   web:
     runs-on: ubuntu-24.04
