@@ -13,9 +13,9 @@ private contact **without disclosing the vulnerability**.
 
 ## Supported releases
 
-Configra is currently in prerelease. There is not yet a release that has completed
-the production acceptance contract. Security fixes are developed on the active
-development branch and published in a new release; existing tags are not rewritten.
+The supported stable line starts at v1.0.0. Use its latest patch release when
+reporting an issue. Older `-rc` versions are superseded by the stable release.
+Security fixes are published in new versions; existing tags are not rewritten.
 We do not promise a fixed response or remediation SLA.
 
 MySQL 8.0.22 remains an application-compatibility requirement. That does not

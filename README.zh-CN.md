@@ -65,7 +65,7 @@ Configra 自身可运行在 Kubernetes 中，Management 与 API 分开部署。M
 
 Token 按 **Environment** 授权，Admin / Viewer 为工作区级角色，Vault Namespace 不是多租户隔离机制。不提供动态数据库凭据、HSM/KMS、应用自动重启或 Master Key 自动轮换。
 
-当前源码镜像已在 8 vCPU Linux 主机上通过十分钟 1000 QPS 测试，API 限制为 2 CPU / 512 MiB。[测试记录](docs/verification/2026-09-22.md#native-linux-default-profile-ten-minute-gate)包含具体环境和失败记录，不能直接作为所有部署的容量保证。
+v1.0.0 的运行时代码已在 4 vCPU Linux 主机上通过十分钟 1000 QPS 测试，API 限制为 2 CPU / 512 MiB，60 万次读取全部成功。[测试记录](docs/verification/2026-09-22.md#final-runtime-native-linux-acceptance)包含具体环境和失败记录，不能直接作为所有部署的容量保证。
 
 v1.0.0 新增后端列表分页、只读恢复检查和[维护窗口内的主密钥轮换](deploy/backup/README.md#offline-master-key-rotation)。从 rc.2 升级时，自编 Management 客户端需要[适配分页](docs/ui.md)；机器读取接口和 SDK 调用方式不变。生产入口、跨主机故障仍需在自己的环境验证。上线前请查看[当前验收状态](docs/production-readiness.md)。
 

@@ -32,14 +32,24 @@ include the host operating system's CA store.
 ```sh
 ./configra --version
 ./configra --help
-./configra management --config deploy/management.example.yaml
-# In another process, using the same database and Master Key:
-./configra api --config deploy/api.example.yaml
 ```
 
 Edit the example YAML and provision its referenced TLS files, OIDC client,
 Master Key, MySQL 8.0.22 database, NATS, and ClickHouse first. The examples are not
 a zero-configuration local demo. Follow the local-experience guide for that.
+
+Start Management and keep that terminal open:
+
+```sh
+./configra management --config deploy/management.example.yaml
+```
+
+After Management is ready, start the machine API in another terminal, from the
+same release directory and using the same database and Master Key:
+
+```sh
+./configra api --config deploy/api.example.yaml
+```
 
 Use macOS arm64 for Apple Silicon, macOS amd64 for Intel, and the matching Linux
 CPU architecture for servers. The Kubernetes CSI node deployment is Linux-only;

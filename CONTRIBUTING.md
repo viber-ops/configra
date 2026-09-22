@@ -46,7 +46,9 @@ fixture disables native AIO and is not the production capacity or Kubernetes gat
 Management/API, sync controllers and CSI provider in a new three-node kind
 cluster (one control plane and two workers). Install
 kind, kubectl, curl and OpenSSL first (set `CONFIGRA_TEST_KIND` if kind is outside
-`PATH`), and have `busybox:1.37.0` available locally. It uses Kubernetes 1.35.0
+`PATH`), then run `docker pull busybox:1.37.0`. Use kubectl 1.35.x to match the
+Kubernetes 1.35.0 test cluster; CI installs and checksum-checks this client
+instead of relying on the runner's preinstalled version. It uses Kubernetes 1.35.0
 and the fixed v1.6.1 CSI Driver source, downloaded over HTTPS. The dedicated
 kubeconfig never replaces your current context. Driver images are pulled once
 on the Docker host and imported into each node before the driver starts. The test also stops every service

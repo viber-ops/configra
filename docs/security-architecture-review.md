@@ -4,12 +4,12 @@ Follow-up on 2026-09-12: authenticated request-rejection capture and an observed
 credential Audit decoding failure are addressed in
 [the audit verification record](verification/2026-09-12.md#audit). The findings
 below retain their original review date; see [current status](production-readiness.md)
-for remaining work. The full production acceptance is still open.
+for release acceptance and deployment-specific work.
 
 ## Follow-up — 2026-09-22
 
 This pass concentrates on the API process, Kubernetes adapters and Go SDK. Changes
-are based on the published server rc.2 and prepared for v1.0.0; they are not in rc.2.
+are included in v1.0.0; the published rc.2 artifacts are unchanged.
 The [verification record](verification/2026-09-22.md) distinguishes unit,
 real-dependency, container and cluster checks.
 
@@ -71,9 +71,11 @@ controller failover and three API rollouts. A subsequent
 [offline cluster rotation drill](verification/2026-09-22.md#offline-key-rotation-in-kubernetes)
 also passes: complete service shutdown, backup, same-image maintenance Pods,
 old-key rejection/new-key verification, bootstrap Secret replacement and fresh
-SDK/CA/Audit/native/CSI reads. Current-candidate capacity, production
-ingress/independent-host failure, deployment-specific maintenance controls and
-final-release replay remain open.
+SDK/CA/Audit/native/CSI reads. The later
+[final-runtime native Linux acceptance](verification/2026-09-22.md#final-runtime-native-linux-acceptance)
+passes capacity, service faults, backup recovery and offline rotation from the
+clean release runtime. Production ingress/independent-host failures and
+deployment-specific maintenance controls still require the operator's own drill.
 The current server image also passes a [three-node worker-loss drill](verification/2026-09-22.md#three-node-provider-and-service-failover):
 native/CSI reads on both workers, cross-node sync leadership, existing and fresh
 mounts on the survivor, recovery and three API rollouts. Requests are checked

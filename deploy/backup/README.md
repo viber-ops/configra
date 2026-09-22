@@ -29,14 +29,20 @@ user=configra_backup
 password=replace-through-secret-volume
 ```
 
-From the repository root, with `/backup` already mounted and writable and the
-matching MySQL 8.0.22 tools available:
+From the repository or unpacked release root, with `/backup` already mounted and
+writable and the matching MySQL 8.0.22 tools available:
 
 ```sh
-cd deploy/backup
 mkdir -m 700 /backup/new-point
-sh mysql-backup.sh /run/secrets/mysql.cnf configra /backup/new-point
-sh mysql-restore.sh /run/secrets/mysql.cnf /backup/new-point configra_restore_20260827
+sh deploy/backup/mysql-backup.sh /run/secrets/mysql.cnf configra /backup/new-point
+```
+
+To test recovery, choose a **new, isolated database name** and confirm that the
+mounted credentials have the required restore permissions. Do not point the
+live service at it yet:
+
+```sh
+sh deploy/backup/mysql-restore.sh /run/secrets/mysql.cnf /backup/new-point configra_restore_20260827
 ```
 
 The backup tool uses `mysqldump --single-transaction`, emits `mysql.sql.gz` and a
@@ -66,14 +72,9 @@ isolated service and exercise actual reads.
 
 ## Encrypted-state verification / 检查加密数据
 
-**Source candidate only:** `doctor` is not in the published server rc.2 binary.
-Use a binary built from this checkout until a new release includes the command.
-From the repository root, with the supported Go toolchain installed:
-
-```sh
-mkdir -p .cache
-go build -o .cache/configra ./cmd/configra
-```
+`doctor` is included in v1.0.0; rc.2 does not contain it. The commands below run
+from the unpacked release root, where `./configra` is the verified release
+binary. A source build may use its own binary path instead.
 
 Save the following as `/run/configra/doctor.yaml`, adjusting the Master Key path.
 Provide `CONFIGRA_RESTORE_DSN` through your secret manager or a Kubernetes Secret;
@@ -89,10 +90,10 @@ key_provider:
   master_key_file: /run/secrets/restored-master-key
 ```
 
-Then, from the repository root:
+Then, from the unpacked release root:
 
 ```sh
-./.cache/configra doctor --config /run/configra/doctor.yaml --verify-vault --timeout 10m
+./configra doctor --config /run/configra/doctor.yaml --verify-vault --timeout 10m
 ```
 
 Exit code `0` and one JSON line mean that the complete scan succeeded. For the
@@ -126,9 +127,9 @@ read a known resolved Config and File, exercise required authorization, issue a
 test client from a restored active CA, and test an explicitly approved notification
 destination. Keep test delivery away from real incident channels.
 
-中文说明：这个命令检查恢复库，不替你恢复或修改数据。先从当前源码构建，
-再用只读数据库账号、恢复库的 DSN 和单独保管的主密钥执行；已发布的 rc.2
-还没有此命令。不需要准备 OIDC、TLS、NATS 或 ClickHouse 才能检查。
+中文说明：这个命令检查恢复库，不替你恢复或修改数据。v1.0.0 发布包已包含
+此命令，不需要自行编译；使用只读数据库账号、恢复库的 DSN 和单独保管的
+主密钥执行。不需要准备 OIDC、TLS、NATS 或 ClickHouse 才能检查。
 成功时输出三类记录数量；失败、取消或超时返回非零退出码，不输出成功结果。
 历史版本、归档项、过期或撤销的 CA、停用通知凭证都在检查范围内。
 
@@ -140,7 +141,7 @@ destination. Keep test delivery away from real incident channels.
 
 ## Offline Master Key rotation
 
-This command is also **source-candidate only**, not part of rc.2. It changes the
+`rotate-master-key` is included in v1.0.0, not rc.2. It changes the
 database key wrapping, not application passwords, CA signing keys, client
 certificates or Tokens. If the old key may have been stolen together with a
 database copy, treat the exposed values and CA keys as compromised: rewrapping
@@ -175,7 +176,7 @@ On a maintenance runner with database access, the reviewed binary, current
 bootstrap YAML, old key file and separately mounted new key file, run:
 
 ```sh
-./.cache/configra rotate-master-key \
+./configra rotate-master-key \
   --config /run/configra/doctor.yaml \
   --new-key-file /run/secrets/new-master-key \
   --confirm-database configra_restore_20260827 \
@@ -239,11 +240,18 @@ the [ClickHouse native backup documentation](https://clickhouse.com/docs/concept
 The local test configuration is `deploy/clickhouse/backup_disk.xml`; production
 should normally point the named disk at durable object storage.
 
-Provide `clickhouse-client` credentials through a mounted config file, then run:
+Provide `clickhouse-client` credentials through a mounted config file. From the
+repository or unpacked release root, create a new backup:
 
 ```sh
-sh clickhouse-backup.sh /run/secrets/client.xml configra backups configra-20260827.zip
-sh clickhouse-restore.sh /run/secrets/client.xml configra backups configra-20260827.zip configra_restore_20260827
+sh deploy/backup/clickhouse-backup.sh /run/secrets/client.xml configra backups configra-20260827.zip
+```
+
+Restore only into a new, isolated target after checking the backup name and
+mounted credentials:
+
+```sh
+sh deploy/backup/clickhouse-restore.sh /run/secrets/client.xml configra backups configra-20260827.zip configra_restore_20260827
 ```
 
 The restore wrapper first creates a new target it can safely identify as its own;

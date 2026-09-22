@@ -4,71 +4,40 @@ This document is the completion contract for Configra V1. A capability is comple
 
 ## Current status — 2026-09-22
 
-The objective is a production-usable, Apache-2.0 open-source release. It is still
-open. This is the single current work record; the acceptance requirements below
-are unchanged. Dated results live in [verification/](verification/).
+The release target is **v1.0.0** for the server and Go SDK. This page records
+release acceptance, not a blanket approval of every production deployment.
+The final runtime passes native Linux integration, capacity and recovery checks,
+three-node Kubernetes acceptance on native Linux and the Mac, and the complete
+[hosted CI run](https://github.com/viber-ops/configra/actions/runs/35694430155).
+Dated results and failed attempts remain in the
+[verification record](verification/2026-09-22.md). Tagged archive/download checks
+are completed before publishing the [release](https://github.com/viber-ops/configra/releases/tag/v1.0.0);
+their post-tag evidence is recorded there.
 
-The requested release target is now **v1.0.0**, conditional on clean-checkout
-CI, the unchanged capacity/leakage gate, service/Kubernetes recovery checks and
-complete release-bundle verification. Deployment-specific ingress, capacity and
-independent-host/zone checks remain the deployer's responsibility; they are not
-an implied SLA. The [rc.2 release](https://github.com/viber-ops/configra/releases/tag/v0.1.0-rc.2)
-and its checksums remain unchanged. See the [current verification record](verification/2026-09-22.md).
+Production ingress, capacity on your hardware, independent-host/zone failures,
+backup retention and maintenance-access controls must be checked in your own
+deployment. The recorded test results are not an SLA. The published rc.2 tag
+and checksums remain unchanged.
 
 | Requirement | Required evidence | Current state |
 | --- | --- | --- |
-| Apache-2.0 distribution | License/notice in source, nested module, binaries and images; third-party license inventory | Updated 92-record Go inventory, eight binary collectors and both arm64 image inventories [pass locally](verification/2026-09-22.md#distribution); full new release bundles/download checks remain |
-| Open-source maintenance | Contribution/security policies, working private disclosure, continuous checks and dependency updates | Existing policies/private reporting retained; SDK CI passes on GitHub, server CI and manual release gates are prepared; pinned actions and weekly dependency checks retained |
-| MySQL 8.0.22 support | Exact-version integration, migration and restore tests; unchanged capacity gate | Current core/E2E/backup tests passed on 8.0.22. A later full run exposed an index-intersection scan in Config history; the query-local fix and expanded read-budget tests now [pass on both Go versions](verification/2026-09-22.md#api-authorization-and-bounded-history-queries). No schema change or 8.4-only requirement |
+| Apache-2.0 distribution | License/notice in source, nested module, binaries and images; third-party license inventory | Reviewed Go inventory and runtime/module/UI notices, source access and SBOM checks pass for source-built bundles and both images. Tagged downloadable archives are checked separately before publication |
+| Open-source maintenance | Contribution/security policies, working private disclosure, continuous checks and dependency updates | Policies/private reporting, pinned CI actions and weekly dependency checks are live. SDK Linux/macOS CI and all four server Go-version/module jobs, 51 UI tests and integration pass |
+| MySQL 8.0.22 support | Exact-version integration, migration and restore tests; unchanged capacity gate | Final native Linux integration, ten-minute load, service backup/restore and offline rotation pass on 8.0.22. No schema change or 8.4-only requirement |
 | MySQL 8.4 comparison | Official compatibility/upgrade sources, separately identified runtime evidence | [Primary-source comparison](research/mysql-8.0.22-and-8.4-compatibility.md) completed; runtime evidence absent |
-| Complete authenticated mutation audit | Authenticated rejections have durable, value-free receipts; logical Operation identities survive replay; final image/failure drills pass | Gateway capture and credential-identifier repair implemented; local source image now passes real OIDC rejection receipts, ClickHouse outage/recovery and post-rotation Audit delivery. [Image evidence](verification/2026-09-22.md#actual-service-images-and-dependency-faults); final-release/stress replay remains |
-| Bounded management inventories | Server-side limits/pagination, consumer behavior and scale/query evidence | Config/Vault histories, all seven resource inventories, notification subscriptions and Vault usages have SQL/UI paging. Complete impact counts and separate CA trust reads preserve safety across pages. [Earlier four-inventory checks](verification/2026-09-22.md#resource-inventories) and [security inventory checks](verification/2026-09-22.md#security-inventories-and-vault-impact) are local evidence; clean-checkout CI and final-image acceptance remain |
-| Key recovery and lifecycle | Correct/wrong-key drills, usable rotation procedure, CA/client lifecycle checks | MySQL 8.0.22 storage/restore/fault checks and [offline rotation in real Kubernetes Pods](verification/2026-09-22.md#offline-key-rotation-in-kubernetes) pass locally: all service Pods stop, both keys are checked before Secret replacement, then SDK/Config/File/ETag, CA issuance/revocation, Audit and fresh native/CSI delivery pass. Final-release and production maintenance controls still need replay |
-| Production process and Kubernetes | Exact release images, readiness/shutdown, TLS pass-through, rollout, CSI/sync and dependency failure tests | The [latest server/adapter replay](verification/2026-09-22.md#latest-image-kubernetes-attempts) passes two-worker native/CSI delivery, abrupt worker loss, cross-node leadership, fresh mounts, recovery, offline key rotation and three complete no-retry mTLS rollouts (78 reads). Failed setup/host-resource attempts are retained. Production ingress, independent-host/zone failure and final-release acceptance remain |
-| 1000 QPS for ten minutes | Production image, real encrypted Vault reference, mTLS, 2 CPU/512 MiB limit, unchanged gate, leakage checks and recorded host | The [current amd64 source image passes](verification/2026-09-22.md#native-linux-default-profile-ten-minute-gate) on the eight-vCPU Linux host with default query parameters: 600,000 HTTP 200, 999.998 completed/s, p99 2.559 ms, all Access events and leakage checks passing. API limit remains 2 CPU/512 MiB. Failed Mac/two-vCPU runs are retained; final clean-release replay and deployment-specific sizing remain |
-| Usable instructions, not slogans | Clean-environment walkthroughs of quickstart, SDK, installation, Kubernetes and backup/restore; failures fixed | [Local protocol and SDK walkthrough](verification/2026-09-12.md#documentation) executed; startup failure fixed in development source, remaining guides still need full execution |
-| Chinese and English website | Same-page language switching, corresponding guides, locale-correct links/metadata, build and content checks | Paired deployment/credential/CSI and offline-maintenance guidance updated; 28 pages built, type check and 36 rebuilt-site tests passed. [Local Chromium walkthrough](verification/2026-09-22.md#website-browser-walkthrough) passed 26 pages at desktop/mobile widths, language switching and clipboard checks; deployed-site verification remains |
-| Release integrity | Clean commit/tag mapping, tests, license/notices/SBOM and downloadable multi-platform artifacts | SDK v1.0.0 passed four Linux/macOS CI jobs. Server v1.0.0 preparation includes the SDK snapshot fix in the Kubernetes dependency pin; final server gates and downloadable artifacts remain pending |
+| Complete authenticated mutation audit | Authenticated rejections have durable, value-free receipts; logical Operation identities survive replay; final image/failure drills pass | Real-MySQL replay/rejection tests and final native-image OIDC rejection receipts, ClickHouse outage recovery and post-rotation Audit delivery pass |
+| Bounded management inventories | Server-side limits/pagination, consumer behavior and scale/query evidence | All seven inventories, Config/Vault histories, notification subscriptions and Vault usages are paged. Clean-checkout SQL/HTTP/UI tests pass, including cross-page grants and the actual 79-Config seed rerun. Counts/search can still be linear |
+| Key recovery and lifecycle | Correct/wrong-key drills, usable rotation procedure, CA/client lifecycle checks | Final native-image backup/restore, SELECT-only doctor, offline rotation, restarted SDK reads and restored CA issuance/revocation pass. Partial rollback, concurrent writers and lost COMMIT responses have real-MySQL regressions |
+| Production process and Kubernetes | Exact runtime images, readiness/shutdown, TLS pass-through, rollout, CSI/sync and dependency failure tests | Native Linux, Mac and hosted three-node checks pass for both providers, credential/API/controller/worker faults, rolling updates, offline rotation and fresh delivery. Native Linux verifies 111 no-retry reads during three complete API rollouts. Production ingress and independent-host/zone checks remain deployment-specific |
+| 1000 QPS for ten minutes | Production image, real encrypted Vault reference, mTLS, 2 CPU/512 MiB limit, unchanged gate, leakage checks and recorded host | [Final runtime passes](verification/2026-09-22.md#final-runtime-native-linux-acceptance) on four-vCPU Linux: 600,000 HTTP 200, 999.997 completed/s, p99 31.935 ms, all Access and leakage checks pass. API limit stays 2 CPU/512 MiB. Earlier Mac/two-vCPU/hosted-runner failures remain recorded |
+| Usable instructions, not slogans | Clean-environment walkthroughs of quickstart, SDK, installation, Kubernetes and backup/restore; failures fixed | Real local startup/seed, OIDC browser operations, SDK example and native-image backup/restore/rotation pass. Kubernetes checks exercise the deployment base and CSI example. Exact downloaded-binary installation is checked before publication |
+| Chinese and English website | Same-page language switching, corresponding guides, locale-correct links/metadata, build and content checks | Both languages use v1.0.0 instructions. Type check, 28-page build, 36 tests and Chromium checks of 26 routes at desktop/mobile widths pass. Published-site checking follows release publication |
+| Release integrity | Clean commit/tag mapping, tests, license/notices/SBOM and downloadable multi-platform artifacts | SDK v1.0.0 is published and verified against four Linux/macOS CI jobs and its module checksum. Server archives are built from the tag, held as a draft and independently downloaded/verified before publication |
 
-The latest [API follow-up](verification/2026-09-22.md#api-authorization-and-bounded-history-queries)
-also replaces the per-request full Token-grant list with a requested-Environment
-lookup, preserves revocation/ETag behavior and repairs a silently skipped Audit
-E2E test. Full local core/E2E integration, rebuilt-image startup/distribution,
-real OIDC/dependency/recovery checks and a 15-second mTLS/leak smoke pass.
-The later native Linux run below passes the capacity gate on its recorded
-hardware; earlier shared-host failures remain in the evidence. This is not final
-release or deployment sign-off.
-
-A later [native-controller follow-up](verification/2026-09-22.md#native-reconciliation-ordering-and-request-bounds)
-reproduced and fixed an overlapping-fetch overwrite and unbounded Kubernetes
-request contexts. Dual-toolchain race/vet and vulnerability checks pass. The
-rebuilt adapter `776c7ff8073c…` also passes image-distribution checks and the
-complete three-node service/failure/rotation drill; this is distinct from the
-older adapter's results. Production ingress and independent-host/zone failure
-verification remain.
-
-The [document-size follow-up](verification/2026-09-22.md#document-encoding-limits)
-then moved output limits ahead of unbounded JSON/YAML allocation in the shared
-formatting paths. Its regressions, dual-toolchain checks and real-MySQL tests
-pass locally. A separate [JSON parameter repair](verification/2026-09-22.md#mysql-json-parameter-types)
-fixes three shared writes that MySQL rejected when parameter interpolation was
-enabled. Both query modes pass mutation/replay and Audit regressions, including
-quotes, backslashes, Unicode and `NO_BACKSLASH_ESCAPES`. The new server image
-`42a1b5120ddd…` contains both fixes and passes distribution/startup checks. Its
-explicit interpolation profile subsequently passed the ten-minute gate on the
-Mac, without resolving the default-profile failures.
-
-A later [File error-classification fix](verification/2026-09-22.md#file-metadata-failure-classification)
-preserves HTTP 503 for database metadata failures instead of reporting a missing
-File. Full source integration and the arm64 image `977d21382ba5…` pass startup,
-real service/SDK, dependency recovery, backup/restore, offline rotation and the
-complete latest-image Kubernetes drill. The two-vCPU Linux host failed both load
-profiles. On its eight-vCPU replacement, amd64 image `d61de319c15f…` passes
-distribution/startup, full core/E2E/SDK checks, the default-profile ten-minute
-capacity/leakage gate and the full native Linux service/fault/recovery drill.
-Native Linux also exposed two fixture permission problems, now fixed without
-changing production privileges. Remote reports and test backups were retrieved;
-the owned fixtures and temporary workspace were removed afterward.
+The full sequence of fixes, failing reproductions and earlier image/host runs is
+kept in the [dated verification record](verification/2026-09-22.md), rather than
+duplicated here. Six TLA+ models and Go 1.25.13/1.26.7 race/vet checks pass;
+current source scanning finds no reachable vulnerability.
 
 ## Confirmed review scope
 
@@ -86,6 +55,10 @@ query defaults and capacity thresholds are unchanged. Mac fixtures remain useful
 the three-node Kubernetes checks; do not stop unrelated projects or equate
 arm64-host/emulated-MySQL measurements with native Linux results. Preserve the
 remote evidence and remove owned fixtures before the user releases the machine.
+Those hosts were subsequently released. Final runtime acceptance uses a new
+four-vCPU/7,521-MiB native Linux host: the complete stack passes the unchanged
+gate there, with the API still capped at two CPUs and 512 MiB. Its exact result,
+image and distinction from the failed hosted-runner warmup are recorded above.
 
 The production Kubernetes version and ingress product are not selected. The
 tested review baseline is Kubernetes 1.35.0 with native Services and TLS-preserving
@@ -206,9 +179,9 @@ are not copied. These diagnostics do not change the acceptance thresholds.
 
 The early [September 22 runs](verification/2026-09-22.md#capacity-and-leak-detection)
 used native MySQL AIO on the shared Mac/Docker host and included both passes and
-failures. The later [eight-vCPU Linux result](verification/2026-09-22.md#native-linux-default-profile-ten-minute-gate)
-passes the current source image with default queries and a two-CPU API limit.
-Neither validates every deployment. The older result below remains historical,
+failures. The final [four-vCPU Linux result](verification/2026-09-22.md#final-runtime-native-linux-acceptance)
+passes the release runtime with default queries and a two-CPU API limit.
+It does not validate every deployment. The older result below remains historical,
 not a result for the current source.
 
 The 2026-08-27 V1 release-candidate gate served 600,000/600,000 successful reads
@@ -242,7 +215,8 @@ The final audit links each row above to a runnable test, model-check output, con
 - Documentation commands must identify their working directory, prerequisites,
   placeholders and expected outcome. Mark anything not yet executed as such.
 - Publish new tags for changed releases; do not silently rewrite published
-  versions. The explicit server rc.1 retirement is documented above; SDK tags
+  versions. The explicit server rc.1 retirement is documented in its successor's
+  [release notes](releases/v0.1.0-rc.2.md); SDK tags
   remain unchanged.
 - The goal stays open until each requirement has direct, current evidence.
 

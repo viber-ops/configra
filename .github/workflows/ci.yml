@@ -133,7 +133,10 @@ jobs:
         if: always()
         run: |
           node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
           import { existsSync, readdirSync, readFileSync } from 'node:fs';
+          const locations = (value) => [...new Set(value.match(/scripts\/(?:service-smoke|kubernetes-smoke|docs-smoke)\.mjs:\d+:\d+/g) ?? [])];
+          assert.deepEqual(locations('private-value\n at /work/scripts/docs-smoke.mjs:12:3\n at /work/scripts/docs-smoke.mjs:12:3'), ['scripts/docs-smoke.mjs:12:3']);
           if (!existsSync('.cache')) process.exit(0);
           for (const directory of readdirSync('.cache').filter((name) => /^service-smoke-[A-Za-z0-9]+$/.test(name))) {
             const base = `.cache/${directory}`;
@@ -142,8 +145,7 @@ jobs:
               console.log(JSON.stringify({ passed, failed_stage, checks }));
             }
             for (const file of readdirSync(base).filter((name) => /failure\.txt$/.test(name))) {
-              const locations = [...new Set(readFileSync(`${base}/${file}`, 'utf8').match(/scripts\/(?:service-smoke|kubernetes-smoke|docs-smoke)\.mjs:\d+:\d+/g) ?? [])];
-              console.log(JSON.stringify({ diagnostic: file, locations }));
+              console.log(JSON.stringify({ diagnostic: file, locations: locations(readFileSync(`${base}/${file}`, 'utf8')) }));
             }
           }
           JS

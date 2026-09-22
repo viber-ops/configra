@@ -91,9 +91,9 @@ workspace-wide. Vault Namespaces organize items; they do not isolate untrusted
 tenants. Configra is not a dynamic database-credential engine, HSM/KMS, or an
 application restart controller.
 
-The current source image passed the ten-minute 1000 QPS gate on an eight-vCPU
+The v1.0.0 runtime passed the ten-minute 1000 QPS gate on a four-vCPU
 Linux host, with the API limited to two CPUs/512 MiB. The
-[results and failed runs](docs/verification/2026-09-22.md#native-linux-default-profile-ten-minute-gate)
+[results and failed runs](docs/verification/2026-09-22.md#final-runtime-native-linux-acceptance)
 record the exact hardware, query profile and scope; they are not a capacity
 guarantee for every deployment. v1.0.0 adds bounded inventory pages, a read-only recovery check and
 [offline Master Key rotation](deploy/backup/README.md#offline-master-key-rotation).
