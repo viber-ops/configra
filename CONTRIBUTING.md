@@ -16,7 +16,7 @@ Go and Node versions, and keep credentials out of source control.
 Container/service checks also need Docker with Compose, curl, OpenSSL and
 `unzip` on the host. Go race tests need a C compiler (GCC or Clang).
 
-Use `main` for development or the README's tag to reproduce a released preview.
+Use `main` for development or the README's tag to reproduce a released version.
 Kubernetes and managed-PKI code are included in both. The sibling SDK checkout is
 needed by `e2e` and `make service-test`; the Kubernetes module uses its
 checksum-pinned public SDK.
@@ -78,6 +78,12 @@ CI also runs the real-dependency integration suite and UI regressions; its SDK
 fixture is pinned in the workflow. Dependency updates remain reviewable PRs,
 not automatic merges: update the reviewed license manifest when shipped imports
 change. These checks do not replace the production-image and capacity gates.
+
+Manual CI adds `all`, `capacity` or `kubernetes` acceptance modes. Use separate
+runs when capacity and cluster checks need different hosts; selecting one does
+not count the other as passed. A release needs both sets of evidence, tied to
+its runtime source and image. Failed capacity runs report bounded metadata, not
+raw HTTP errors or private diagnostics. `all` still fails if either gate fails.
 
 ## Submit a change
 

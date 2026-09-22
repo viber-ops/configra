@@ -7,6 +7,12 @@ on:
   schedule:
     - cron: '17 3 * * 1'
   workflow_dispatch:
+    inputs:
+      acceptance:
+        description: 'Additional acceptance checks (a release needs both capacity and Kubernetes evidence)'
+        type: choice
+        default: all
+        options: [all, capacity, kubernetes]
 
 permissions:
   contents: read
@@ -83,21 +89,24 @@ jobs:
           CONFIGRA_TEST_NATS_URL: nats://127.0.0.1:42229
         run: go -C e2e test -tags='integration load' -race -count=1 -run '^Test(SampleLoad|LoadLeak|LoadEvidence)'
       - name: Ten-minute production-image capacity and leakage gate
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && inputs.acceptance != 'kubernetes'
+        run: make load-test
+      - name: Report bounded capacity metadata, including failed warmup
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.acceptance != 'kubernetes'
         run: |
-          make load-test
           node --input-type=module <<'JS'
-          import { readFileSync } from 'node:fs';
+          import { existsSync, readFileSync } from 'node:fs';
+          if (!existsSync('.cache/load/latest.json')) { console.log('No capacity report was produced.'); process.exit(0); }
           const report = JSON.parse(readFileSync('.cache/load/latest.json', 'utf8'));
-          const { started_at, passed, duration, requested_qps, host_cpus, image,
+          const { started_at, passed, stage, duration, requested_qps, host_os, host_arch, host_cpus, image,
             container_cpus, container_memory_bytes, mysql_version, mysql_interpolate_params,
             resources, expected_access_events, persisted_access_events, captured_access_events,
             nats_leak_scan_passed, leak_scan_passed } = report;
-          const { latencies, requests, throughput, success, status_codes } = report.vegeta;
-          console.log(JSON.stringify({ started_at, passed, duration, requested_qps, host_cpus, image,
+          const metrics = ({ latencies, requests, throughput, success, status_codes } = {}) => ({ latencies, requests, throughput, success, status_codes });
+          console.log(JSON.stringify({ started_at, passed, stage, duration, requested_qps, host_os, host_arch, host_cpus, image,
             container_cpus, container_memory_bytes, mysql_version, mysql_interpolate_params,
             resources, expected_access_events, persisted_access_events, captured_access_events,
-            nats_leak_scan_passed, leak_scan_passed, latencies, requests, throughput, success, status_codes }, null, 2));
+            nats_leak_scan_passed, leak_scan_passed, warmup: metrics(report.warmup), measured: metrics(report.vegeta) }, null, 2));
           JS
       - name: Remove disposable dependencies
         if: always()
@@ -106,12 +115,12 @@ jobs:
         if: github.event_name != 'workflow_dispatch'
         run: make service-test
       - name: Install the Kubernetes acceptance tool
-        if: github.event_name == 'workflow_dispatch'
+        if: '!cancelled() && github.event_name == ''workflow_dispatch'' && inputs.acceptance != ''capacity'''
         run: |
           go install sigs.k8s.io/kind@v0.33.0
           kubectl version --client
       - name: Three-node Kubernetes services, providers, failure recovery and offline key rotation
-        if: github.event_name == 'workflow_dispatch'
+        if: '!cancelled() && github.event_name == ''workflow_dispatch'' && inputs.acceptance != ''capacity'''
         run: make kubernetes-service-test
 
   web:
