@@ -20,7 +20,7 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
     GOOS=$TARGETOS GOARCH=$TARGETARCH go build -buildvcs=false -trimpath -ldflags="-s -w" -o /out/configra-kubernetes ./cmd/configra-kubernetes
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     /tmp/configra-go-licenses -binary /out/configra-kubernetes -out /out/licenses/configra-kubernetes-modules
-FROM --platform=$BUILDPLATFORM node:24-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df AS package
+FROM --platform=$BUILDPLATFORM node:25-bookworm-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370 AS package
 COPY scripts/compose-distribution.mjs /compose-distribution.mjs
 COPY --from=build /out/configra-kubernetes /artifact/configra-kubernetes
 COPY --from=build /out/licenses/ /artifact/licenses/configra-kubernetes/
