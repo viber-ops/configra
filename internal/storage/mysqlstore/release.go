@@ -195,15 +195,17 @@ func (store *Store) ActivateRelease(ctx context.Context, request ReleaseActivate
 	finish := func(result ReleaseResult, failure error) (ReleaseResult, error) {
 		return finishRelease(ctx, tx, request.OperationID, request.Actor, request.EnvironmentKey, request.ConfigKey, request.ReleaseKey, "activate", result, failure)
 	}
-	if generation != request.ExpectedGeneration {
-		return finish(ReleaseResult{Outcome: OutcomeConflict, ReleaseState: machine.ReleaseState{ReleaseKey: active.String, Generation: generation}}, ErrConflict)
-	}
 	manifest, digest, err := loadRelease(ctx, tx, envID, configID, request.ReleaseKey)
 	if err != nil {
 		return ReleaseResult{}, err
 	}
 	if _, err := store.resolveRelease(ctx, tx, envID, configID, &manifest, false); err != nil {
 		return ReleaseResult{}, err
+	}
+	// Scope and current availability precede conflict reporting, as they do
+	// conditional reads. A stale generation cannot change a denial into 409.
+	if generation != request.ExpectedGeneration {
+		return finish(ReleaseResult{Outcome: OutcomeConflict, ReleaseState: machine.ReleaseState{ReleaseKey: active.String, Generation: generation}}, ErrConflict)
 	}
 	result := ReleaseResult{Outcome: OutcomeNoChange, ReleaseState: machine.ReleaseState{ReleaseKey: request.ReleaseKey, Generation: generation}, Digest: hex.EncodeToString(digest)}
 	if active.String != request.ReleaseKey {

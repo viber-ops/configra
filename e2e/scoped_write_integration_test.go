@@ -415,6 +415,8 @@ func TestScopedWriteSDKWithRealMySQLNATSClickHouse(t *testing.T) {
 	}
 	_, err = clientFor(noNamespaces.Token, &identity).ReadRelease(ctx, "testing", "server", "", activeRelease.ETag)
 	wantStatus(err, 403)
+	_, err = clientFor(noNamespaces.Token, &identity).ActivateRelease(ctx, "testing", "server", "first", configrago.ReleaseActivate{OperationID: "release-outside-stale", ExpectedGeneration: 0})
+	wantStatus(err, 403)
 	cliIdentity := filepath.Join(directory, "cli-identity")
 	issueArgs := []string{"deployment-credential", "issue", "--authority", ca.Authority.ID, "--name", "cli-host", "--expires-at", time.Now().Add(6 * time.Hour).UTC().Format(time.RFC3339), "--operation-id", "cli-deployment-issue", "--output-dir", cliIdentity}
 	var receipt struct {
