@@ -6,10 +6,13 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"database/sql"
 	"errors"
 	"fmt"
 	"net/http/httptest"
+	"os"
 	"slices"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -59,6 +62,20 @@ func TestMixedFileAndCredentialBurstPreservesMachineReads(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer client.CloseIdleConnections()
+	metricsDB, err := sql.Open("mysql", os.Getenv("CONFIGRA_TEST_MYSQL_ROOT_DSN"))
+	if err != nil {
+		t.Fatal("open fixture metrics")
+	}
+	defer metricsDB.Close()
+	deadlocks := func() uint64 {
+		var name, value string
+		if metricsDB.QueryRowContext(ctx, "SHOW GLOBAL STATUS LIKE 'Innodb_deadlocks'").Scan(&name, &value) != nil {
+			return 0
+		}
+		number, _ := strconv.ParseUint(value, 10, 64)
+		return number
+	}
+	beforeDeadlocks := deadlocks()
 	var accepted, limited, failed atomic.Int64
 	write := func(worker, index int) {
 		operation := fmt.Sprintf("mixed-burst-%02d-%02d", worker, index)
@@ -77,6 +94,11 @@ func TestMixedFileAndCredentialBurstPreservesMachineReads(t *testing.T) {
 			limited.Add(1)
 		} else {
 			failed.Add(1)
+			if api != nil {
+				t.Logf("unexpected write response: status=%d code=%s", api.StatusCode, api.Code)
+			} else {
+				t.Log("unexpected write transport failure")
+			}
 		}
 	}
 	// Establish both write paths, then run a simultaneous read/write burst.
@@ -119,7 +141,7 @@ func TestMixedFileAndCredentialBurstPreservesMachineReads(t *testing.T) {
 	}
 	slices.Sort(measured)
 	if failed.Load() != 0 || accepted.Load() < 2 || limited.Load() == 0 || len(measured) != 80 || measured[75] > 2*time.Second {
-		t.Fatalf("mixed admission: accepted=%d limited=%d errors=%d reads=%d p95=%s", accepted.Load(), limited.Load(), failed.Load(), len(measured), measured[75])
+		t.Fatalf("mixed admission: accepted=%d limited=%d errors=%d reads=%d p95=%s deadlocks=%d", accepted.Load(), limited.Load(), failed.Load(), len(measured), measured[75], deadlocks()-beforeDeadlocks)
 	}
 	t.Logf("bounded mixed acceptance: reads=80 p95=%s accepted_writes=%d limited_writes=%d", measured[75], accepted.Load(), limited.Load())
 }
