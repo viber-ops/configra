@@ -7,7 +7,7 @@ require (
 	github.com/go-sql-driver/mysql v1.10.0
 	github.com/nats-io/nats.go v1.53.1
 	github.com/viber-ops/configra v0.0.0
-	github.com/viber-ops/configra-go v1.1.1-0.20261002200032-fc42d0fab0f1
+	github.com/viber-ops/configra-go v1.2.0
 	go.uber.org/zap v1.28.0
 )
 

@@ -6,7 +6,7 @@
 
 Configra 是面向研发与运维的自托管配置服务。如果你正在多个仓库、部署脚本和集群之间反复复制配置，它可以提供统一工作台：管理多环境 YAML / JSON、引用共享 Vault 值，再通过 Go SDK 或 Kubernetes 交给应用。
 
-> 当前稳定版为 **v1.1.0**。请使用文档指定的标签，并在自己的部署环境验证入口、容量和恢复流程。
+> 当前稳定版为 **v1.2.0**。请使用文档指定的标签，并在自己的部署环境验证入口、容量和恢复流程。
 
 ![Configra Vault 工作台：资源导航、条目、环境变体与字段详情](https://viber-ops.github.io/assets/configra/vault-light.png)
 
@@ -43,8 +43,8 @@ database:
 准备 Docker Compose、Go 1.25.13+、Node.js 24、npm、Make 和 OpenSSL：
 
 ```sh
-git clone --branch v1.1.0 https://github.com/viber-ops/configra.git
-git clone --branch v1.1.0 https://github.com/viber-ops/configra-go.git
+git clone --branch v1.2.0 https://github.com/viber-ops/configra.git
+git clone --branch v1.2.0 https://github.com/viber-ops/configra-go.git
 cd configra
 make local-run
 ```
@@ -78,6 +78,10 @@ v1.0.1 新增后端列表分页、只读恢复检查和[维护窗口内的主密
 项目原创代码采用 [Apache-2.0](LICENSE)，第三方组件保留各自的许可证与声明。
 贡献方式见 [CONTRIBUTING.md](CONTRIBUTING.md)，安全问题请通过 [SECURITY.md](SECURITY.md) 中的私密渠道报告。
 
-## v1.1.0 自动化写入
+## v1.2.0 自动化写入
 
-[有范围的写令牌](docs/scoped-write-tokens.zh-CN.md) 由 OIDC 登录且具有 MFA 证明的管理员签发。operator 通过 9443 的 Token + mTLS 写 Config/Vault（含文件），并签发/吊销继承白名单的只读部署凭据。默认只读 Token 仍覆盖环境；写令牌及其部署凭据额外按 Config/namespace 白名单收窄权限。参阅 [升级与 schema 2 → 3 迁移](docs/releases/v1.1.0.md)。
+[有范围的写令牌](docs/scoped-write-tokens.zh-CN.md) 由 OIDC 登录且具有 MFA 证明的管理员签发。operator 通过 9443 的 Token + mTLS 写 Config/Vault（含文件），并签发/吊销继承白名单的只读部署凭据。默认只读 Token 仍覆盖环境；写令牌及其部署凭据额外按 Config/namespace 白名单收窄权限。参阅 [升级与 schema 3 → 4 迁移](docs/releases/v1.2.0.md)。
+
+## v1.2 运维能力
+
+[Cobra 部署 CLI](docs/cli.md) 复用 SDK，支持 [Config＋File 整套发布/回滚](docs/release-sets.md) 与凭据两阶段轮换。配套 [会话撤销](docs/session-control.md)、[私网监控](deploy/monitoring/README.md)、[生产权限与 HA](deploy/kubernetes/production/README.md)、[归档清理](docs/data-retention.md)；升级先阅读 [schema 3→4 与回退步骤](docs/releases/v1.2.0.md)。

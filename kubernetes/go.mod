@@ -4,7 +4,7 @@ go 1.25.13
 
 require (
 	github.com/prometheus/client_golang v1.23.2
-	github.com/viber-ops/configra-go v1.1.1-0.20261002200032-fc42d0fab0f1
+	github.com/viber-ops/configra-go v1.2.0
 	go.yaml.in/yaml/v3 v3.0.4
 	google.golang.org/grpc v1.83.2
 	k8s.io/api v0.35.0

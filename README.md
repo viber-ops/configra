@@ -4,14 +4,14 @@
 
 [Website](https://viber-ops.github.io/en/configra/) ·
 [Documentation](https://viber-ops.github.io/en/docs/configra/) ·
-[Downloads](https://github.com/viber-ops/configra/releases/tag/v1.1.0) ·
+[Downloads](https://github.com/viber-ops/configra/releases/tag/v1.2.0) ·
 [Go SDK](https://github.com/viber-ops/configra-go) · [中文](README.zh-CN.md)
 
 Configra stores versioned YAML/JSON and shared Vault values for each environment.
 Applications read resolved configuration through the Go SDK, CSI file mounts,
 or native Kubernetes Secret/ConfigMap synchronization.
 
-> **Stable release: v1.1.0.** Use the tag for these guides.
+> **Stable release: v1.2.0.** Use the tag for these guides.
 > Validate ingress, capacity and recovery in your own deployment before rollout.
 > [Read the limits](https://viber-ops.github.io/en/docs/configra/security/).
 
@@ -35,7 +35,7 @@ or native Kubernetes Secret/ConfigMap synchronization.
 | Machine access | HTTPS, Environment-scoped Tokens, mTLS and revocation checks |
 | Less certificate work | Managed client CAs, encrypted signing keys and one-time private exports |
 | Go integration | Resolved reads, file downloads and Viper snapshots with ETag polling |
-| Deployment automation | MFA-issued scoped write Tokens for Config/Vault writes and read-only host credentials |
+| Deployment automation | Cobra `configractl`, scoped writes, verified credential rotation and complete release activation/rollback |
 | Kubernetes integration | CSI file mounts **and** native Secret/ConfigMap synchronization |
 
 For example, a Config can reference a Vault value without copying it:
@@ -47,15 +47,16 @@ database:
 ```
 
 Applications receive the final document for the requested environment. References
-must occupy the complete scalar; File fields are read separately.
+must occupy the complete scalar. Use [release sets](docs/release-sets.md) for one
+consistent Config+File batch, or the existing individual read endpoints.
 
 ## Try the workspace
 
 With Docker Compose, Go 1.25.13+, Node.js 24, npm, Make and OpenSSL installed:
 
 ```sh
-git clone --branch v1.1.0 https://github.com/viber-ops/configra.git
-git clone --branch v1.1.0 https://github.com/viber-ops/configra-go.git
+git clone --branch v1.2.0 https://github.com/viber-ops/configra.git
+git clone --branch v1.2.0 https://github.com/viber-ops/configra-go.git
 cd configra
 make local-run
 ```
@@ -102,7 +103,7 @@ Production ingress and independent-host failure checks remain deployment-specifi
 Check the [current production status](docs/production-readiness.md)
 before a rollout.
 
-For v1.1.0, follow the [upgrade and schema 2 → 3 migration instructions](docs/releases/v1.1.0.md). Administrators need verified OIDC MFA to issue write Tokens; operators use mTLS and need no human identity.
+For v1.2.0, follow the [upgrade and schema 3 → 4 migration instructions](docs/releases/v1.2.0.md). Administrators need verified OIDC MFA to issue write Tokens; operators use mTLS and need no human identity.
 
 ## Develop and verify
 
@@ -129,3 +130,11 @@ review and verification records are indexed in [maintainer documentation](docs/R
 Original project source is licensed under [Apache-2.0](LICENSE). Third-party
 components retain their own licenses and notices. See [CONTRIBUTING.md](CONTRIBUTING.md)
 and [SECURITY.md](SECURITY.md) for contributions and private vulnerability reports.
+
+## v1.2 operations
+
+Use the [Cobra operator CLI](docs/cli.md), [release sets](docs/release-sets.md),
+[session control](docs/session-control.md), [private metrics](deploy/monitoring/README.md),
+[production roles/HA](deploy/kubernetes/production/README.md), and
+[archived retention](docs/data-retention.md). The
+[upgrade runbook](docs/releases/v1.2.0.md) covers schema 3 → 4 and separate migration credentials.

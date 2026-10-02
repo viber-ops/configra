@@ -1,6 +1,7 @@
 # Configra --- 轻量配置与敏感信息管理中心设计文档
 
 > V1 Design：短小精悍、语义明确、可审计、可验证。
+> v1.2.0 新增 [发布集](release-sets.md)、[CLI](cli.md)、[共享会话控制](session-control.md) 与 [运维交付](releases/v1.2.0.md)。
 > v1.1.0 新增 [scoped write token](scoped-write-tokens.zh-CN.md)；其范围与签发边界以该指南为准。
 
 ## 1. 产品定位

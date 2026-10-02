@@ -11,7 +11,7 @@ require (
 	github.com/nats-io/nats.go v1.53.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/spf13/cobra v1.10.2
-	github.com/viber-ops/configra-go v1.1.1-0.20261002200032-fc42d0fab0f1
+	github.com/viber-ops/configra-go v1.2.0
 	go.uber.org/zap v1.28.0
 	go.yaml.in/yaml/v3 v3.0.4
 	golang.org/x/oauth2 v0.36.0
