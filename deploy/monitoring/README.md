@@ -74,7 +74,9 @@ The command returns metadata only, while verifying real HTTPS, Token/mTLS,
 authorization and Config resolution. Probe failure must reach the monitoring
 system even if Configra's own notification delivery is unavailable.
 
-Kubernetes sync exposes standard controller-runtime metrics with
+Kubernetes provider and sync expose source batch duration, success/failure, in-flight
+reads and last source attempt/success; provider also exports bounded RPC outcomes.
+These have no resource/credential labels. Sync exposes standard controller-runtime metrics with
 `--metrics-address` (default loopback `127.0.0.1:8080`; `0` disables it).
 Binding `Ready`, `version` and `lastSyncedAt` remain available through the CRD.
 Inspect failing Bindings with Kubernetes tooling; synchronization success does

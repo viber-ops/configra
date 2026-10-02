@@ -1,0 +1,31 @@
+groups:
+  - name: configra-backup
+    rules:
+      - alert: ConfigraBackupRecoveryPointMissing
+        expr: absent(configra_backup_recovery_point_timestamp_seconds{store="mysql"})
+        for: 15m
+        labels: {severity: critical}
+        annotations:
+          summary: No remotely verified Configra recovery point is observable
+          description: Check the backup CronJob, remote storage and persistent Pushgateway. A local dump does not establish an off-site recovery point.
+      - alert: ConfigraBackupRecoveryPointTooOld
+        expr: time() - configra_backup_recovery_point_timestamp_seconds{store="mysql"} > 7200
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: Configra recovery point exceeds the sample two-hour RPO
+          description: Check scheduling, dump, upload and remote verification. Adjust this threshold only with an agreed recovery objective.
+      - alert: ConfigraBackupFailed
+        expr: configra_backup_last_attempt_succeeded == 0
+        for: 1m
+        labels: {severity: warning}
+        annotations:
+          summary: Configra backup archival or verification failed
+          description: Preserve the last valid backup and investigate the failed Job. Successful metrics are not advanced on failure.
+      - alert: ConfigraBackupJobFailed
+        expr: kube_job_status_failed{namespace="configra",job_name=~"configra-mysql-backup-.*"} > 0
+        for: 1m
+        labels: {severity: warning}
+        annotations:
+          summary: Configra backup Pod failed before completing its workflow
+          description: Check Pod scheduling, image pulls, mounted credentials, volume capacity and the value-free failure message.

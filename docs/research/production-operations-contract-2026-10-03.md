@@ -1,5 +1,7 @@
 # Configra 生产运维部署契约
 
+实现更新：已交付的 [角色模板与受限账号验收](../../deploy/mysql/README.md)、[HA overlay](../../deploy/kubernetes/production/README.md) 和 [备份调度](../../deploy/backup/README.md#scheduled-remote-backups--定时异地备份) 为当前使用入口。下文保留实现前的调查；其中 Management 每次启动需要 CREATE 的限制已消除，新增 `configra migrate`。实际 MySQL 8.0.22 角色测试确认 Sentinel 锁读还需要窄化的 `UPDATE(id)` 权限，不能直接套用下文 SELECT-only 推论。发布表 S/I/U、schema 3→4 及服务角色禁止 DDL/删除已经通过真实账号验收。
+
 日期：2026-10-03；范围：`feat/operations-cli` 工作树、尚未发布的 schema 4。本文只读核对实现并给部署建议；没有执行授权、备份、清理或生产操作。
 官方页面通过 HTTPS 读取；web 工具接口不可用。权限表来自实际 SQL，仍须在 MySQL **8.0.22** 用受限账号完成验收，不能把源码推导写成已通过的权限测试。
 

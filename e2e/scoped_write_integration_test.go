@@ -408,6 +408,13 @@ func TestScopedWriteSDKWithRealMySQLNATSClickHouse(t *testing.T) {
 		t.Fatal("CLI binary File download")
 	}
 	exerciseReleaseCLI(t, ctx, client, directory, runCLI)
+	noNamespaces := issueWriter("release-namespace-denied", time.Now().Add(time.Hour), []string{})
+	activeRelease, err := client.ReadRelease(ctx, "testing", "server", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = clientFor(noNamespaces.Token, &identity).ReadRelease(ctx, "testing", "server", "", activeRelease.ETag)
+	wantStatus(err, 403)
 	cliIdentity := filepath.Join(directory, "cli-identity")
 	issueArgs := []string{"deployment-credential", "issue", "--authority", ca.Authority.ID, "--name", "cli-host", "--expires-at", time.Now().Add(6 * time.Hour).UTC().Format(time.RFC3339), "--operation-id", "cli-deployment-issue", "--output-dir", cliIdentity}
 	var receipt struct {
@@ -515,6 +522,8 @@ func TestScopedWriteSDKWithRealMySQLNATSClickHouse(t *testing.T) {
 	_, err = expiringClient.WriteConfig(ctx, "testing", "server", configWrite)
 	wantStatus(err, 401)
 	_, err = expiringClient.ReadResolvedConfig(ctx, "testing", "server", "")
+	wantStatus(err, 401)
+	_, err = expiringClient.ReadRelease(ctx, "testing", "server", "", activeRelease.ETag)
 	wantStatus(err, 401)
 	deploymentRequest.OperationID = "scoped-deploy-cascade"
 	cascade, err := client.IssueDeploymentCredential(ctx, "testing", deploymentRequest)

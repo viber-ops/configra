@@ -31,7 +31,9 @@ the complete connection profile and ignores ambient connection variables;
 explicit command flags override it. Without a selected context, environment
 variables supply defaults. Relative paths saved by `context set` are converted
 to absolute paths. Context files contain paths, never Token/key contents, and
-are written atomically with mode 0600. `--timeout` bounds the complete command.
+are written atomically with mode 0600. `--timeout` bounds request/validator work
+and stdin waiting; filesystem completion follows normal operating-system I/O
+semantics.
 
 已选 context 时，以其整套连接配置为准；显式 flag 可覆盖，避免混入其他环境的
 环境变量。未选 context 时才使用环境变量。原始 Token 不接受命令行参数。
@@ -74,6 +76,14 @@ the new state and choosing a new Operation ID; automatic overwrite is unsupporte
 提供内容，不把秘密放进参数。需要向 stdout 返回敏感内容时，必须同时指定
 `--output - --reveal`；此时不要将 stdout 发送到 CI 日志。普通 stdout 仅输出
 无值元数据，`--json` 使用紧凑 JSON；stderr 只包含固定错误码和退出码。
+
+## Complete releases / 整套发布
+
+Use `release prepare/state/get/activate/rollback` for one Config plus its pinned
+Vault dependencies and File members. Activation/rollback require the expected
+stream generation, a stable Operation ID and a local validator executable. See
+the [release set workflow and manifest](release-sets.md). Independent current-value
+reads continue to follow current values; select release consumption explicitly.
 
 ## Deployment credentials / 部署凭据
 

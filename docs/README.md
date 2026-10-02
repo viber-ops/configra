@@ -13,6 +13,12 @@ These repository guides describe the checked-out source:
 | Install a binary bundle / 安装二进制包 | [Release installation](release-installation.md) |
 | Deploy the service on Kubernetes / 部署服务 | [Service deployment](../deploy/kubernetes/README.md) |
 | Consume configuration in Pods / Pod 接入 | [CSI and native synchronization](../kubernetes/README.md) |
+| Operate deployments / 部署 CLI | [configractl](cli.md) |
+| Publish/rollback whole sets / 整套发布回滚 | [Release sets](release-sets.md) |
+| Revoke human sessions / 撤销人工会话 | [Session control](session-control.md) |
+| Monitor and retain data / 监控与数据保留 | [Metrics](../deploy/monitoring/README.md), [Outbox retention](data-retention.md) |
+| Production roles and HA / 生产权限与 HA | [DB roles](../deploy/mysql/README.md), [HA overlay](../deploy/kubernetes/production/README.md) |
+| Upgrade to v1.2.0 / 升级至 v1.2.0 | [Schema 3 → 4](releases/v1.2.0.md) |
 | Automate scoped writes / 自动化范围写入 | [English](scoped-write-tokens.md) · [中文](scoped-write-tokens.zh-CN.md) |
 | Upgrade to v1.1.0 / 升级至 v1.1.0 | [Release and migration](releases/v1.1.0.md) |
 | Manage CAs and client certificates / 管理证书 | [Managed certificates](managed-certificates.md) |

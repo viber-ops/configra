@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 
 	"github.com/viber-ops/configra/internal/vaultcrypto"
 )
@@ -97,11 +97,16 @@ func initializeOrVerify(ctx context.Context, db *sql.DB, provider *vaultcrypto.L
 	}
 	defer releaseMigrationLock(connection)
 
-	if _, err := connection.ExecContext(ctx, schemaMigrationsDDL); err != nil {
-		return fmt.Errorf("create schema migration table: %w", err)
-	}
 	var version uint64
-	if err := connection.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
+	err = connection.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version)
+	var missing *mysql.MySQLError
+	if errors.As(err, &missing) && missing.Number == 1146 {
+		if _, err := connection.ExecContext(ctx, schemaMigrationsDDL); err != nil {
+			return fmt.Errorf("create schema migration table: %w", err)
+		}
+		err = connection.QueryRowContext(ctx, "SELECT COALESCE(MAX(version),0) FROM schema_migrations").Scan(&version)
+	}
+	if err != nil {
 		return fmt.Errorf("read schema version: %w", err)
 	}
 	if version > schemaVersion {

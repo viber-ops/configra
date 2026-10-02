@@ -306,12 +306,12 @@ func TestSchemaV2PreservesExistingDataAndChecksMasterKeyBeforeMigration(t *testi
 		t.Fatal(err)
 	}
 	defer store.Close()
-	if version, err := store.SchemaVersion(ctx); err != nil || version != 3 {
+	if version, err := store.SchemaVersion(ctx); err != nil || version != 4 {
 		t.Fatal("latest schema was not recorded")
 	}
 	var migrations int
-	if err := database.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migrations WHERE version IN (2, 3)").Scan(&migrations); err != nil || migrations != 2 {
-		t.Fatal("v2/v3 migrations were not both recorded")
+	if err := database.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migrations WHERE version IN (2, 3, 4)").Scan(&migrations); err != nil || migrations != 3 {
+		t.Fatal("v2/v3/v4 migrations were not all recorded")
 	}
 	items, err := store.ListEnvironments(ctx, EnvironmentQuery{InventoryQuery: InventoryQuery{Limit: 50}})
 	if err != nil || len(items.Items) != 1 || items.Total != 1 || items.Items[0].Key != "legacy" {

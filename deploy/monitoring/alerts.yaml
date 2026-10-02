@@ -2,7 +2,7 @@ groups:
   - name: configra
     rules:
       - alert: ConfigraMetricsUnavailable
-        expr: up{job=~"configra-(api|management|sync)"} == 0
+        expr: up{job=~"configra-(api|management|sync|provider)"} == 0
         for: 1m
         labels: {severity: critical}
         annotations:
@@ -63,3 +63,10 @@ groups:
         annotations:
           summary: Configra reads are failing
           description: Run an actual authorized read probe and check MySQL, resource validity and cryptographic health.
+      - alert: ConfigraKubernetesSourceFailures
+        expr: sum by (instance, job) (rate(configra_kubernetes_fetches_total{result="error"}[5m])) > 0
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: Kubernetes consumers cannot fetch complete Configra batches
+          description: Inspect Binding Ready/lastSyncedAt or provider mount failures, identity expiry and source availability. A successful source read does not attest application reload.

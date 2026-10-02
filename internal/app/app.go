@@ -48,7 +48,7 @@ func NewCommand() *cobra.Command {
 		_ = command.MarkFlagRequired("config")
 		root.AddCommand(command)
 	}
-	root.AddCommand(newDoctorCommand(), newKeyRotationCommand(), newSessionsCommand(), newPruneCommand())
+	root.AddCommand(newDoctorCommand(), newKeyRotationCommand(), newSessionsCommand(), newPruneCommand(), newMigrateCommand())
 	return root
 }
 

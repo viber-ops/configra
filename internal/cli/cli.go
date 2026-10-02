@@ -55,6 +55,9 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		}
 	}()
 	root.PersistentPreRunE = func(command *cobra.Command, _ []string) error {
+		if command.ValidateRequiredFlags() != nil {
+			return fail(2, "missing_required_arguments")
+		}
 		settings.executing = true
 		if settings.timeout <= 0 {
 			return fail(2, "positive_timeout_required")

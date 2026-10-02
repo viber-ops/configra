@@ -295,3 +295,25 @@ See [prerequisites and cleanup](../CONTRIBUTING.md#work-locally). The test owns 
 kubeconfig and never switches your current context. A passing local run does not
 prove production ingress, physical-host/zone loss, database HA, capacity or
 release readiness. All three test nodes still share one Docker host.
+
+## Consistent release consumption
+
+Server/SDK v1.2.0 adds `type: release`: use one object with `environment`, `config`
+and `path: .`. It reads the active Config and every pinned File in one request;
+it cannot be mixed with ordinary Config/File objects. See the
+[release contract](../docs/release-sets.md#kubernetes-consumers). Native targets
+require flat manifest filenames and files mode; CSI keeps its relative-path and
+3 MiB limits. Native objects retain the 900 KiB limit and ConfigMap sensitivity
+check. Upgrade the CRD before applying a release source.
+
+`--metrics-address` exposes a private Prometheus listener in both provider and
+sync modes (loopback `127.0.0.1:8080`, `0` disables exposure). Source batch
+counts/duration/in-flight reads and last attempt/success have no resource or
+credential labels; provider RPC outcomes use bounded method/status labels. Sync
+also exports controller-runtime metrics. These describe source reads and control
+work, not application reload. Inspect each Binding's Ready/version/lastSyncedAt
+for its own status; a global last-success value cannot prove all Bindings are
+fresh. Put non-loopback listeners behind a monitoring-only NetworkPolicy.
+
+发布集读取、Secret 更新或 CSI batch 完成，不代表应用已经重新加载。环境变量消费
+需要替换 Pod；应用自行打开多个文件时，应按同一快照/目录边界加载，避免跨切换读取。

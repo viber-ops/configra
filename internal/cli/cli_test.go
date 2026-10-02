@@ -18,6 +18,7 @@ func TestCLIFlagsAreParsedByCobraWithoutLeakingInvalidValues(t *testing.T) {
 		{"--timeout", "private-argument-sentinel", "config", "get", "server"},
 		{"private-argument-sentinel"},
 		{"config", "put", "server", "--expected-revision", "private-argument-sentinel"},
+		{"release", "activate", "server", "first", "--expected-generation", "0", "--operation-id", "missing-validator"},
 	} {
 		var stdout, stderr bytes.Buffer
 		code := cli.Run(context.Background(), args, strings.NewReader(""), &stdout, &stderr, "test")
