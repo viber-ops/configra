@@ -8,8 +8,12 @@ The release target is **v1.1.0** for both the server and Go SDK. It adds
 [MFA-issued scoped writers](scoped-write-tokens.md), immutable scope inheritance
 for read-only deployment credentials and MySQL schema 3. Local real-dependency
 and hosted CI evidence is recorded in [October 2 verification](verification/2026-10-02.md).
-Publishing still requires the existing capacity, Kubernetes and tagged archive
-gates; previous-version results do not establish this candidate's acceptance.
+The unchanged ten-minute capacity gate passes on the recorded Mac/Docker host;
+the hosted three-node Kubernetes gate also passes. Earlier local timeouts and
+the hosted Linux warmup failure remain recorded, so current native Linux
+capacity is not claimed. Downloaded tagged archives still require independent
+verification before publication; previous-version results do not establish this
+candidate's acceptance.
 
 The table below retains the **v1.0.1 / SDK v1.0.0 baseline**. Its native Linux
 integration/capacity/recovery and three-node Kubernetes results, hosted CI and
