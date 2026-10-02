@@ -330,14 +330,14 @@ func (server *server) authenticate(request *http.Request, environment string) (T
 		(!token.ExpiresAt.IsZero() && !server.now().Before(token.ExpiresAt)) {
 		return Token{}, "", http.StatusUnauthorized
 	}
-	if !token.EnvironmentGranted {
-		return token, "", http.StatusForbidden
-	}
 	if request.TLS == nil {
 		return Token{}, "", http.StatusUnauthorized
 	}
 	if len(request.TLS.PeerCertificates) == 0 {
 		if token.AllowWithoutMTLS && token.Kind != TokenWriteScoped && len(token.CertificateFingerprint) == 0 {
+			if !token.EnvironmentGranted {
+				return token, "", http.StatusForbidden
+			}
 			return token, AuthenticationTokenOnly, 0
 		}
 		return Token{}, "", http.StatusUnauthorized
@@ -352,6 +352,9 @@ func (server *server) authenticate(request *http.Request, environment string) (T
 	}
 	if !active {
 		return Token{}, "", http.StatusUnauthorized
+	}
+	if !token.EnvironmentGranted {
+		return token, "", http.StatusForbidden
 	}
 	return token, AuthenticationMTLS, 0
 }

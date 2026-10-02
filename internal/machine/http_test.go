@@ -232,6 +232,8 @@ func TestHandlerEnforcesTokenEnvironmentAndConditionalMTLS(t *testing.T) {
 		{"presented unknown certificate is never ignored", tokenOnly, "https://configra.test/v1/environments/a/configs/payment", authorization, &tls.ConnectionState{PeerCertificates: []*x509.Certificate{{Raw: []byte("unknown")}}}, http.StatusUnauthorized, "unauthorized"},
 		{"certificate required by default", base, "https://configra.test/v1/environments/a/configs/payment", authorization, &tls.ConnectionState{}, http.StatusUnauthorized, "unauthorized"},
 		{"environment must be granted", base, "https://configra.test/v1/environments/b/configs/payment", authorization, validTLS, http.StatusForbidden, "environment_forbidden"},
+		{"certificate checked before environment denial", base, "https://configra.test/v1/environments/b/configs/payment", authorization, &tls.ConnectionState{}, http.StatusUnauthorized, "unauthorized"},
+		{"invalid presented identity precedes environment denial", tokenOnly, "https://configra.test/v1/environments/b/configs/payment", authorization, &tls.ConnectionState{PeerCertificates: []*x509.Certificate{{Raw: []byte("unknown")}}}, http.StatusUnauthorized, "unauthorized"},
 		{"plain HTTP is rejected", tokenOnly, "http://configra.test/v1/environments/a/configs/payment", authorization, nil, http.StatusUnauthorized, "unauthorized"},
 		{"expired token is rejected", expired, "https://configra.test/v1/environments/a/configs/payment", authorization, validTLS, http.StatusUnauthorized, "unauthorized"},
 		{"revoked token is rejected", revoked, "https://configra.test/v1/environments/a/configs/payment", authorization, validTLS, http.StatusUnauthorized, "unauthorized"},
