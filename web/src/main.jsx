@@ -1,6 +1,7 @@
 import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AuthorityManagement, CertificateManagement, authorityLabel } from './security/Certificates.jsx';
+import { Sessions, sessionLabel } from './security/Sessions.jsx';
 import { request, managementError, ActionError, useInventory, InventoryPagination } from './management.jsx';
 import './styles.css';
 import './workspace.css';
@@ -1064,7 +1065,7 @@ function Shell({ principal, language, setLanguage, theme, setTheme, t }) {
         {route === 'vault' && currentRoute.segments.length >= 3
           ? <div className="resource-explorer"><ResourceRail refresh={inventoryRevision} section="vault" selected={`${currentRoute.segments[1]}/${currentRoute.segments[2]}`} t={t} /><div className="resource-explorer-detail"><VaultDetail key={`${currentRoute.segments[1]}/${currentRoute.segments[2]}`} principal={principal} namespaceKey={currentRoute.segments[1]} itemKey={currentRoute.segments[2]} t={t} /></div></div>
           : route === 'vault' && <VaultItems principal={principal} filters={currentRoute.query} t={t} />}
-        {route === 'administration' && principal.role === 'admin' && <Administration t={t} />}
+        {route === 'administration' && principal.role === 'admin' && <Administration t={t} principal={principal} />}
         {route === 'notifications' && principal.role === 'admin' && <Notifications t={t} />}
         {principal.role !== 'admin' && ['administration', 'notifications'].includes(route) && <Forbidden t={t} />}
         {route === 'access' && <AccessPage t={t} />}
@@ -1945,7 +1946,7 @@ function downloadFile(file) {
   } catch {}
 }
 
-function Administration({ t }) {
+function Administration({ t, principal }) {
   const [tab, setTab] = useState('tokens');
   return (
     <div className="page administration-page">
@@ -1954,10 +1955,11 @@ function Administration({ t }) {
         <button type="button" role="tab" aria-selected={tab === 'tokens'} onClick={() => setTab('tokens')}>{t.apiTokens}</button>
         <button type="button" role="tab" aria-selected={tab === 'certificates'} onClick={() => setTab('certificates')}>{t.clientCertificates}</button>
         <button type="button" role="tab" aria-selected={tab === 'authorities'} onClick={() => setTab('authorities')}>{authorityLabel(t)}</button>
+        <button type="button" role="tab" aria-selected={tab === 'sessions'} onClick={() => setTab('sessions')}>{sessionLabel(t)}</button>
         <button type="button" role="tab" aria-selected={tab === 'notifications'} onClick={() => setTab('notifications')}>{t.notifications}</button>
         <button type="button" role="tab" aria-selected={tab === 'deployment'} onClick={() => setTab('deployment')}>{t.deploymentStatus}</button>
       </div>
-      {tab === 'tokens' ? <TokensPanel t={t} /> : tab === 'certificates' ? <CertificateManagement t={t} onAuthorities={() => setTab('authorities')} /> : tab === 'authorities' ? <AuthorityManagement t={t} onCertificates={() => setTab('certificates')} /> : tab === 'notifications' ? <Notifications t={t} embedded /> : <DeploymentPanel t={t} />}
+      {tab === 'tokens' ? <TokensPanel t={t} /> : tab === 'certificates' ? <CertificateManagement t={t} onAuthorities={() => setTab('authorities')} /> : tab === 'authorities' ? <AuthorityManagement t={t} onCertificates={() => setTab('certificates')} /> : tab === 'sessions' ? <Sessions t={t} principal={principal} /> : tab === 'notifications' ? <Notifications t={t} embedded /> : <DeploymentPanel t={t} />}
     </div>
   );
 }

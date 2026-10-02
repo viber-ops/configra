@@ -92,7 +92,7 @@ func ParseSpec(object *unstructured.Unstructured) (Spec, time.Duration, error) {
 		return spec, 0, err
 	}
 	for _, object := range spec.Objects {
-		if strings.Contains(object.Path, "/") || (spec.Target.Mode == "env" && object.Type == "file") {
+		if strings.Contains(object.Path, "/") || (spec.Target.Mode == "env" && (object.Type == "file" || object.Type == "release")) {
 			return spec, 0, errors.New("native bindings require flat filenames; env mode accepts Configs only")
 		}
 	}
@@ -142,13 +142,13 @@ func (reconciler *Reconciler) Reconcile(ctx context.Context, request ctrl.Reques
 	if err != nil {
 		return reconciler.failure(ctx, object, "FetchFailed", "Configra objects could not be fetched; the previous target is retained.")
 	}
-	if len(materials) != len(spec.Objects) {
+	if source.ValidateMaterials(spec.Objects, materials) != nil {
 		return reconciler.failure(ctx, object, "FetchFailed", "Configra returned incomplete data.")
 	}
 	data := map[string][]byte{}
 	versions := sha256.New()
-	for index, material := range materials {
-		if material.Path != spec.Objects[index].Path || material.Version == "" {
+	for _, material := range materials {
+		if strings.Contains(material.Path, "/") || material.Version == "" {
 			return reconciler.failure(ctx, object, "FetchFailed", "Configra returned inconsistent object identities.")
 		}
 		if spec.Target.Kind == "ConfigMap" && material.Sensitive && !spec.AllowSensitiveConfigMap {

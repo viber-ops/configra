@@ -9,6 +9,32 @@ async function mockAdmin(page) {
   }));
 }
 
+test('administrator session control confirms the identity and preserves operation identity on retry', async ({ page }) => {
+  await mockAdmin(page);
+  await page.route('**/v1/api-tokens*', route => route.fulfill({ json: { items: [], total: 0 } }));
+  const requests = [];
+  await page.route('**/v1/session-policies*', route => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: { items: [], total: 0 } });
+    requests.push({ body: route.request().postDataJSON(), operation: route.request().headers()['idempotency-key'] });
+    if (requests.length === 1) return route.fulfill({ status: 503, json: { error: { code: 'service_unavailable' } } });
+    return route.fulfill({ json: { outcome: 'success', identity_id: 'a'.repeat(64), blocked: true, generation: 1 } });
+  });
+  await page.goto('/ui/#/administration');
+  await page.getByRole('tab', { name: 'Administrator sessions' }).click();
+  await page.getByLabel('OIDC issuer', { exact: true }).fill('https://identity.example.com');
+  await page.getByLabel('Subject (sub)', { exact: true }).fill('departed-user');
+  await page.getByRole('combobox', { name: 'Action', exact: true }).selectOption('block');
+  await page.getByRole('button', { name: 'Review change', exact: true }).click();
+  expect(requests).toHaveLength(0);
+  await page.getByRole('button', { name: 'Confirm change', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Confirm change', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Confirm change', exact: true }).click();
+  await expect.poll(() => requests.length).toBe(2);
+  expect(requests[0].body).toEqual({ issuer: 'https://identity.example.com', subject: 'departed-user', action: 'block' });
+  expect(requests[0].operation).toBeTruthy();
+  expect(requests[1].operation).toBe(requests[0].operation);
+});
+
 test('Notification destinations and their subscriptions are independently paged', async ({ page }) => {
   await mockAdmin(page);
   const events = Array.from({ length: 105 }, (_, index) => `event.${String(index).padStart(3, '0')}`);

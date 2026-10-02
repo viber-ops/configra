@@ -26,6 +26,7 @@ These repository guides describe the checked-out source:
 | How does the domain work? / 领域模型是什么？ | [Terminology](../CONTEXT.md), [detailed design](design.md) |
 | Why were these choices made? / 为什么这样设计？ | [Numbered architecture decisions](adr/) |
 | What did the security review find? / 安全审查结论是什么？ | [Security and architecture review](security-architecture-review.md) |
+| Which operational capabilities should come next? / 哪些运维与架构能力应优先补齐？ | [v1.1.0 operations and architecture review](research/operations-architecture-review-2026-10-02.md) |
 | How should the UI behave? / 界面如何组织？ | [UI design, routes and screenshots](ui.md) |
 | How are release materials assembled? / 如何维护发布材料？ | [Distribution tooling](../scripts/DISTRIBUTION.md) |
 | What was actually tested? / 哪些操作真正验证过？ | [2026-09-22 verification record](verification/2026-09-22.md), [September 12 release checks](verification/2026-09-12.md), [migration record](verification/2026-09-11-migration.md) |

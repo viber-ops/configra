@@ -29,7 +29,7 @@ func TestCommandHasTwoServerModesAndMaintenanceCommands(t *testing.T) {
 		}
 	}
 	slices.Sort(names)
-	if !slices.Equal(names, []string{"api", "doctor", "management", "rotate-master-key"}) {
+	if !slices.Equal(names, []string{"api", "doctor", "management", "prune-outbox", "rotate-master-key", "sessions"}) {
 		t.Fatalf("commands = %v", names)
 	}
 

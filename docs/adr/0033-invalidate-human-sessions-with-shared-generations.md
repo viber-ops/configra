@@ -1,0 +1,3 @@
+# Invalidate human sessions with shared generations
+
+Management checks a MySQL-backed subject/session generation on every authenticated request; invalidation advances the generation, blocking additionally denies fresh sign-ins, and unblocking never restores an older cookie. Signed OIDC claims still determine identity, roles and MFA, while the shared policy makes emergency revocation effective across replicas without decoding or scanning SCS session blobs. Existing in-flight work may finish; already-issued machine identities remain independently controlled and must be reviewed/revoked separately after an administrator compromise.

@@ -454,6 +454,7 @@ type signingOIDCProvider struct {
 	audience         jwt.Audience
 	groups           []string
 	amr              []string
+	sid              string
 	userInfoSubject  string
 	userInfoGroups   []string
 	omitIDToken      bool
@@ -525,6 +526,7 @@ func (provider *signingOIDCProvider) serveHTTP(response http.ResponseWriter, req
 			Expiry:   jwt.NewNumericDate(now.Add(time.Hour)),
 			IssuedAt: jwt.NewNumericDate(now),
 		}).Claims(map[string]any{
+			"sid":    provider.sid,
 			"amr":    provider.amr,
 			"nonce":  provider.nonce,
 			"groups": provider.groups,

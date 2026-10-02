@@ -23,6 +23,75 @@ import (
 	"github.com/viber-ops/configra/internal/vaultcrypto"
 )
 
+type blockedWebhook struct{ started chan struct{} }
+
+func (sink blockedWebhook) Send(ctx context.Context, _ mysqlstore.NotificationTarget, _ notification.Event) notification.AttemptResult {
+	select {
+	case sink.started <- struct{}{}:
+	default:
+	}
+	<-ctx.Done()
+	return notification.AttemptResult{Status: mysqlstore.NotificationDeliveryRetrying, ErrorCode: "timeout"}
+}
+
+func TestSlowNotificationDoesNotBlockNewAuditDelivery(t *testing.T) {
+	if os.Getenv("CONFIGRA_TEST_NATS_URL") == "" || os.Getenv("CONFIGRA_TEST_CLICKHOUSE_DSN") == "" {
+		t.Skip("real dependencies required")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	store := newAuditMySQLStore(t, ctx)
+	logs, err := logstore.New(os.Getenv("CONFIGRA_TEST_CLICKHOUSE_DSN"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer logs.Close()
+	started := make(chan struct{}, 1)
+	sender := blockedWebhook{started: started}
+	actor := mysqlstore.Actor{Type: "user", ID: "worker-isolation"}
+	url := "https://notification.example.com/synthetic-sink"
+	if _, err := store.CommitNotificationDestination(ctx, mysqlstore.NotificationDestinationCommit{OperationID: "slow-destination", Actor: actor, Key: "slow", DisplayName: "Slow test", Provider: mysqlstore.NotificationGenericWebhook, URL: &url, Enabled: true, EventTypes: []string{"environment.create"}}); err != nil {
+		t.Fatal(err)
+	}
+	consumer, err := accessnats.ConnectConsumer(accessnats.Config{URLs: []string{os.Getenv("CONFIGRA_TEST_NATS_URL")}}, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- logworker.Run(ctx, store, logs, consumer, sender, zap.NewNop()) }()
+	defer func() {
+		cancel()
+		if err := <-done; err != nil {
+			t.Error(err)
+		}
+	}()
+	create := func(key string) {
+		t.Helper()
+		if _, err := store.ApplyEnvironmentChange(ctx, mysqlstore.EnvironmentChange{OperationID: key, Actor: actor, Action: mysqlstore.EnvironmentCreate, Key: key, DisplayName: key}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	create("slow-first")
+	select {
+	case <-started:
+	case <-ctx.Done():
+		t.Fatal("notification did not start")
+	}
+	second := fmt.Sprintf("audit-during-notification-%d", time.Now().UnixNano())
+	create(second)
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		page, err := logs.ListAudits(ctx, logstore.AuditQuery{Limit: 10, Search: second})
+		if err == nil && len(page.Items) > 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("slow notification blocked an unrelated Audit receipt")
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+}
+
 func TestRunDeliversAccessAndAuditEventsUntilCanceled(t *testing.T) {
 	natsURL := os.Getenv("CONFIGRA_TEST_NATS_URL")
 	clickHouseDSN := os.Getenv("CONFIGRA_TEST_CLICKHOUSE_DSN")

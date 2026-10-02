@@ -33,6 +33,7 @@ import (
 	"github.com/viber-ops/configra/internal/logworker"
 	"github.com/viber-ops/configra/internal/machine"
 	"github.com/viber-ops/configra/internal/management"
+	"github.com/viber-ops/configra/internal/observability"
 	"github.com/viber-ops/configra/internal/storage/mysqlstore"
 	"github.com/viber-ops/configra/internal/vaultdoc"
 	"go.uber.org/zap"
@@ -135,6 +136,10 @@ func TestScopedWriteSDKWithRealMySQLNATSClickHouse(t *testing.T) {
 		return client
 	}
 	client := clientFor(writer.Token, &identity)
+	self, err := client.ReadIdentity(ctx, "testing")
+	if err != nil || self.PublicID != writer.PublicID || self.Kind != "write-scoped" || self.Authentication != "mtls" || self.CertificateExpiresAt == nil {
+		t.Fatal("writer metadata authentication")
+	}
 	wantStatus := func(err error, status int) {
 		t.Helper()
 		var api *configrago.APIError
@@ -256,6 +261,20 @@ func TestScopedWriteSDKWithRealMySQLNATSClickHouse(t *testing.T) {
 	}
 	deploymentIdentity, _ := scopedBundle(t, deployment.Certificate.ExportBundle)
 	reader := clientFor(deployment.Token.Token, &deploymentIdentity)
+	readerIdentity, err := reader.ReadIdentity(ctx, "testing")
+	if err != nil || readerIdentity.ParentPublicID != writer.PublicID || readerIdentity.PublicID != deployment.Token.PublicID {
+		t.Fatal("deployment identity lineage")
+	}
+	own, err := client.ListDeploymentCredentials(ctx, "testing", "")
+	if err != nil || len(own.Items) != 1 || own.Items[0].PublicID != deployment.Token.PublicID {
+		t.Fatal("writer-owned credential inventory")
+	}
+	remaining, err := client.ListDeploymentCredentials(ctx, "testing", deployment.Token.PublicID)
+	if err != nil || len(remaining.Items) != 0 {
+		t.Fatal("deployment cursor was not respected")
+	}
+	_, err = reader.ListDeploymentCredentials(ctx, "testing", "")
+	wantStatus(err, 403)
 	if _, err := reader.ReadResolvedConfig(ctx, "testing", "server", ""); err != nil {
 		t.Fatal(err)
 	}
@@ -325,10 +344,159 @@ func TestScopedWriteSDKWithRealMySQLNATSClickHouse(t *testing.T) {
 		}
 	}
 
+	// Execute the distributed CLI against the same real HTTPS/mTLS fixture.
+	cliBinary := filepath.Join(directory, "configractl")
+	buildCLI := exec.CommandContext(ctx, "go", "build", "-o", cliBinary, "./cmd/configractl")
+	buildCLI.Dir = ".."
+	if output, err := buildCLI.CombinedOutput(); err != nil {
+		t.Fatalf("build CLI: %s", output)
+	}
+	cliBase := []string{"--context-file", filepath.Join(directory, "contexts.json"), "--server", server.URL, "--environment", "testing", "--token-file", filepath.Join(directory, "token"), "--client-cert", filepath.Join(directory, "client.crt"), "--client-key", filepath.Join(directory, "client.key"), "--server-ca", filepath.Join(directory, "server.crt"), "--json"}
+	runCLI := func(want int, arguments ...string) []byte {
+		t.Helper()
+		command := exec.CommandContext(ctx, cliBinary, append(append([]string{}, cliBase...), arguments...)...)
+		output, err := command.CombinedOutput()
+		code := 0
+		if err != nil {
+			var exit *exec.ExitError
+			if !errors.As(err, &exit) {
+				t.Fatal("CLI process failed")
+			}
+			code = exit.ExitCode()
+		}
+		for _, secret := range [][]byte{[]byte(writer.Token), fileBytes, controlFiles["client.key"], []byte("private-value-cli"), []byte("private-value-validator")} {
+			if bytes.Contains(output, secret) {
+				t.Fatal("CLI output exposed secret material")
+			}
+		}
+		if code != want {
+			t.Fatalf("CLI code %d, want %d: %s", code, want, output)
+		}
+		return output
+	}
+	current, err := client.ReadRawConfig(ctx, "testing", "server")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cliConfig := filepath.Join(directory, "cli.yaml")
+	if err := os.WriteFile(cliConfig, []byte("value: private-value-cli\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cliWrite := []string{"config", "put", "server", "--file", cliConfig, "--operation-id", "cli-config-update", "--expected-revision", fmt.Sprint(current.Revision)}
+	runCLI(0, cliWrite...)
+	runCLI(0, cliWrite...)
+	runCLI(0, "check", "server")
+	conflict := append([]string{}, cliWrite...)
+	conflict[6] = "cli-config-conflict"
+	runCLI(4, conflict...)
+	runCLI(3, "config", "put", "outside", "--file", cliConfig, "--operation-id", "cli-outside-config", "--expected-revision", "0")
+	cliDownload := filepath.Join(directory, "cli-downloaded.yaml")
+	runCLI(0, "config", "get", "server", "--raw", "--output", cliDownload)
+	if data, err := os.ReadFile(cliDownload); err != nil || !bytes.Contains(data, []byte("private-value-cli")) {
+		t.Fatal("CLI Config download")
+	}
+	for index := 1; index <= 17; index++ {
+		item, err := client.ReadVaultItem(ctx, "testing", "deployment", "secrets")
+		if err != nil {
+			t.Fatal(err)
+		}
+		runCLI(0, "vault", "file", "put", "deployment", "secrets", fmt.Sprintf("file_%02d", index), "--file", filepath.Join(directory, fmt.Sprintf("secret-%02d.key", index)), "--operation-id", fmt.Sprintf("cli-file-%02d", index), "--expected-revision", fmt.Sprint(item.Revision))
+	}
+	fileDownload := filepath.Join(directory, "cli-file.bin")
+	runCLI(0, "vault", "file", "get", "deployment", "secrets", "file_17", "--output", fileDownload)
+	if data, err := os.ReadFile(fileDownload); err != nil || !bytes.Equal(data, fileBytes) {
+		t.Fatal("CLI binary File download")
+	}
+	exerciseReleaseCLI(t, ctx, client, directory, runCLI)
+	cliIdentity := filepath.Join(directory, "cli-identity")
+	issueArgs := []string{"deployment-credential", "issue", "--authority", ca.Authority.ID, "--name", "cli-host", "--expires-at", time.Now().Add(6 * time.Hour).UTC().Format(time.RFC3339), "--operation-id", "cli-deployment-issue", "--output-dir", cliIdentity}
+	var receipt struct {
+		PublicID string `json:"public_id"`
+		Exported bool   `json:"exported"`
+	}
+	if json.Unmarshal(runCLI(0, issueArgs...), &receipt) != nil || receipt.PublicID == "" || !receipt.Exported {
+		t.Fatal("CLI issuance receipt")
+	}
+	for _, name := range []string{"token", "client.key", "client.crt", "client.zip", "receipt.json"} {
+		if info, err := os.Stat(filepath.Join(cliIdentity, name)); err != nil || info.Mode().Perm() != 0600 {
+			t.Fatal("CLI private credential modes")
+		}
+	}
+	cliToken, err := os.ReadFile(filepath.Join(cliIdentity, "token"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cliCertificate, err := tls.LoadX509KeyPair(filepath.Join(cliIdentity, "client.crt"), filepath.Join(cliIdentity, "client.key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cliReader := clientFor(string(cliToken), &cliCertificate)
+	if _, err := cliReader.ReadResolvedConfig(ctx, "testing", "server", ""); err != nil {
+		t.Fatal(err)
+	}
+	replayArgs := append([]string{}, issueArgs...)
+	replayArgs[len(replayArgs)-1] = filepath.Join(directory, "cli-replay")
+	runCLI(8, replayArgs...)
+	rotatedDirectory := filepath.Join(directory, "cli-rotated")
+	rotation := []string{"deployment-credential", "rotate", "--authority", ca.Authority.ID, "--name", "cli-host-replacement", "--expires-at", time.Now().Add(6 * time.Hour).UTC().Format(time.RFC3339), "--operation-id", "cli-rotation-issue", "--output-dir", rotatedDirectory, "--replaces", receipt.PublicID, "--verify-config", "server"}
+	runCLI(0, rotation...)
+	if _, err := cliReader.ReadResolvedConfig(ctx, "testing", "server", ""); err != nil {
+		t.Fatal("rotation retired old credentials before adoption")
+	}
+	finish := []string{"deployment-credential", "finish-rotation", "--directory", rotatedDirectory, "--operation-id", "cli-deployment-revoke"}
+	runCLI(2, finish...)
+	newToken, err := os.ReadFile(filepath.Join(rotatedDirectory, "token"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	newCertificate, err := tls.LoadX509KeyPair(filepath.Join(rotatedDirectory, "client.crt"), filepath.Join(rotatedDirectory, "client.key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	newReader := clientFor(string(newToken), &newCertificate)
+	if _, err := newReader.ReadResolvedConfig(ctx, "testing", "server", ""); err != nil {
+		t.Fatal("replacement consumer could not read")
+	}
+	finish = append(finish, "--consumer-confirmed")
+	runCLI(0, finish...)
+	runCLI(0, finish...)
+	if _, err := newReader.ReadResolvedConfig(ctx, "testing", "server", ""); err != nil {
+		t.Fatal("rotation revoked the replacement")
+	}
+	_, err = cliReader.ReadResolvedConfig(ctx, "testing", "server", "")
+	wantStatus(err, 401)
+
+	// Per-caller throttling remains audited, while reads bypass write admission.
+	limited := httptest.NewUnstartedServer(management.NewMachineHandler(store, publisher, management.WriteLimits{Concurrent: 1, RequestsPerSecond: 1000, Burst: 2, PerTokenRequestsPerSecond: 0.1}))
+	limited.TLS = &tls.Config{MinVersion: tls.VersionTLS12, ClientAuth: tls.VerifyClientCertIfGiven, ClientCAs: clientCAs}
+	limited.StartTLS()
+	defer limited.Close()
+	limitedRoots := roots.Clone()
+	limitedRoots.AddCert(limited.Certificate())
+	limitedClient, err := configrago.NewClient(configrago.ClientOptions{BaseURL: limited.URL, Token: writer.Token, TLSConfig: &tls.Config{RootCAs: limitedRoots, Certificates: []tls.Certificate{identity}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer limitedClient.CloseIdleConnections()
+	current, err = client.ReadRawConfig(ctx, "testing", "server")
+	if err != nil {
+		t.Fatal(err)
+	}
+	limitedWrite := configrago.ConfigWrite{RevisionWrite: configrago.RevisionWrite{OperationID: "rate-first", ExpectedRevision: current.Revision}, Name: current.ConfigName, Format: current.Format, Content: current.Content}
+	if _, err := limitedClient.WriteConfig(ctx, "testing", "server", limitedWrite); err != nil {
+		t.Fatal(err)
+	}
+	limitedWrite.OperationID = "rate-second"
+	_, err = limitedClient.WriteConfig(ctx, "testing", "server", limitedWrite)
+	wantStatus(err, 429)
+	if _, err := limitedClient.ReadResolvedConfig(ctx, "testing", "server", ""); err != nil {
+		t.Fatal("write limit blocked an authorized read")
+	}
+
 	// Forbidden management capabilities are never routed to human handlers.
 	transport := &http.Transport{TLSClientConfig: &tls.Config{RootCAs: roots, Certificates: []tls.Certificate{identity}}}
 	defer transport.CloseIdleConnections()
-	for _, path := range []string{"/v1/environments", "/v1/api-tokens", "/v1/users", "/v1/certificate-authorities", "/v1/master-key/export"} {
+	for _, path := range []string{"/v1/environments", "/v1/api-tokens", "/v1/users", "/v1/certificate-authorities", "/v1/master-key/export", "/v1/session-policies"} {
 		request, _ := http.NewRequestWithContext(ctx, "POST", server.URL+path, strings.NewReader(`{"value":"private-value-request"}`))
 		request.Header.Set("Authorization", "Bearer "+writer.Token)
 		response, err := (&http.Client{Transport: transport}).Do(request)
@@ -378,6 +546,8 @@ func TestScopedWriteSDKWithRealMySQLNATSClickHouse(t *testing.T) {
 	}
 	actions := map[string]int{}
 	updates := 0
+	cliOperations := map[string]int{}
+	rateRejected := false
 	for _, record := range page.Items {
 		if record.ActorType == "token" {
 			ip := net.ParseIP(record.SourceIP)
@@ -385,6 +555,9 @@ func TestScopedWriteSDKWithRealMySQLNATSClickHouse(t *testing.T) {
 				t.Fatal("invalid Token audit identity/time/peer IP")
 			}
 			actions[record.Action]++
+			if record.ErrorCode == "write_rate_limited" {
+				rateRejected = true
+			}
 			if record.Action == "vault.put_field" || record.Action == "vault.delete_field" {
 				if record.FieldKey == "" {
 					t.Fatal("field audit omitted the object Field key")
@@ -393,9 +566,12 @@ func TestScopedWriteSDKWithRealMySQLNATSClickHouse(t *testing.T) {
 			if record.OperationID == "scoped-config-update" {
 				updates++
 			}
+			if strings.HasPrefix(record.OperationID, "cli-") {
+				cliOperations[record.OperationID]++
+			}
 		}
 	}
-	if updates != 1 || actions["config.commit"] < 2 || actions["vault.put_field"] < 17 || actions["vault.delete_field"] != 1 || actions["vault.delete_item"] < 1 || actions["deployment.issue"] < 2 || actions["deployment.revoke"] != 1 {
+	if actions["release.prepare"] != 2 || actions["release.activate"] != 4 || !rateRejected || updates != 1 || cliOperations["cli-config-update"] != 1 || cliOperations["cli-deployment-issue"] != 1 || cliOperations["cli-deployment-revoke"] != 1 || actions["config.commit"] < 2 || actions["vault.put_field"] < 17 || actions["vault.delete_field"] != 1 || actions["vault.delete_item"] < 1 || actions["deployment.issue"] < 2 || actions["deployment.revoke"] != 2 {
 		t.Fatalf("missing or duplicate mutation audits: %v", actions)
 	}
 	encoded, _ := json.Marshal(page)
@@ -420,6 +596,35 @@ func TestScopedWriteSDKWithRealMySQLNATSClickHouse(t *testing.T) {
 	response := adminRequest("GET", "/v1/audit?q="+writer.PublicID, "", nil, true)
 	if response.Code != 200 || !bytes.Contains(response.Body.Bytes(), []byte(`"source_ip"`)) {
 		t.Fatal("Management audit query omitted scoped writes/IP")
+	}
+	metrics := observability.New("management", store)
+	stopMetrics, err := metrics.Start(ctx, "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stopMetrics()
+	metricDeadline := time.Now().Add(5 * time.Second)
+	for {
+		response := httptest.NewRecorder()
+		metrics.Handler().ServeHTTP(response, httptest.NewRequest("GET", "http://metrics/metrics", nil))
+		data := response.Body.Bytes()
+		if bytes.Contains(data, []byte(`configra_operational_sample_success{service="management"} 1`)) {
+			for _, name := range []string{"configra_outbox_events", "configra_storage_bytes", "configra_credentials_expiring_14d", "configra_database_pool"} {
+				if !bytes.Contains(data, []byte(name)) {
+					t.Fatalf("missing metric %s", name)
+				}
+			}
+			for _, secret := range []string{writer.Token, writer.PublicID, "private-value"} {
+				if bytes.Contains(data, []byte(secret)) {
+					t.Fatal("operational metrics leaked identity or values")
+				}
+			}
+			break
+		}
+		if time.Now().After(metricDeadline) {
+			t.Fatal("operational metadata sampler did not succeed")
+		}
+		time.Sleep(25 * time.Millisecond)
 	}
 }
 

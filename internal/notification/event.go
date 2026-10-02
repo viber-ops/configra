@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/viber-ops/configra/internal/storage/mysqlstore"
@@ -72,7 +73,7 @@ func DecodeEvent(outbox mysqlstore.OutboxEvent) (Event, error) {
 		(payload.SourceIP != "" && net.ParseIP(payload.SourceIP) == nil) ||
 		payload.Action == "" || len(payload.Action) > 128 || payload.Outcome != mysqlstore.OutcomeSuccess ||
 		payload.ResourceType == "" || len(payload.ResourceType) > 64 ||
-		payload.ResourceKey == "" || len(payload.ResourceKey) > 63 || len(payload.EnvironmentKey) > 63 ||
+		payload.ResourceKey == "" || !validNotificationResource(payload.ResourceType, payload.ResourceKey) || len(payload.EnvironmentKey) > 63 ||
 		len(payload.NamespaceKey) > 63 || (payload.ResourceType == "vault_item" && payload.NamespaceKey == "") {
 		return Event{}, errors.New("invalid Notification Outbox payload")
 	}
@@ -105,4 +106,12 @@ func validEventFieldKey(key string) bool {
 		}
 	}
 	return true
+}
+
+func validNotificationResource(kind, key string) bool {
+	if kind == "release" {
+		a, b, ok := strings.Cut(key, ".")
+		return ok && a != "" && b != "" && validEventFieldKey(a) && validEventFieldKey(b)
+	}
+	return len(key) <= 63
 }

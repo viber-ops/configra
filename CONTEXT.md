@@ -56,6 +56,14 @@ _Avoid_: Raw submission
 An immutable snapshot of a Config in one Environment or of an entire Vault Item. An operation that produces no state change produces no Revision.
 _Avoid_: Mutable version
 
+**Release Set**:
+An immutable combination of one Config Revision and its pinned Vault dependencies and File members in one Environment. Its identity belongs to that Config's release stream; activating or rolling back a Release Set changes the stream's active selection without changing the retained resource Revisions.
+_Avoid_: Environment stage, latest-value bundle
+
+**Release Stream**:
+The active Release Set and monotonic activation generation for one Config in one Environment. Independent Configs have independent release streams, and consumers opt into the release contract explicitly.
+_Avoid_: Global Environment release, implicit promotion
+
 **Target Revision**:
 The immutable Target snapshot selected for a Merge or Replace; it may be current or historical. The resulting snapshot becomes the Target Environment's new current Revision.
 _Avoid_: Expected Target Revision, shared Environment version
@@ -121,8 +129,12 @@ A small binary value stored in a Vault Item and retrieved as bytes through the C
 _Avoid_: Base64 Secret Field
 
 **Last-known-good**:
-The most recent Config successfully fetched by a running Machine Client and retained only in that process for fallback.
+The most recent Config successfully fetched and accepted by any application Snapshot Validation, retained only in the running Machine Client process for fallback.
 _Avoid_: Persistent cache
+
+**Snapshot Validation**:
+An optional application check that accepts or rejects a fetched Config before it becomes the Machine Client's current Snapshot. Rejection preserves the previously accepted Snapshot and does not trigger a Change Callback.
+_Avoid_: Change Callback, post-install check
 
 **Config Watch**:
 The single explicitly started Client loop for one Handler, stopped by its Context, that conditionally checks the API Server with the current composite ETag and atomically installs only a successfully parsed changed Resolved Config. It defaults to a 30-second interval with jitter, rejects intervals below 5 seconds, backs repeated failures off to at most 5 minutes, may skip intermediate Revisions, and retains the Last-known-good on failure.

@@ -300,3 +300,10 @@ func (publisher *recordingAccessPublisher) TryPublish(event machine.AccessEvent)
 	publisher.events <- event
 	return true
 }
+
+func (repository fakeRepository) ReadRelease(context.Context, string, string, string, string) (machine.ReleaseBundle, error) {
+	return machine.ReleaseBundle{}, machine.ErrNotFound
+}
+func (repository fakeRepository) ReadReleaseState(context.Context, string, string) (machine.ReleaseState, error) {
+	return machine.ReleaseState{}, machine.ErrNotFound
+}

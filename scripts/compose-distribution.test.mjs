@@ -25,7 +25,7 @@ function fixture(root, conflicting = false) {
   }, properties: [{ name: 'configra:notices-sha256', value: hash(notice) }] }, components: [], dependencies: [] };
   put('licenses/ui/THIRD_PARTY_NOTICES.txt', notice);
   put('licenses/ui/sbom.cdx.json', encode(ui));
-  for (const name of ['configra', 'configra-kubernetes']) {
+  for (const name of ['configra', 'configractl', 'configra-kubernetes']) {
     const binary = name === 'configra' ? name + notice + encode(ui) : name;
     put(name, binary);
     const moduleRoot = `licenses/${name}-modules`;

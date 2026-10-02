@@ -3,6 +3,7 @@ package management
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/viber-ops/configra/internal/machine"
@@ -12,11 +13,20 @@ import (
 
 // Only these routes are writable on the API listener. Human management routes
 // and their OIDC/session middleware are never mounted here.
-func NewMachineHandler(store *mysqlstore.Store, publisher machine.AccessPublisher) http.Handler {
+func NewMachineHandler(store *mysqlstore.Store, publisher machine.AccessPublisher, limits ...WriteLimits) http.Handler {
+	config := WriteLimits{}
+	if len(limits) > 0 {
+		config = limits[0]
+	}
+	admission := newWriteAdmission(config)
 	server := &server{configs: store, publisher: publisher}
 	reads := machine.NewHandler(store, publisher)
 	mux := http.NewServeMux()
+	mux.Handle("GET /v1/environments/{environment}/identity", reads)
 	mux.Handle("GET /v1/environments/{environment}/configs/{config}", reads)
+	mux.Handle("GET /v1/environments/{environment}/configs/{config}/release", reads)
+	mux.Handle("GET /v1/environments/{environment}/configs/{config}/release-state", reads)
+	mux.Handle("GET /v1/environments/{environment}/configs/{config}/releases/{release}", reads)
 	mux.Handle("GET /v1/environments/{environment}/vault-items/{namespace}/{item}/fields/{field}/content", reads)
 	protect := func(action, resourceType, parameter string, mutation bool, next http.HandlerFunc) http.HandlerFunc {
 		return func(response http.ResponseWriter, request *http.Request) {
@@ -34,7 +44,11 @@ func NewMachineHandler(store *mysqlstore.Store, publisher machine.AccessPublishe
 				if key := request.PathValue("namespace"); auditResourceKey(key) {
 					metadata.NamespaceKey = key
 				}
-				if key := request.PathValue(parameter); validScopedAuditIdentity(resourceType, key) {
+				key := request.PathValue(parameter)
+				if resourceType == "release" {
+					key = request.PathValue("config") + "." + key
+				}
+				if validScopedAuditIdentity(resourceType, key) {
 					metadata.ResourceKey = key
 				}
 				writer := &auditResponseWriter{ResponseWriter: response, requestID: metadata.RequestID}
@@ -51,13 +65,17 @@ func NewMachineHandler(store *mysqlstore.Store, publisher machine.AccessPublishe
 				writeError(response, status, scopedStatusCode(status))
 				return
 			}
+			if mutation && !admission.tokenAllowed(token.PublicID) {
+				admission.reject(response)
+				return
+			}
 			if token.Kind != machine.TokenWriteScoped || !auditResourceKey(environment) ||
 				(request.PathValue("config") != "" && !token.AllowsConfig(request.PathValue("config"))) ||
 				(request.PathValue("namespace") != "" && !token.AllowsNamespace(request.PathValue("namespace"))) {
 				writeError(response, http.StatusForbidden, "scope_forbidden")
 				return
 			}
-			for _, name := range []string{"config", "namespace", "item", "field"} {
+			for _, name := range []string{"config", "namespace", "item", "field", "release"} {
 				if key := request.PathValue(name); key != "" && !auditResourceKey(key) {
 					writeError(response, http.StatusBadRequest, "invalid_resource_key")
 					return
@@ -68,6 +86,27 @@ func NewMachineHandler(store *mysqlstore.Store, publisher machine.AccessPublishe
 		}
 	}
 	mux.HandleFunc("PUT /v1/environments/{environment}/configs/{config}", protect("config.commit", "config", "config", true, server.commitConfig))
+	mux.HandleFunc("PUT /v1/environments/{environment}/configs/{config}/releases/{release}", protect("release.prepare", "release", "release", true, func(response http.ResponseWriter, request *http.Request) {
+		var body machine.ReleaseSpec
+		if !decodeJSON(response, request, &body) {
+			return
+		}
+		token, _ := machine.TokenFromContext(request.Context())
+		result, err := store.PrepareRelease(request.Context(), mysqlstore.ReleasePrepare{OperationID: request.Header.Get("Idempotency-Key"), Actor: mysqlstore.Actor{Type: "token", ID: token.PublicID}, EnvironmentKey: request.PathValue("environment"), ConfigKey: request.PathValue("config"), ReleaseKey: request.PathValue("release"), Spec: body})
+		writeMutationResult(response, result, err)
+	}))
+	mux.HandleFunc("POST /v1/environments/{environment}/configs/{config}/releases/{release}/activate", protect("release.activate", "release", "release", true, func(response http.ResponseWriter, request *http.Request) {
+		var body struct {
+			ExpectedGeneration uint64 `json:"expected_generation"`
+		}
+		if !decodeJSON(response, request, &body) {
+			return
+		}
+		token, _ := machine.TokenFromContext(request.Context())
+		result, err := store.ActivateRelease(request.Context(), mysqlstore.ReleaseActivate{OperationID: request.Header.Get("Idempotency-Key"), Actor: mysqlstore.Actor{Type: "token", ID: token.PublicID}, EnvironmentKey: request.PathValue("environment"), ConfigKey: request.PathValue("config"), ReleaseKey: request.PathValue("release"), ExpectedGeneration: body.ExpectedGeneration})
+		writeMutationResult(response, result, err)
+	}))
+
 	mux.HandleFunc("GET /v1/environments/{environment}/configs/{config}/raw", protect("config.read", "config", "config", false, func(response http.ResponseWriter, request *http.Request) {
 		result, err := store.ReadRawConfig(request.Context(), request.PathValue("environment"), request.PathValue("config"))
 		if err != nil {
@@ -118,6 +157,19 @@ func NewMachineHandler(store *mysqlstore.Store, publisher machine.AccessPublishe
 			writeMutationResult(response, result, err)
 		}))
 	}
+	mux.HandleFunc("GET /v1/environments/{environment}/deployment-credentials", protect("deployment.list", "api_token", "public_id", false, func(response http.ResponseWriter, request *http.Request) {
+		token, _ := machine.TokenFromContext(request.Context())
+		items, err := store.ListDeploymentCredentials(request.Context(), mysqlstore.Actor{Type: "token", ID: token.PublicID}, request.PathValue("environment"), request.URL.Query().Get("after"))
+		if err != nil {
+			writeReadError(response, err)
+			return
+		}
+		next := ""
+		if len(items) == 100 {
+			next = items[len(items)-1].PublicID
+		}
+		writeJSON(response, map[string]any{"items": items, "next_cursor": next})
+	}))
 	mux.HandleFunc("POST /v1/environments/{environment}/deployment-credentials", protect("deployment.issue", "api_token", "public_id", true, func(response http.ResponseWriter, request *http.Request) {
 		var body struct {
 			DisplayName string    `json:"display_name"`
@@ -145,7 +197,7 @@ func NewMachineHandler(store *mysqlstore.Store, publisher machine.AccessPublishe
 	mux.HandleFunc("/", protect("api.request", "machine_request", "", true, func(response http.ResponseWriter, _ *http.Request) {
 		writeError(response, http.StatusForbidden, "scope_forbidden")
 	}))
-	return mux
+	return admission.wrap(mux)
 }
 
 func scopedStatusCode(status int) string {
@@ -159,6 +211,10 @@ func scopedStatusCode(status int) string {
 }
 
 func validScopedAuditIdentity(kind, key string) bool {
+	if kind == "release" {
+		a, b, ok := strings.Cut(key, ".")
+		return ok && auditResourceKey(a) && auditResourceKey(b)
+	}
 	if kind == "api_token" {
 		return len(key) == 16 && isLowerHex(key)
 	}

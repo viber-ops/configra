@@ -69,7 +69,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: viber-ops/configra-go
-          ref: 88776a775b99edcbd5db499be26d4f17bcc4dd45 # scoped-write SDK / v1.1.0
+          ref: fc42d0fab0f1525aeb65992437cddd2760332359 # operations SDK checkpoint
           path: configra-go
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0

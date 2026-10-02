@@ -73,8 +73,12 @@ func (store *Store) RecordRejectedMutation(ctx context.Context, rejected Rejecte
 }
 
 func validAuditResourceIdentity(kind, key string) bool {
-	if kind == "client_certificate" || kind == "certificate_authority" || kind == "api_token" {
-		length := map[string]int{"client_certificate": 64, "certificate_authority": 32, "api_token": 16}[kind]
+	if kind == "release" {
+		a, b, ok := strings.Cut(key, ".")
+		return ok && validResourceKey(a) && validResourceKey(b)
+	}
+	if kind == "client_certificate" || kind == "certificate_authority" || kind == "api_token" || kind == "identity" || kind == "outbox_archive" {
+		length := map[string]int{"client_certificate": 64, "certificate_authority": 32, "api_token": 16, "identity": 64, "outbox_archive": 64}[kind]
 		_, err := hex.DecodeString(key)
 		return err == nil && len(key) == length && key == strings.ToLower(key)
 	}

@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	schemaVersion     = 3
+	schemaVersion     = 4
 	migrationLockName = "configra:schema-migration"
 )
 
@@ -130,6 +130,14 @@ func initializeOrVerify(ctx context.Context, db *sql.DB, provider *vaultcrypto.L
 			return fmt.Errorf("record schema v3: %w", err)
 		}
 	}
+	if version > 0 && version < 4 {
+		if err := applySchemaV4(ctx, connection); err != nil {
+			return err
+		}
+		if _, err := connection.ExecContext(ctx, "INSERT INTO schema_migrations (version) VALUES (4)"); err != nil {
+			return errors.New("record schema v4")
+		}
+	}
 	return nil
 }
 
@@ -172,6 +180,9 @@ func initializeSchema(ctx context.Context, connection *sql.Conn, provider *vault
 		return err
 	}
 	if err := applySchemaV3(ctx, connection); err != nil {
+		return err
+	}
+	if err := applySchemaV4(ctx, connection); err != nil {
 		return err
 	}
 	sentinel, err := provider.CreateSentinel()

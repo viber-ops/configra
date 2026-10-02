@@ -75,7 +75,7 @@ function loadPart(path) {
   return { part, ref };
 }
 
-const commands = kind === 'bundle' ? ['configra', 'configra-kubernetes'] : [imageName];
+const commands = kind === 'bundle' ? ['configra', 'configractl', 'configra-kubernetes'] : [imageName];
 const commandRefs = new Map();
 const commandBytes = new Map();
 const platforms = new Set();

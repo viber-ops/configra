@@ -28,7 +28,7 @@ type notificationAttemptSender interface {
 func DeliverNotificationsOnce(
 	ctx context.Context,
 	outbox *mysqlstore.Store,
-	sender *notification.Sender,
+	sender notificationAttemptSender,
 ) (int, error) {
 	if outbox == nil || sender == nil {
 		return 0, errors.New("Notification Outbox and Sender are required")

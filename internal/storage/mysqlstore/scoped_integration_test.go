@@ -35,7 +35,10 @@ func TestScopedTokenMigrationFromV2PreservesLegacyReadCredentials(t *testing.T) 
 		DROP COLUMN parent_public_id, DROP COLUMN deployment_certificate_fingerprint`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.ExecContext(ctx, "DELETE FROM schema_migrations WHERE version = 3"); err != nil {
+	if _, err := db.ExecContext(ctx, "DELETE FROM schema_migrations WHERE version >= 3"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, "DROP TABLE management_session_policies"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.ExecContext(ctx, "INSERT INTO schema_migrations (version) VALUES (2)"); err != nil {

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -337,8 +338,12 @@ func DecodeAuditOutbox(event mysqlstore.OutboxEvent) (AuditRecord, error) {
 }
 
 func validAuditResourceKey(resourceType, key string) bool {
-	if resourceType == "client_certificate" || resourceType == "certificate_authority" || resourceType == "api_token" {
-		length := map[string]int{"client_certificate": 64, "certificate_authority": 32, "api_token": 16}[resourceType]
+	if resourceType == "release" {
+		a, b, ok := strings.Cut(key, ".")
+		return ok && auditNamedKey(a) && auditNamedKey(b)
+	}
+	if resourceType == "client_certificate" || resourceType == "certificate_authority" || resourceType == "api_token" || resourceType == "identity" || resourceType == "outbox_archive" {
+		length := map[string]int{"client_certificate": 64, "certificate_authority": 32, "api_token": 16, "identity": 64, "outbox_archive": 64}[resourceType]
 		decoded, err := hex.DecodeString(key)
 		return err == nil && len(key) == length && len(decoded)*2 == length
 	}
