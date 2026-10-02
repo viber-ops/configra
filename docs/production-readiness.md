@@ -2,17 +2,18 @@
 
 This document is the completion contract for Configra V1. A capability is complete only when its evidence below exists and passes from a clean checkout; implementation progress or a narrower test is not substitute evidence.
 
-## Current status — 2026-09-22
+## Current status — 2026-10-02
 
-The release target is **v1.0.1** for the server and **v1.0.0** for the Go SDK. This page records
-release acceptance, not a blanket approval of every production deployment.
-The final runtime passes native Linux integration, capacity and recovery checks,
-three-node Kubernetes acceptance on native Linux and the Mac, and the complete
-[hosted CI run](https://github.com/viber-ops/configra/actions/runs/35694430155).
-Dated results and failed attempts remain in the
-[verification record](verification/2026-09-22.md). Tagged archive/download checks
-are completed before publishing the [release](https://github.com/viber-ops/configra/releases/tag/v1.0.1);
-their post-tag evidence is recorded there.
+The release target is **v1.1.0** for both the server and Go SDK. It adds
+[MFA-issued scoped writers](scoped-write-tokens.md), immutable scope inheritance
+for read-only deployment credentials and MySQL schema 3. Local real-dependency
+and hosted CI evidence is recorded in [October 2 verification](verification/2026-10-02.md).
+Publishing still requires the existing capacity, Kubernetes and tagged archive
+gates; previous-version results do not establish this candidate's acceptance.
+
+The table below retains the **v1.0.1 / SDK v1.0.0 baseline**. Its native Linux
+integration/capacity/recovery and three-node Kubernetes results, hosted CI and
+tagged archive/download evidence remain in the [September verification record](verification/2026-09-22.md).
 
 Production ingress, capacity on your hardware, independent-host/zone failures,
 backup retention and maintenance-access controls must be checked in your own

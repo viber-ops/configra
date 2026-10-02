@@ -21,6 +21,12 @@ const messages = {
     administration: 'Administration',
     administrationBody: 'Manage application access, client identities, and workspace integrations.',
     allowWithoutMTLS: 'Allow this token without mTLS',
+    writeScoped: 'Scoped write token',
+    configAllowlist: 'Config key allowlist',
+    namespaceAllowlist: 'Vault namespace allowlist',
+    scopeHint: 'Comma-separated resource keys; leave empty to allow all in the selected environments.',
+    writeTokenHint: 'Requires verified OIDC MFA, mTLS and an explicit expiry (maximum 90 days, or the shorter server policy). Scopes are immutable; rotate to change them.',
+    mfa_required: 'MFA evidence is required. Sign in again after enabling MFA at your identity provider.',
     allowedEnvironments: 'Allowed environments',
     apiTokens: 'API tokens',
     audit: 'Audit',
@@ -349,6 +355,12 @@ const messages = {
     administration: '管理',
     administrationBody: '管理业务凭据并只读查看运行信息；冷启动 YAML 不会在这里编辑。',
     allowWithoutMTLS: '允许此 Token 不使用 mTLS',
+    writeScoped: '有范围的写令牌',
+    configAllowlist: 'Config 资源键白名单',
+    namespaceAllowlist: 'Vault namespace 白名单',
+    scopeHint: '用逗号分隔资源键；留空允许所选环境内的全部资源。',
+    writeTokenHint: '需要 OIDC MFA 证明、mTLS 和明确过期时间（最长 90 天，或服务端设置的更短期限）。范围不可修改；变更时请轮换令牌。',
+    mfa_required: '需要 MFA 证明。请在身份提供方启用 MFA 后重新登录。',
     allowedEnvironments: '允许访问的 Environment',
     apiTokens: 'API Token',
     audit: '审计日志',
@@ -1953,6 +1965,7 @@ function Administration({ t }) {
 function TokensPanel({ t }) {
   const [creating, setCreating] = useState(false);
   const [neverExpires, setNeverExpires] = useState(false);
+  const [writeScoped, setWriteScoped] = useState(false);
   const [created, setCreated] = useState(null);
   const [editing, setEditing] = useState('');
   const [confirming, setConfirming] = useState('');
@@ -1971,10 +1984,16 @@ function TokensPanel({ t }) {
     const body = {
       display_name: data.get('display_name'),
       environment_keys: environmentKeys,
-      allow_without_mtls: data.has('allow_without_mtls'),
-      never_expires: neverExpires,
+      allow_without_mtls: !writeScoped && data.has('allow_without_mtls'),
+      never_expires: !writeScoped && neverExpires,
     };
-    if (!neverExpires && data.get('expires_at')) body.expires_at = new Date(data.get('expires_at')).toISOString();
+    if (writeScoped) {
+      body.kind = 'write-scoped';
+      for (const key of ['config_keys', 'namespace_keys']) {
+        if (data.get(key)?.trim()) body[key] = data.get(key).split(',').map(value => value.trim());
+      }
+    }
+    if ((!neverExpires || writeScoped) && data.get('expires_at')) body.expires_at = new Date(data.get('expires_at')).toISOString();
     try {
       const result = await request('/v1/api-tokens', {
         method: 'POST',
@@ -1984,8 +2003,8 @@ function TokensPanel({ t }) {
       setCreated(result.token);
       setCreating(false);
       setRefresh(value => value + 1);
-    } catch {
-      setError(t.operationFailed);
+    } catch (error) {
+      setError(t[error.code] || t.operationFailed);
     }
   };
   const saveGrants = async event => {
@@ -2025,10 +2044,12 @@ function TokensPanel({ t }) {
         <form className="token-form" onSubmit={create}>
           <label>{t.tokenName}<input name="display_name" required maxLength="255" autoComplete="off" /></label>
           <EnvironmentChoices label={t.allowedEnvironments} checked={environment => environmentKeys.includes(environment.key)} onChange={(key, checked) => setEnvironmentKeys(current => checked ? [...current, key] : current.filter(value => value !== key))} t={t} />
-          <label className="check-line"><input type="checkbox" name="allow_without_mtls" />{t.allowWithoutMTLS}</label>
-          <label className="check-line"><input type="checkbox" checked={neverExpires} onChange={event => setNeverExpires(event.target.checked)} />{t.neverExpires}</label>
-          {!neverExpires && <label>{t.expiresAt}<input type="datetime-local" name="expires_at" /><small>{t.locale.startsWith('zh') ? '留空使用默认的 90 天有效期。' : 'Leave empty for the default 90-day lifetime.'}</small></label>}
-          <div className="form-actions"><span className="inline-error" role="alert">{error}</span><button className="primary-action compact-action" type="submit">{t.createAPIToken}</button></div>
+          <label className="check-line"><input type="checkbox" checked={writeScoped} onChange={event => { setWriteScoped(event.target.checked); setNeverExpires(false); }} />{t.writeScoped}</label>
+          {writeScoped && <><p className="scope-note">{t.writeTokenHint}</p><label>{t.configAllowlist}<input name="config_keys" maxLength="16384" autoComplete="off" /><small>{t.scopeHint}</small></label><label>{t.namespaceAllowlist}<input name="namespace_keys" maxLength="16384" autoComplete="off" /><small>{t.scopeHint}</small></label></>}
+          {!writeScoped && <label className="check-line"><input type="checkbox" name="allow_without_mtls" />{t.allowWithoutMTLS}</label>}
+          {!writeScoped && <label className="check-line"><input type="checkbox" checked={neverExpires} onChange={event => setNeverExpires(event.target.checked)} />{t.neverExpires}</label>}
+          {!neverExpires && <label>{t.expiresAt}<input type="datetime-local" name="expires_at" required={writeScoped} />{!writeScoped && <small>{t.locale.startsWith('zh') ? '留空使用默认的 90 天有效期。' : 'Leave empty for the default 90-day lifetime.'}</small>}</label>}
+          <div className="form-actions"><span className="inline-error" role="alert">{error}</span><button className="primary-action compact-action" type="submit" disabled={writeScoped && environmentKeys.length === 0}>{t.createAPIToken}</button></div>
         </form>
       )}
       {editing && <form className="grant-form" onSubmit={saveGrants}><strong>{editing.display_name}</strong>
@@ -2039,7 +2060,7 @@ function TokensPanel({ t }) {
       {!creating && error && <p className="inline-error" role="alert">{error}</p>}
       <CollectionState state={state} t={t}>
         <div className="table-frame"><table><thead><tr><th>{t.tokenName}</th><th>{t.prefix}</th><th>{t.environments}</th><th>mTLS</th><th>{t.expiresAt}</th><th>{t.status}</th><th /></tr></thead>
-          <tbody>{state.items.map(token => <tr key={token.public_id}><td><strong title={token.display_name}>{token.display_name}</strong><code className="row-subkey">{token.public_id}</code></td><td><code title={token.display_prefix}>{token.display_prefix}</code></td><td><div className="environment-links">{token.environment_keys.map(environment => <code key={environment}>{environment}</code>)}{token.environment_count > token.environment_keys.length && <span>+{token.environment_count - token.environment_keys.length}</span>}</div></td><td>{token.allow_without_mtls ? t.tokenOnlyAllowed : t.mtlsRequired}</td><td><time>{token.expires_at ? formatDate(token.expires_at, t.locale) : t.neverExpires}</time></td><td><span className={token.revoked ? 'status archived' : 'status active'}>{token.revoked ? t.revoked : t.statusActive}</span></td><td>{!token.revoked && <div className="row-actions"><button type="button" disabled={saving} aria-label={`${t.editEnvironments} ${token.display_name}`} onClick={() => { if (confirmDiscard()) { setEditing(token); setGrants({}); } }}>{t.editEnvironments}</button>{confirming === token.public_id ? <button className="danger-link" type="button" aria-label={`${t.confirmRevoke} ${token.display_name}`} onClick={() => revoke(token.public_id)}>{t.confirmRevoke}</button> : <button className="danger-link" type="button" aria-label={`${t.revoke} ${token.display_name}`} onClick={() => setConfirming(token.public_id)}>{t.revoke}</button>}</div>}</td></tr>)}</tbody>
+          <tbody>{state.items.map(token => <tr key={token.public_id}><td><strong title={token.display_name}>{token.display_name}</strong><code className="row-subkey">{token.public_id}</code><small>{token.kind || 'read-only'}</small>{(token.kind === 'write-scoped' || token.parent_public_id) && <details><summary>{t.allowedEnvironments}</summary><p>{t.configAllowlist}: {token.config_keys == null ? '*' : token.config_keys.join(', ') || '∅'}</p><p>{t.namespaceAllowlist}: {token.namespace_keys == null ? '*' : token.namespace_keys.join(', ') || '∅'}</p></details>}</td><td><code title={token.display_prefix}>{token.display_prefix}</code></td><td><div className="environment-links">{token.environment_keys.map(environment => <code key={environment}>{environment}</code>)}{token.environment_count > token.environment_keys.length && <span>+{token.environment_count - token.environment_keys.length}</span>}</div></td><td>{token.allow_without_mtls ? t.tokenOnlyAllowed : t.mtlsRequired}</td><td><time>{token.expires_at ? formatDate(token.expires_at, t.locale) : t.neverExpires}</time></td><td><span className={token.revoked ? 'status archived' : 'status active'}>{token.revoked ? t.revoked : t.statusActive}</span></td><td>{!token.revoked && <div className="row-actions">{token.kind !== 'write-scoped' && !token.parent_public_id && <button type="button" disabled={saving} aria-label={`${t.editEnvironments} ${token.display_name}`} onClick={() => { if (confirmDiscard()) { setEditing(token); setGrants({}); } }}>{t.editEnvironments}</button>}{confirming === token.public_id ? <button className="danger-link" type="button" aria-label={`${t.confirmRevoke} ${token.display_name}`} onClick={() => revoke(token.public_id)}>{t.confirmRevoke}</button> : <button className="danger-link" type="button" aria-label={`${t.revoke} ${token.display_name}`} onClick={() => setConfirming(token.public_id)}>{t.revoke}</button>}</div>}</td></tr>)}</tbody>
         </table></div>
       </CollectionState>
       <InventoryPagination collection={state} t={t} />
@@ -2180,7 +2201,7 @@ function AccessPage({ t }) {
       <div className="log-summary"><article><span>{t.observedResponses}</span><strong>{state.status === 'ready' ? state.items.length : '—'}</strong></article><article><span>mTLS</span><strong>{accessItems.filter(item => item.authentication === 'mtls').length}</strong></article><article><span>OIDC</span><strong>{accessItems.filter(item => item.authentication === 'oidc').length}</strong></article></div>
       <p className="scope-note">{t.accessIncomplete}</p>
       <CollectionState state={state} t={t}>
-        <div className="table-frame log-table"><table><thead><tr><th>{t.time}</th><th>{t.principal}</th><th>{t.authentication}</th><th>{t.environments}</th><th>{t.resource}</th><th>{t.revision}</th><th>{t.vaultRevisions}</th></tr></thead><tbody>{state.items.map((record, index) => <tr key={`${record.time}-${record.principal}-${index}`}><td><time>{formatDate(record.time, t.locale)}</time></td><td><code title={record.principal}>{record.principal}</code></td><td>{record.authentication}</td><td><code>{record.environment || '—'}</code></td><td><span>{record.resource_type}</span><strong title={record.namespace ? `${record.namespace}/${record.resource}` : record.resource}>{record.namespace ? `${record.namespace}/${record.resource}` : record.resource}</strong></td><td>{record.config_revision ? `v${record.config_revision}` : '—'}</td><td><div className="environment-links">{Object.entries(record.vault_revisions).map(([item, revision]) => <code key={item}>{item} @ v{revision}</code>)}</div></td></tr>)}</tbody></table></div>
+        <div className="table-frame log-table"><table><thead><tr><th>{t.time}</th><th>{t.principal}</th><th>{t.authentication}</th><th>{t.environments}</th><th>{t.resource}</th><th>{t.revision}</th><th>{t.vaultRevisions}</th></tr></thead><tbody>{state.items.map((record, index) => <tr key={`${record.time}-${record.principal}-${index}`}><td><time>{formatDate(record.time, t.locale)}</time></td><td><code title={record.principal}>{record.principal}</code></td><td>{record.authentication}</td><td><code>{record.environment || '—'}</code></td><td><span>{record.resource_type}</span><strong title={record.namespace ? `${record.namespace}/${record.resource}${record.field_key ? '.' + record.field_key : ''}` : record.resource}>{record.namespace ? `${record.namespace}/${record.resource}${record.field_key ? '.' + record.field_key : ''}` : record.resource}</strong></td><td>{record.config_revision ? `v${record.config_revision}` : '—'}</td><td><div className="environment-links">{Object.entries(record.vault_revisions).map(([item, revision]) => <code key={item}>{item} @ v{revision}</code>)}</div></td></tr>)}</tbody></table></div>
       </CollectionState>
     </ResourcePage>
   );
@@ -2217,7 +2238,7 @@ function AuditPage({ principal, t }) {
       {state.status === 'failed' && <div className="collection-state"><p>{t.loadFailed}</p></div>}
       {state.status === 'ready' && state.items.length === 0 && <div className="collection-state"><p>{search ? t.noMatchingAudits : t.noResources}</p></div>}
       {state.status === 'ready' && state.items.length > 0 && <>
-        <div className="table-frame log-table"><table><thead><tr><th>{t.time}</th><th>{t.auditIdentifier}</th><th>{t.actor}</th><th>{t.action}</th><th>{t.outcome}</th><th>{t.resource}</th><th>{t.revision}</th><th>{t.delivery}</th></tr></thead><tbody>{state.items.map(record => <tr key={record.id}><td><time>{formatDate(record.time, t.locale)}</time></td><td><code title={record.operation_id || record.request_id}>{record.operation_id || record.request_id || '—'}</code></td><td><ActorIdentity actorID={record.actor_id} principal={principal} /></td><td><code>{record.action}</code></td><td><span className={record.outcome === 'success' ? 'status active' : 'status archived'}>{record.outcome}</span>{record.error_code && <code className="row-subkey">{record.error_code}</code>}</td><td><span>{record.resource_type}</span><strong title={record.namespace ? `${record.namespace}/${record.resource}` : record.resource}>{record.namespace ? `${record.namespace}/${record.resource}` : record.resource}</strong></td><td>{record.revision ? `v${record.revision}` : '—'}</td><td>#{record.delivery_attempt}</td></tr>)}</tbody></table></div>
+        <div className="table-frame log-table"><table><thead><tr><th>{t.time}</th><th>{t.auditIdentifier}</th><th>{t.actor}</th><th>{t.action}</th><th>{t.outcome}</th><th>{t.resource}</th><th>{t.revision}</th><th>{t.delivery}</th></tr></thead><tbody>{state.items.map(record => <tr key={record.id}><td><time>{formatDate(record.time, t.locale)}</time></td><td><code title={record.operation_id || record.request_id}>{record.operation_id || record.request_id || '—'}</code></td><td><ActorIdentity actorID={record.actor_id} principal={principal} />{record.source_ip && <code className="row-subkey">IP: {record.source_ip}</code>}</td><td><code>{record.action}</code></td><td><span className={record.outcome === 'success' ? 'status active' : 'status archived'}>{record.outcome}</span>{record.error_code && <code className="row-subkey">{record.error_code}</code>}</td><td><span>{record.resource_type}</span><strong title={record.namespace ? `${record.namespace}/${record.resource}${record.field_key ? '.' + record.field_key : ''}` : record.resource}>{record.namespace ? `${record.namespace}/${record.resource}${record.field_key ? '.' + record.field_key : ''}` : record.resource}</strong></td><td>{record.revision ? `v${record.revision}` : '—'}</td><td>#{record.delivery_attempt}</td></tr>)}</tbody></table></div>
         <nav className="config-pagination" aria-label={t.auditPagination}><span>{first}–{first + state.items.length - 1}</span><div><button type="button" disabled={page === 0} onClick={() => setPage(value => value - 1)}>{t.previous}</button><code>{t.pageNumber.replace('{page}', page + 1)}</code><button type="button" disabled={!state.hasMore} onClick={() => setPage(value => value + 1)}>{t.next}</button></div></nav>
       </>}
     </ResourcePage>

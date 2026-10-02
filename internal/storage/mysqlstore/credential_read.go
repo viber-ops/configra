@@ -8,15 +8,20 @@ import (
 )
 
 type TokenSummary struct {
-	PublicID         string     `json:"public_id"`
-	DisplayName      string     `json:"display_name"`
-	DisplayPrefix    string     `json:"display_prefix"`
-	EnvironmentKeys  []string   `json:"environment_keys"`
-	EnvironmentCount uint64     `json:"environment_count"`
-	AllowWithoutMTLS bool       `json:"allow_without_mtls"`
-	ExpiresAt        *time.Time `json:"expires_at,omitempty"`
-	Revoked          bool       `json:"revoked"`
-	CreatedAt        time.Time  `json:"created_at"`
+	Kind                   string     `json:"kind"`
+	ConfigKeys             []string   `json:"config_keys"`
+	NamespaceKeys          []string   `json:"namespace_keys"`
+	ParentPublicID         string     `json:"parent_public_id,omitempty"`
+	CertificateFingerprint string     `json:"certificate_fingerprint,omitempty"`
+	PublicID               string     `json:"public_id"`
+	DisplayName            string     `json:"display_name"`
+	DisplayPrefix          string     `json:"display_prefix"`
+	EnvironmentKeys        []string   `json:"environment_keys"`
+	EnvironmentCount       uint64     `json:"environment_count"`
+	AllowWithoutMTLS       bool       `json:"allow_without_mtls"`
+	ExpiresAt              *time.Time `json:"expires_at,omitempty"`
+	Revoked                bool       `json:"revoked"`
+	CreatedAt              time.Time  `json:"created_at"`
 }
 
 func (store *Store) ListTokens(ctx context.Context, query InventoryQuery) (InventoryPage[TokenSummary], error) {
@@ -32,8 +37,8 @@ func (store *Store) ListTokens(ctx context.Context, query InventoryQuery) (Inven
 		SELECT token.public_id, token.display_name, token.display_prefix, token.allow_without_mtls,
 		       token.expires_at, token.revoked_at IS NOT NULL, token.created_at,
 		       (SELECT COUNT(*) FROM api_token_environments AS grant_record WHERE grant_record.token_id = token.id),
-		       preview.resource_key
-		FROM (SELECT token.id, token.public_id, token.display_name, token.display_prefix, token.allow_without_mtls, token.expires_at, token.revoked_at, token.created_at
+		       preview.resource_key, token.kind, token.config_keys, token.namespace_keys, COALESCE(token.parent_public_id, ''), COALESCE(LOWER(HEX(token.deployment_certificate_fingerprint)), '')
+		FROM (SELECT token.id, token.public_id, token.display_name, token.display_prefix, token.allow_without_mtls, token.expires_at, token.revoked_at, token.created_at, token.kind, token.config_keys, token.namespace_keys, token.parent_public_id, token.deployment_certificate_fingerprint
 		      FROM api_tokens AS token WHERE `+where+` ORDER BY token.created_at DESC, token.public_id LIMIT ? OFFSET ?) AS token
 		LEFT JOIN LATERAL (
 			SELECT environment.resource_key FROM api_token_environments AS grant_record
@@ -49,15 +54,20 @@ func (store *Store) ListTokens(ctx context.Context, query InventoryQuery) (Inven
 	result := make([]TokenSummary, 0)
 	for rows.Next() {
 		var (
-			token       TokenSummary
-			expiresAt   sql.NullTime
-			environment sql.NullString
+			token               TokenSummary
+			expiresAt           sql.NullTime
+			environment         sql.NullString
+			configs, namespaces []byte
 		)
 		if err := rows.Scan(
 			&token.PublicID, &token.DisplayName, &token.DisplayPrefix, &token.AllowWithoutMTLS,
 			&expiresAt, &token.Revoked, &token.CreatedAt, &token.EnvironmentCount, &environment,
+			&token.Kind, &configs, &namespaces, &token.ParentPublicID, &token.CertificateFingerprint,
 		); err != nil {
 			return page, fmt.Errorf("scan API Token: %w", err)
+		}
+		if decodeTokenScope(configs, &token.ConfigKeys) != nil || decodeTokenScope(namespaces, &token.NamespaceKeys) != nil {
+			return page, ErrValidation
 		}
 		if len(result) == 0 || result[len(result)-1].PublicID != token.PublicID {
 			token.EnvironmentKeys = make([]string, 0)

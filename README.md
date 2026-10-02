@@ -4,14 +4,14 @@
 
 [Website](https://viber-ops.github.io/en/configra/) ·
 [Documentation](https://viber-ops.github.io/en/docs/configra/) ·
-[Downloads](https://github.com/viber-ops/configra/releases/tag/v1.0.1) ·
+[Downloads](https://github.com/viber-ops/configra/releases/tag/v1.1.0) ·
 [Go SDK](https://github.com/viber-ops/configra-go) · [中文](README.zh-CN.md)
 
 Configra stores versioned YAML/JSON and shared Vault values for each environment.
 Applications read resolved configuration through the Go SDK, CSI file mounts,
 or native Kubernetes Secret/ConfigMap synchronization.
 
-> **Stable release: v1.0.1.** Use the tag for these guides.
+> **Stable release: v1.1.0.** Use the tag for these guides.
 > Validate ingress, capacity and recovery in your own deployment before rollout.
 > [Read the limits](https://viber-ops.github.io/en/docs/configra/security/).
 
@@ -35,6 +35,7 @@ or native Kubernetes Secret/ConfigMap synchronization.
 | Machine access | HTTPS, Environment-scoped Tokens, mTLS and revocation checks |
 | Less certificate work | Managed client CAs, encrypted signing keys and one-time private exports |
 | Go integration | Resolved reads, file downloads and Viper snapshots with ETag polling |
+| Deployment automation | MFA-issued scoped write Tokens for Config/Vault writes and read-only host credentials |
 | Kubernetes integration | CSI file mounts **and** native Secret/ConfigMap synchronization |
 
 For example, a Config can reference a Vault value without copying it:
@@ -53,8 +54,8 @@ must occupy the complete scalar; File fields are read separately.
 With Docker Compose, Go 1.25.13+, Node.js 24, npm, Make and OpenSSL installed:
 
 ```sh
-git clone --branch v1.0.1 https://github.com/viber-ops/configra.git
-git clone --branch v1.0.0 https://github.com/viber-ops/configra-go.git
+git clone --branch v1.1.0 https://github.com/viber-ops/configra.git
+git clone --branch v1.1.0 https://github.com/viber-ops/configra-go.git
 cd configra
 make local-run
 ```
@@ -86,9 +87,7 @@ use its own provider to obtain its Master Key or startup credentials**.
 
 ## Permissions and limits
 
-Machine permissions are **Environment-wide**, and human Admin/Viewer roles are
-workspace-wide. Vault Namespaces organize items; they do not isolate untrusted
-tenants. Configra is not a dynamic database-credential engine, HSM/KMS, or an
+Default read-only machine permissions are **Environment-wide**; [scoped writers](docs/scoped-write-tokens.md) and their deployment credentials also enforce optional Config/Namespace allowlists. Human Admin/Viewer roles are workspace-wide. Vault Namespaces do not isolate untrusted tenants. Configra is not a dynamic database-credential engine, HSM/KMS, or an
 application restart controller.
 
 The v1.0.1 runtime passed the ten-minute 1000 QPS gate on a four-vCPU
@@ -102,6 +101,8 @@ machine reads and SDK calls are unchanged.
 Production ingress and independent-host failure checks remain deployment-specific.
 Check the [current production status](docs/production-readiness.md)
 before a rollout.
+
+For v1.1.0, follow the [upgrade and schema 2 → 3 migration instructions](docs/releases/v1.1.0.md). Administrators need verified OIDC MFA to issue write Tokens; operators use mTLS and need no human identity.
 
 ## Develop and verify
 

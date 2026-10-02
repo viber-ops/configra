@@ -13,13 +13,15 @@ import (
 )
 
 const (
-	schemaVersion     = 2
+	schemaVersion     = 3
 	migrationLockName = "configra:schema-migration"
 )
 
 type Store struct {
 	db       *sql.DB
 	provider *vaultcrypto.LocalKeyProvider
+	// Set once at startup; zero uses the 90-day policy.
+	WriteTokenMaxTTL time.Duration
 }
 
 func OpenManagement(ctx context.Context, dsn string, provider *vaultcrypto.LocalKeyProvider) (*Store, error) {
@@ -120,6 +122,14 @@ func initializeOrVerify(ctx context.Context, db *sql.DB, provider *vaultcrypto.L
 			return fmt.Errorf("record schema v2: %w", err)
 		}
 	}
+	if version > 0 && version < 3 {
+		if err := applySchemaV3(ctx, connection); err != nil {
+			return err
+		}
+		if _, err := connection.ExecContext(ctx, "INSERT INTO schema_migrations (version) VALUES (3)"); err != nil {
+			return fmt.Errorf("record schema v3: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -159,6 +169,9 @@ func initializeSchema(ctx context.Context, connection *sql.Conn, provider *vault
 		}
 	}
 	if err := applySchemaV2(ctx, connection); err != nil {
+		return err
+	}
+	if err := applySchemaV3(ctx, connection); err != nil {
 		return err
 	}
 	sentinel, err := provider.CreateSentinel()

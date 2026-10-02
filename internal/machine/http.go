@@ -12,6 +12,7 @@ import (
 	"maps"
 	"mime"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 )
@@ -23,15 +24,42 @@ var (
 	ErrNotModified = errors.New("not modified")
 	ErrUnresolved  = errors.New("unresolved vault reference")
 	ErrIntegrity   = errors.New("cryptographic integrity failure")
+	ErrForbidden   = errors.New("scope forbidden")
+)
+
+const (
+	TokenReadOnly    = "read-only"
+	TokenWriteScoped = "write-scoped"
 )
 
 type Token struct {
-	PublicID           string
-	SecretDigest       [sha256.Size]byte
-	EnvironmentGranted bool // For the Environment passed to TokenForEnvironment.
-	AllowWithoutMTLS   bool
-	ExpiresAt          time.Time
-	Revoked            bool
+	PublicID               string
+	SecretDigest           [sha256.Size]byte
+	EnvironmentGranted     bool // For the Environment passed to TokenForEnvironment.
+	AllowWithoutMTLS       bool
+	ExpiresAt              time.Time
+	Revoked                bool
+	Kind                   string
+	ConfigKeys             []string // nil permits all; an empty list permits none.
+	NamespaceKeys          []string
+	CertificateFingerprint []byte // Deployment credentials are bound to their issued certificate.
+}
+
+func (token Token) AllowsConfig(key string) bool {
+	return token.ConfigKeys == nil || slices.Contains(token.ConfigKeys, key)
+}
+func (token Token) AllowsNamespace(key string) bool {
+	return token.NamespaceKeys == nil || slices.Contains(token.NamespaceKeys, key)
+}
+
+type tokenContextKey struct{}
+
+func WithToken(ctx context.Context, token Token) context.Context {
+	return context.WithValue(ctx, tokenContextKey{}, token)
+}
+func TokenFromContext(ctx context.Context) (Token, bool) {
+	token, ok := ctx.Value(tokenContextKey{}).(Token)
+	return token, ok
 }
 
 type ResolvedConfig struct {
@@ -103,9 +131,13 @@ func (server *server) readFile(response http.ResponseWriter, request *http.Reque
 		return
 	}
 
-	authentication, status := server.authorize(request, environment)
+	token, authentication, status := server.authenticate(request, environment)
 	if status != 0 {
 		writeError(response, status, statusCode(status))
+		return
+	}
+	if !token.AllowsNamespace(namespace) {
+		writeError(response, http.StatusForbidden, "scope_forbidden")
 		return
 	}
 
@@ -170,16 +202,23 @@ func (server *server) readResolvedConfig(response http.ResponseWriter, request *
 		return
 	}
 
-	authentication, status := server.authorize(request, environment)
+	token, authentication, status := server.authenticate(request, environment)
 	if status != 0 {
 		writeError(response, status, statusCode(status))
 		return
 	}
+	if !token.AllowsConfig(config) {
+		writeError(response, http.StatusForbidden, "scope_forbidden")
+		return
+	}
 
 	resolved, err := server.repository.ReadResolvedConfig(
-		request.Context(), environment, config, request.Header.Get("If-None-Match"),
+		WithToken(request.Context(), token), environment, config, request.Header.Get("If-None-Match"),
 	)
 	switch {
+	case errors.Is(err, ErrForbidden):
+		writeError(response, http.StatusForbidden, "scope_forbidden")
+		return
 	case errors.Is(err, ErrNotModified):
 		response.Header().Set("Cache-Control", "no-store")
 		response.Header().Set("ETag", resolved.ETag)
@@ -220,46 +259,54 @@ func (server *server) readResolvedConfig(response http.ResponseWriter, request *
 	}
 }
 
-func (server *server) authorize(request *http.Request, environment string) (Authentication, int) {
+// Authenticate validates both the bearer credential and the presented, registered mTLS identity.
+func Authenticate(repository Repository, request *http.Request, environment string) (Token, Authentication, int) {
+	return (&server{repository: repository, now: time.Now}).authenticate(request, environment)
+}
+
+func (server *server) authenticate(request *http.Request, environment string) (Token, Authentication, int) {
 	publicID, secret, ok := bearerToken(request.Header.Get("Authorization"))
 	if !ok {
-		return "", http.StatusUnauthorized
+		return Token{}, "", http.StatusUnauthorized
 	}
 	token, err := server.repository.TokenForEnvironment(request.Context(), publicID, environment)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			return "", http.StatusUnauthorized
+			return Token{}, "", http.StatusUnauthorized
 		}
-		return "", http.StatusServiceUnavailable
+		return Token{}, "", http.StatusServiceUnavailable
 	}
 	presentedDigest := sha256.Sum256(secret)
 	if token.PublicID != publicID ||
 		subtle.ConstantTimeCompare(presentedDigest[:], token.SecretDigest[:]) != 1 ||
 		token.Revoked ||
 		(!token.ExpiresAt.IsZero() && !server.now().Before(token.ExpiresAt)) {
-		return "", http.StatusUnauthorized
+		return Token{}, "", http.StatusUnauthorized
 	}
 	if !token.EnvironmentGranted {
-		return "", http.StatusForbidden
+		return token, "", http.StatusForbidden
 	}
 	if request.TLS == nil {
-		return "", http.StatusUnauthorized
+		return Token{}, "", http.StatusUnauthorized
 	}
 	if len(request.TLS.PeerCertificates) == 0 {
-		if token.AllowWithoutMTLS {
-			return AuthenticationTokenOnly, 0
+		if token.AllowWithoutMTLS && token.Kind != TokenWriteScoped && len(token.CertificateFingerprint) == 0 {
+			return token, AuthenticationTokenOnly, 0
 		}
-		return "", http.StatusUnauthorized
+		return Token{}, "", http.StatusUnauthorized
 	}
 	fingerprint := sha256.Sum256(request.TLS.PeerCertificates[0].Raw)
+	if len(token.CertificateFingerprint) > 0 && subtle.ConstantTimeCompare(fingerprint[:], token.CertificateFingerprint) != 1 {
+		return Token{}, "", http.StatusUnauthorized
+	}
 	active, err := server.repository.IsCertificateActive(request.Context(), fingerprint)
 	if err != nil {
-		return "", http.StatusServiceUnavailable
+		return Token{}, "", http.StatusServiceUnavailable
 	}
 	if !active {
-		return "", http.StatusUnauthorized
+		return Token{}, "", http.StatusUnauthorized
 	}
-	return AuthenticationMTLS, 0
+	return token, AuthenticationMTLS, 0
 }
 
 func bearerToken(header string) (string, []byte, bool) {

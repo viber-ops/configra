@@ -50,14 +50,15 @@ func TestDecodeEventPreservesVaultNamespaceAndRejectsItsAbsence(t *testing.T) {
 	copy(id[:], []byte("0123456789abcdef"))
 	payload := map[string]any{
 		"time": time.Now().UTC(), "operation_id": "operation-vault",
-		"actor":  map[string]string{"type": "user", "id": "admin@example.com"},
+		"actor":     map[string]string{"type": "token", "id": "0123456789abcdef"},
+		"source_ip": "192.0.2.1", "field_key": "password",
 		"action": "vault.commit", "outcome": "success", "namespace_key": "platform",
 		"resource_type": "vault_item", "resource_key": "redis", "revision": 2,
 	}
 	encoded, _ := json.Marshal(payload)
 	outbox := mysqlstore.OutboxEvent{ID: id, Kind: mysqlstore.OutboxNotification, Type: "vault.updated", OperationID: "operation-vault", Payload: encoded, Attempts: 1}
 	event, err := DecodeEvent(outbox)
-	if err != nil || event.Namespace != "platform" {
+	if err != nil || event.Namespace != "platform" || event.SourceIP != "192.0.2.1" || event.FieldKey != "password" || event.Actor.Type != "token" {
 		t.Fatalf("DecodeEvent = %#v, %v", event, err)
 	}
 	delete(payload, "namespace_key")

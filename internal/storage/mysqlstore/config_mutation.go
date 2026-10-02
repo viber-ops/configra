@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/viber-ops/configra/internal/configdoc"
+	"github.com/viber-ops/configra/internal/machine"
 )
 
 type Actor struct {
@@ -78,7 +79,7 @@ func (meta configCommitMeta) event(suffix string) string {
 }
 
 func (store *Store) commitConfig(ctx context.Context, request ConfigCommit, meta configCommitMeta) (ConfigCommitResult, error) {
-	if !validOperationID(request.OperationID) || !validActor(request.Actor) {
+	if !validOperationID(request.OperationID) || !validScopedActor(request.Actor) {
 		return ConfigCommitResult{}, ErrValidation
 	}
 	digest := configCommitDigest(request, meta)
@@ -96,6 +97,20 @@ func (store *Store) commitConfig(ctx context.Context, request ConfigCommit, meta
 		return ConfigCommitResult{}, fmt.Errorf("begin Config Commit: %w", err)
 	}
 	defer transaction.Rollback()
+	token, err := authorizeScopedWrite(ctx, transaction, request.Actor, request.EnvironmentKey, request.ConfigKey, "")
+	if err != nil {
+		return ConfigCommitResult{}, err
+	}
+	if request.Actor.Type == "token" {
+		if meta.Action != "commit" {
+			return ConfigCommitResult{}, machine.ErrForbidden
+		}
+		for _, reference := range document.References {
+			if !token.AllowsNamespace(reference.NamespaceKey) {
+				return ConfigCommitResult{}, machine.ErrForbidden
+			}
+		}
+	}
 	replayed, replay, err := beginOperation(ctx, transaction, request.OperationID, digest, request.Actor)
 	if err != nil {
 		return ConfigCommitResult{}, err
@@ -435,6 +450,7 @@ func nullableRevision(value uint64) any {
 }
 
 type mutationEvent struct {
+	FieldKey       string
 	Type           string
 	Action         string
 	EnvironmentKey string
@@ -471,6 +487,8 @@ func finishOperation(
 	}
 	payload := struct {
 		Time           time.Time `json:"time"`
+		SourceIP       string    `json:"source_ip,omitempty"`
+		FieldKey       string    `json:"field_key,omitempty"`
 		OperationID    string    `json:"operation_id"`
 		Actor          Actor     `json:"actor"`
 		Action         string    `json:"action"`
@@ -482,6 +500,8 @@ func finishOperation(
 		Revision       uint64    `json:"revision,omitempty"`
 	}{
 		Time:           time.Now().UTC(),
+		SourceIP:       auditSourceIP(ctx),
+		FieldKey:       event.FieldKey,
 		OperationID:    operationID,
 		Actor:          actor,
 		Action:         event.Action,
@@ -496,6 +516,9 @@ func finishOperation(
 	}
 	if outcome == OutcomeValidationFailed {
 		// Rejected input is not a resource identity and may contain secret text.
+		if !validResourceKey(payload.FieldKey) {
+			payload.FieldKey = ""
+		}
 		if !validResourceKey(payload.EnvironmentKey) {
 			payload.EnvironmentKey = ""
 		}
@@ -606,4 +629,8 @@ func validResourceKey(value string) bool {
 		}
 	}
 	return true
+}
+
+func validScopedActor(actor Actor) bool {
+	return validActor(actor) || (actor.Type == "token" && validTokenPublicID(actor.ID))
 }

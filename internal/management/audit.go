@@ -53,6 +53,7 @@ var mutationAuditRoutes = map[string]mutationAuditRoute{
 // action; only validated route parameters can identify a resource.
 func (server *server) auditRejections(mux *http.ServeMux, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		request = request.WithContext(mysqlstore.WithAuditSourceIP(request.Context(), request.RemoteAddr))
 		principal, authenticated := humanauth.PrincipalFromContext(request.Context())
 		if !authenticated || !strings.HasPrefix(request.URL.Path, "/v1/") ||
 			(request.Method != http.MethodPost && request.Method != http.MethodPut && request.Method != http.MethodPatch && request.Method != http.MethodDelete) {
