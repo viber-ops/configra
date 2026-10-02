@@ -453,6 +453,7 @@ type signingOIDCProvider struct {
 	challenge        string
 	audience         jwt.Audience
 	groups           []string
+	amr              []string
 	userInfoSubject  string
 	userInfoGroups   []string
 	omitIDToken      bool
@@ -524,6 +525,7 @@ func (provider *signingOIDCProvider) serveHTTP(response http.ResponseWriter, req
 			Expiry:   jwt.NewNumericDate(now.Add(time.Hour)),
 			IssuedAt: jwt.NewNumericDate(now),
 		}).Claims(map[string]any{
+			"amr":    provider.amr,
 			"nonce":  provider.nonce,
 			"groups": provider.groups,
 			"email":  "admin@example.com",
@@ -551,10 +553,48 @@ func (provider *signingOIDCProvider) serveHTTP(response http.ResponseWriter, req
 		}
 		_ = json.NewEncoder(response).Encode(map[string]any{
 			"sub":    provider.userInfoSubject,
+			"amr":    []string{"mfa"}, // UserInfo is not authentication evidence.
 			"groups": provider.userInfoGroups,
 			"email":  "admin@example.com",
 		})
 	default:
 		http.NotFound(response, request)
+	}
+}
+
+func TestMFAEvidenceSurvivesVerifiedOIDCSessionAndIgnoresUserInfo(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		amr  []string
+		want bool
+	}{
+		{"absent", nil, false}, {"password", []string{"pwd"}, false}, {"otp-alone", []string{"otp"}, false},
+		{"mfa", []string{"mfa"}, true}, {"password-otp", []string{"pwd", "otp"}, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			provider := newSigningOIDCProvider(t)
+			provider.amr = test.amr
+			auth := newTestOIDC(t, provider, humanauth.RoleSourceUserInfo)
+			handler := auth.Handler(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+				principal, ok := humanauth.PrincipalFromContext(request.Context())
+				if !ok || principal.MFAVerified != test.want {
+					t.Error("incorrect session MFA evidence")
+				}
+				response.WriteHeader(200)
+			}))
+			location, cookie := beginOIDCLogin(t, handler)
+			provider.nonce, provider.challenge = location.Query().Get("nonce"), location.Query().Get("code_challenge")
+			callback := httptest.NewRequest(http.MethodGet, "https://configra.test/auth/callback?code=valid-code&state="+url.QueryEscape(location.Query().Get("state")), nil)
+			callback.AddCookie(cookie)
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, callback)
+			if response.Code != http.StatusSeeOther {
+				t.Fatalf("callback HTTP %d", response.Code)
+			}
+			request := httptest.NewRequest(http.MethodGet, "https://configra.test/v1/me", nil)
+			request.AddCookie(response.Result().Cookies()[0])
+			request.Header.Set("X-MFA-Verified", "true")
+			handler.ServeHTTP(httptest.NewRecorder(), request)
+		})
 	}
 }

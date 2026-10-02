@@ -52,3 +52,38 @@ test('API token creation uses the server expiry default unless explicitly overri
   expect(created.never_expires).toBe(false);
   expect(created.expires_at).toBeUndefined();
 });
+
+test('scoped writers require environments and expiry and show MFA failures', async ({ page }) => {
+  let created;
+  await page.route('**/v1/**', async route => {
+    const path = new URL(route.request().url()).pathname;
+    let body = path === '/v1/me' ? principal : { items: [], total: 0 };
+    if (path === '/v1/environments') body = { items: [{ key: 'testing', display_name: 'Testing', archived: false }], total: 1 };
+    if (path === '/v1/api-tokens' && route.request().method() === 'POST') {
+      created = route.request().postDataJSON();
+      return route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ error: { code: 'mfa_required' } }) });
+    }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  });
+  await page.goto('/ui/#/administration');
+  await page.getByRole('button', { name: 'New API token' }).click();
+  await page.getByRole('checkbox', { name: 'Scoped write token' }).check();
+  await expect(page.getByRole('checkbox', { name: 'Never expires' })).toHaveCount(0);
+  await expect(page.getByRole('checkbox', { name: 'Allow this token without mTLS' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Create API token' })).toBeDisabled();
+  await page.getByRole('checkbox', { name: 'Allowed environments Testing testing' }).check();
+  await page.getByLabel('Token name').fill('Operator');
+  await page.getByLabel('Config key allowlist').fill('server');
+  await page.getByLabel('Vault namespace allowlist').fill('deployment');
+  await expect(page.locator('input[name="expires_at"]')).toHaveAttribute('required', '');
+  await page.locator('input[name="expires_at"]').fill('2030-01-01T12:00');
+  await page.getByRole('button', { name: 'Create API token' }).click();
+  await expect.poll(() => created).toBeTruthy();
+  expect(created.kind).toBe('write-scoped');
+  expect(created.environment_keys).toEqual(['testing']);
+  expect(created.config_keys).toEqual(['server']);
+  expect(created.namespace_keys).toEqual(['deployment']);
+  expect(created.allow_without_mtls).toBe(false);
+  expect(created.never_expires).toBe(false);
+  await expect(page.getByRole('alert').filter({ hasText: 'MFA evidence is required' })).toBeVisible();
+});

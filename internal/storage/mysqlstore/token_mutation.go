@@ -12,19 +12,29 @@ import (
 	"fmt"
 	"slices"
 	"time"
+
+	"github.com/viber-ops/configra/internal/machine"
 )
 
 type TokenCreate struct {
-	OperationID      string
-	Actor            Actor
-	DisplayName      string
-	EnvironmentKeys  []string
-	AllowWithoutMTLS bool
-	ExpiresAt        time.Time
-	NeverExpires     bool
+	Kind                   string   `json:",omitempty"`
+	ConfigKeys             []string `json:",omitempty"`
+	NamespaceKeys          []string `json:",omitempty"`
+	parentPublicID         string
+	certificateFingerprint []byte
+	OperationID            string
+	Actor                  Actor
+	DisplayName            string
+	EnvironmentKeys        []string
+	AllowWithoutMTLS       bool
+	ExpiresAt              time.Time
+	NeverExpires           bool
 }
 
 type TokenCreateResult struct {
+	Kind             string     `json:"kind"`
+	ConfigKeys       []string   `json:"config_keys"`
+	NamespaceKeys    []string   `json:"namespace_keys"`
 	Outcome          Outcome    `json:"outcome"`
 	PublicID         string     `json:"public_id"`
 	DisplayPrefix    string     `json:"display_prefix"`
@@ -64,11 +74,14 @@ type TokenRevokeResult struct {
 }
 
 func (store *Store) CreateToken(ctx context.Context, request TokenCreate) (TokenCreateResult, error) {
+	if request.Actor.Type == "token" {
+		return TokenCreateResult{}, machine.ErrForbidden
+	}
 	if !validOperationID(request.OperationID) || !validActor(request.Actor) {
 		return TokenCreateResult{}, ErrValidation
 	}
 	digest := tokenRequestDigest(request)
-	validationErr := validateTokenCreate(request)
+	validationErr := store.validateTokenCreate(request)
 	transaction, err := store.db.BeginTx(ctx, nil)
 	if err != nil {
 		return TokenCreateResult{}, fmt.Errorf("begin API Token creation: %w", err)
@@ -88,70 +101,17 @@ func (store *Store) CreateToken(ctx context.Context, request TokenCreate) (Token
 	if validationErr != nil {
 		return store.finishTokenCreateFailure(ctx, transaction, request, validationErr)
 	}
-	environmentKeys, environmentIDs, err := activeEnvironmentIDs(ctx, transaction, request.EnvironmentKeys)
+	result, err := createTokenRecord(ctx, transaction, request)
 	if errors.Is(err, ErrValidation) {
 		return store.finishTokenCreateFailure(ctx, transaction, request, err)
 	}
 	if err != nil {
 		return TokenCreateResult{}, err
 	}
-
-	tokenID, err := randomID()
-	if err != nil {
-		return TokenCreateResult{}, err
-	}
-	publicBytes := make([]byte, 8)
-	secret := make([]byte, 32)
-	if _, err := rand.Read(publicBytes); err != nil {
-		return TokenCreateResult{}, fmt.Errorf("generate API Token public ID: %w", err)
-	}
-	if _, err := rand.Read(secret); err != nil {
-		return TokenCreateResult{}, fmt.Errorf("generate API Token Secret: %w", err)
-	}
-	defer clear(secret)
-	publicID := hex.EncodeToString(publicBytes)
-	displayPrefix := "cfg_" + publicID
-	secretDigest := sha256.Sum256(secret)
-	plaintext := displayPrefix + "_" + base64.RawURLEncoding.EncodeToString(secret)
-	expiresAt := request.ExpiresAt.UTC()
-	if request.NeverExpires {
-		expiresAt = time.Time{}
-	} else if expiresAt.IsZero() {
-		expiresAt = time.Now().UTC().Add(90 * 24 * time.Hour)
-	}
-	var databaseExpiry any
-	var resultExpiry *time.Time
-	if !expiresAt.IsZero() {
-		databaseExpiry = expiresAt
-		resultExpiry = &expiresAt
-	}
-	if _, err := transaction.ExecContext(ctx, `
-		INSERT INTO api_tokens
-			(id, public_id, display_name, display_prefix, secret_digest, allow_without_mtls, expires_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, tokenID, publicID, request.DisplayName, displayPrefix, secretDigest[:], request.AllowWithoutMTLS, databaseExpiry); err != nil {
-		return TokenCreateResult{}, fmt.Errorf("insert API Token: %w", err)
-	}
-	for _, key := range environmentKeys {
-		if _, err := transaction.ExecContext(ctx, `
-			INSERT INTO api_token_environments (token_id, environment_id) VALUES (?, ?)
-		`, tokenID, environmentIDs[key]); err != nil {
-			return TokenCreateResult{}, fmt.Errorf("grant API Token Environment: %w", err)
-		}
-	}
-	result := TokenCreateResult{
-		Outcome:          OutcomeSuccess,
-		PublicID:         publicID,
-		DisplayPrefix:    displayPrefix,
-		Token:            plaintext,
-		EnvironmentKeys:  environmentKeys,
-		AllowWithoutMTLS: request.AllowWithoutMTLS,
-		ExpiresAt:        resultExpiry,
-	}
 	persisted := result
 	persisted.Token = ""
 	if err := finishOperation(ctx, transaction, request.OperationID, request.Actor, result.Outcome, 0, persisted, mutationEvent{
-		Type: "token.created", Action: "token.create", ResourceType: "api_token", ResourceKey: publicID,
+		Type: "token.created", Action: "token.create", ResourceType: "api_token", ResourceKey: result.PublicID,
 	}, true); err != nil {
 		return TokenCreateResult{}, err
 	}
@@ -162,6 +122,9 @@ func (store *Store) CreateToken(ctx context.Context, request TokenCreate) (Token
 }
 
 func (store *Store) SetTokenEnvironments(ctx context.Context, request TokenEnvironmentChange) (TokenEnvironmentResult, error) {
+	if request.Actor.Type == "token" {
+		return TokenEnvironmentResult{}, machine.ErrForbidden
+	}
 	if !validOperationID(request.OperationID) || !validActor(request.Actor) {
 		return TokenEnvironmentResult{}, ErrValidation
 	}
@@ -207,10 +170,11 @@ func (store *Store) SetTokenEnvironments(ctx context.Context, request TokenEnvir
 	}
 	var tokenID []byte
 	var revokedAt sql.NullTime
+	var immutableScope bool
 	err = transaction.QueryRowContext(ctx, `
-		SELECT id, revoked_at FROM api_tokens WHERE public_id = ? FOR UPDATE
-	`, request.PublicID).Scan(&tokenID, &revokedAt)
-	if errors.Is(err, sql.ErrNoRows) || revokedAt.Valid {
+		SELECT id, revoked_at, kind = 'write-scoped' OR parent_public_id IS NOT NULL FROM api_tokens WHERE public_id = ? FOR UPDATE
+	`, request.PublicID).Scan(&tokenID, &revokedAt, &immutableScope)
+	if errors.Is(err, sql.ErrNoRows) || revokedAt.Valid || immutableScope {
 		return finishTokenEnvironmentFailure(ctx, transaction, request, errors.New("API Token is missing or revoked"))
 	}
 	if err != nil {
@@ -286,6 +250,9 @@ func (store *Store) SetTokenEnvironments(ctx context.Context, request TokenEnvir
 }
 
 func (store *Store) RevokeToken(ctx context.Context, request TokenRevoke) (TokenRevokeResult, error) {
+	if request.Actor.Type == "token" {
+		return TokenRevokeResult{}, machine.ErrForbidden
+	}
 	if !validOperationID(request.OperationID) || !validActor(request.Actor) {
 		return TokenRevokeResult{}, ErrValidation
 	}
@@ -322,7 +289,7 @@ func (store *Store) RevokeToken(ctx context.Context, request TokenRevoke) (Token
 	}
 	result := TokenRevokeResult{Outcome: OutcomeNoChange, PublicID: request.PublicID, Revoked: true}
 	if !revokedAt.Valid {
-		if _, err := transaction.ExecContext(ctx, `UPDATE api_tokens SET revoked_at = UTC_TIMESTAMP(6) WHERE id = ?`, tokenID); err != nil {
+		if err := revokeTokenAndDeployments(ctx, transaction, request.PublicID); err != nil {
 			return TokenRevokeResult{}, fmt.Errorf("revoke API Token: %w", err)
 		}
 		result.Outcome = OutcomeSuccess
@@ -338,7 +305,22 @@ func (store *Store) RevokeToken(ctx context.Context, request TokenRevoke) (Token
 	return result, nil
 }
 
-func validateTokenCreate(request TokenCreate) error {
+func (store *Store) validateTokenCreate(request TokenCreate) error {
+	if request.Kind != "" && request.Kind != machine.TokenReadOnly && request.Kind != machine.TokenWriteScoped {
+		return ErrValidation
+	}
+	if validateScopeKeys(request.ConfigKeys) != nil || validateScopeKeys(request.NamespaceKeys) != nil {
+		return ErrValidation
+	}
+	if request.Kind == machine.TokenWriteScoped {
+		maxTTL := store.WriteTokenMaxTTL
+		if maxTTL <= 0 || maxTTL > 90*24*time.Hour {
+			maxTTL = 90 * 24 * time.Hour
+		}
+		if request.Actor.Type != "user" || len(request.EnvironmentKeys) == 0 || request.AllowWithoutMTLS || request.NeverExpires || request.ExpiresAt.IsZero() || request.ExpiresAt.After(time.Now().Add(maxTTL)) {
+			return ErrValidation
+		}
+	}
 	if request.DisplayName == "" || len(request.DisplayName) > 255 {
 		return errors.New("API Token display name is required and must not exceed 255 bytes")
 	}
@@ -448,6 +430,14 @@ func finishTokenRevokeFailure(ctx context.Context, transaction *sql.Tx, request 
 }
 
 func tokenRequestDigest(request any) [sha256.Size]byte {
+	// Preserve legacy digests while distinguishing omitted scopes from explicit
+	// empty (deny-all) scopes; encoding/json omitempty alone collapses them.
+	if token, ok := request.(TokenCreate); ok && (token.ConfigKeys != nil || token.NamespaceKeys != nil) {
+		request = struct {
+			Request                           TokenCreate
+			ConfigScopeSet, NamespaceScopeSet bool
+		}{token, token.ConfigKeys != nil, token.NamespaceKeys != nil}
+	}
 	encoded, _ := json.Marshal(request)
 	digest := sha256.Sum256(encoded)
 	clear(encoded)
@@ -464,4 +454,99 @@ func validTokenPublicID(value string) bool {
 		}
 	}
 	return true
+}
+
+func createTokenRecord(ctx context.Context, transaction *sql.Tx, request TokenCreate) (TokenCreateResult, error) {
+	environmentKeys, environmentIDs, err := activeEnvironmentIDs(ctx, transaction, request.EnvironmentKeys)
+	if err != nil {
+		return TokenCreateResult{}, err
+	}
+	kind := request.Kind
+	if kind == "" {
+		kind = machine.TokenReadOnly
+	}
+	tokenID, err := randomID()
+	if err != nil {
+		return TokenCreateResult{}, err
+	}
+	publicBytes := make([]byte, 8)
+	secret := make([]byte, 32)
+	if _, err := rand.Read(publicBytes); err != nil {
+		return TokenCreateResult{}, fmt.Errorf("generate API Token public ID: %w", err)
+	}
+	if _, err := rand.Read(secret); err != nil {
+		return TokenCreateResult{}, fmt.Errorf("generate API Token Secret: %w", err)
+	}
+	defer clear(secret)
+	publicID := hex.EncodeToString(publicBytes)
+	displayPrefix := "cfg_" + publicID
+	secretDigest := sha256.Sum256(secret)
+	plaintext := displayPrefix + "_" + base64.RawURLEncoding.EncodeToString(secret)
+	expiresAt := request.ExpiresAt.UTC()
+	if request.NeverExpires {
+		expiresAt = time.Time{}
+	} else if expiresAt.IsZero() {
+		expiresAt = time.Now().UTC().Add(90 * 24 * time.Hour)
+	}
+	var databaseExpiry any
+	var resultExpiry *time.Time
+	if !expiresAt.IsZero() {
+		databaseExpiry = expiresAt
+		resultExpiry = &expiresAt
+	}
+	if _, err := transaction.ExecContext(ctx, `
+		INSERT INTO api_tokens
+			(id, public_id, display_name, display_prefix, secret_digest, allow_without_mtls, expires_at,
+ kind, config_keys, namespace_keys, parent_public_id, deployment_certificate_fingerprint)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, tokenID, publicID, request.DisplayName, displayPrefix, secretDigest[:], request.AllowWithoutMTLS, databaseExpiry, kind, scopeJSON(request.ConfigKeys), scopeJSON(request.NamespaceKeys), nullableString(request.parentPublicID), nullableBytes(request.certificateFingerprint)); err != nil {
+		return TokenCreateResult{}, fmt.Errorf("insert API Token: %w", err)
+	}
+	for _, key := range environmentKeys {
+		if _, err := transaction.ExecContext(ctx, `
+			INSERT INTO api_token_environments (token_id, environment_id) VALUES (?, ?)
+		`, tokenID, environmentIDs[key]); err != nil {
+			return TokenCreateResult{}, fmt.Errorf("grant API Token Environment: %w", err)
+		}
+	}
+	result := TokenCreateResult{
+		Outcome: OutcomeSuccess,
+		Kind:    kind, ConfigKeys: request.ConfigKeys, NamespaceKeys: request.NamespaceKeys,
+		PublicID:         publicID,
+		DisplayPrefix:    displayPrefix,
+		Token:            plaintext,
+		EnvironmentKeys:  environmentKeys,
+		AllowWithoutMTLS: request.AllowWithoutMTLS,
+		ExpiresAt:        resultExpiry,
+	}
+	return result, nil
+}
+
+func validateScopeKeys(keys []string) error {
+	if len(keys) > 256 {
+		return ErrValidation
+	}
+	seen := make(map[string]bool, len(keys))
+	for _, key := range keys {
+		if !validResourceKey(key) || seen[key] {
+			return ErrValidation
+		}
+		seen[key] = true
+	}
+	return nil
+}
+
+func scopeJSON(keys []string) any {
+	if keys == nil {
+		return nil
+	}
+	encoded, _ := json.Marshal(keys)
+	return string(encoded)
+}
+
+func nullableString(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
 }

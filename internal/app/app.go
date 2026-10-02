@@ -19,7 +19,6 @@ import (
 	"github.com/viber-ops/configra/internal/humanauth"
 	"github.com/viber-ops/configra/internal/logstore"
 	"github.com/viber-ops/configra/internal/logworker"
-	"github.com/viber-ops/configra/internal/machine"
 	"github.com/viber-ops/configra/internal/management"
 	"github.com/viber-ops/configra/internal/notification"
 	"github.com/viber-ops/configra/internal/storage/mysqlstore"
@@ -98,6 +97,7 @@ func run(ctx context.Context, mode bootstrap.Mode, configPath string) error {
 			return err
 		}
 		defer store.Close()
+		store.WriteTokenMaxTTL = time.Duration(config.WriteTokens.MaxTTLDays) * 24 * time.Hour
 		sessionStore := store.NewManagementSessionStore(5 * time.Minute)
 		defer sessionStore.StopCleanup()
 		sessions := humanauth.NewSessionManager(sessionStore)
@@ -204,7 +204,7 @@ func run(ctx context.Context, mode bootstrap.Mode, configPath string) error {
 			logger.Warn("NATS Access Event flush did not complete")
 		}
 	}()
-	handler := withHealth(machine.NewHandler(store, publisher), store.Ping)
+	handler := withHealth(management.NewMachineHandler(store, publisher), store.Ping)
 	return serve(ctx, config.Listen, tlsConfig, handler, logger, mode)
 }
 

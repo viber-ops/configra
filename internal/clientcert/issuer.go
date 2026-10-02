@@ -52,8 +52,16 @@ func GenerateClient(authority *x509.Certificate, privateKeyDER []byte, name stri
 	if days == 0 {
 		days = 90
 	}
-	if !validCertificateName(name) || days < 1 || days > 365 || authority == nil || !authority.IsCA ||
-		now.Before(authority.NotBefore) || !now.Before(authority.NotAfter) {
+	if days < 1 || days > 365 {
+		return GeneratedCertificate{}, errors.New("invalid Client Certificate lifetime")
+	}
+	return GenerateClientUntil(authority, privateKeyDER, name, now.UTC().Add(time.Duration(days)*24*time.Hour), now)
+}
+
+// GenerateClientUntil supports sub-day deployment credentials without extending
+// the scoped issuer's deadline. The Authority's earlier expiry also caps it.
+func GenerateClientUntil(authority *x509.Certificate, privateKeyDER []byte, name string, notAfter, now time.Time) (GeneratedCertificate, error) {
+	if !validCertificateName(name) || !now.Before(notAfter) || notAfter.After(now.Add(365*24*time.Hour)) || authority == nil || !authority.IsCA || now.Before(authority.NotBefore) || !now.Before(authority.NotAfter) {
 		return GeneratedCertificate{}, errors.New("invalid Client Certificate name, lifetime, or Authority")
 	}
 	signer, err := ParseAuthorityKey(authority, privateKeyDER)
@@ -68,7 +76,7 @@ func GenerateClient(authority *x509.Certificate, privateKeyDER []byte, name stri
 	if err != nil {
 		return GeneratedCertificate{}, err
 	}
-	notAfter := now.UTC().Add(time.Duration(days) * 24 * time.Hour)
+	notAfter = notAfter.UTC()
 	if notAfter.After(authority.NotAfter) {
 		notAfter = authority.NotAfter
 	}

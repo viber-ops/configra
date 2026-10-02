@@ -13,6 +13,8 @@ These repository guides describe the checked-out source:
 | Install a binary bundle / 安装二进制包 | [Release installation](release-installation.md) |
 | Deploy the service on Kubernetes / 部署服务 | [Service deployment](../deploy/kubernetes/README.md) |
 | Consume configuration in Pods / Pod 接入 | [CSI and native synchronization](../kubernetes/README.md) |
+| Automate scoped writes / 自动化范围写入 | [English](scoped-write-tokens.md) · [中文](scoped-write-tokens.zh-CN.md) |
+| Upgrade to v1.1.0 / 升级至 v1.1.0 | [Release and migration](releases/v1.1.0.md) |
 | Manage CAs and client certificates / 管理证书 | [Managed certificates](managed-certificates.md) |
 | Back up and restore / 备份恢复 | [Backup and restore](../deploy/backup/README.md) |
 

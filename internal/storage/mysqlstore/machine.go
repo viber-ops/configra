@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -23,15 +24,17 @@ import (
 func (store *Store) TokenForEnvironment(ctx context.Context, publicID, environmentKey string) (machine.Token, error) {
 	token := machine.Token{PublicID: publicID}
 	var (
-		tokenID   []byte
-		digest    []byte
-		expiresAt sql.NullTime
-		revokedAt sql.NullTime
+		tokenID                   []byte
+		digest                    []byte
+		expiresAt                 sql.NullTime
+		revokedAt                 sql.NullTime
+		configKeys, namespaceKeys []byte
 	)
 	// Check only the requested grant using the existing unique indexes. Keep
 	// archived grants: resource reads still return 404 until unarchived.
 	err := store.db.QueryRowContext(ctx, `
 		SELECT token.id, token.secret_digest, token.allow_without_mtls, token.expires_at, token.revoked_at,
+		       token.kind, token.config_keys, token.namespace_keys, token.deployment_certificate_fingerprint,
 		       EXISTS (
 		           SELECT 1 FROM api_token_environments AS grant_record
 		           JOIN environments AS environment ON environment.id = grant_record.environment_id
@@ -39,7 +42,8 @@ func (store *Store) TokenForEnvironment(ctx context.Context, publicID, environme
 		       )
 		FROM api_tokens AS token
 		WHERE token.public_id = ?
-	`, environmentKey, publicID).Scan(&tokenID, &digest, &token.AllowWithoutMTLS, &expiresAt, &revokedAt, &token.EnvironmentGranted)
+	`, environmentKey, publicID).Scan(&tokenID, &digest, &token.AllowWithoutMTLS, &expiresAt, &revokedAt,
+		&token.Kind, &configKeys, &namespaceKeys, &token.CertificateFingerprint, &token.EnvironmentGranted)
 	if errors.Is(err, sql.ErrNoRows) {
 		return machine.Token{}, machine.ErrNotFound
 	}
@@ -48,6 +52,11 @@ func (store *Store) TokenForEnvironment(ctx context.Context, publicID, environme
 	}
 	if len(tokenID) != 16 || len(digest) != sha256.Size {
 		return machine.Token{}, errors.New("API Token record failed integrity validation")
+	}
+	if decodeTokenScope(configKeys, &token.ConfigKeys) != nil || decodeTokenScope(namespaceKeys, &token.NamespaceKeys) != nil ||
+		(token.Kind != machine.TokenReadOnly && token.Kind != machine.TokenWriteScoped) ||
+		(token.Kind == machine.TokenWriteScoped && (!expiresAt.Valid || token.AllowWithoutMTLS)) {
+		return machine.Token{}, errors.New("API Token scope failed integrity validation")
 	}
 	token.Revoked = revokedAt.Valid
 	copy(token.SecretDigest[:], digest)
@@ -124,6 +133,16 @@ func (store *Store) ReadResolvedConfig(
 	references, err := readReferences(ctx, transaction, configID, environmentID, revision)
 	if err != nil {
 		return machine.ResolvedConfig{}, err
+	}
+	if token, ok := machine.TokenFromContext(ctx); ok {
+		if !token.AllowsConfig(configKey) {
+			return machine.ResolvedConfig{}, machine.ErrForbidden
+		}
+		for identity := range references {
+			if !token.AllowsNamespace(identity.namespaceKey) {
+				return machine.ResolvedConfig{}, machine.ErrForbidden
+			}
+		}
 	}
 	items, err := readVaultMetadata(ctx, transaction, environmentID, references)
 	if err != nil {
@@ -478,3 +497,13 @@ func writeLengthPrefixed(destination io.Writer, value []byte) {
 }
 
 var _ machine.Repository = (*Store)(nil)
+
+func decodeTokenScope(encoded []byte, keys *[]string) error {
+	if len(encoded) == 0 {
+		return nil
+	}
+	if json.Unmarshal(encoded, keys) != nil || *keys == nil {
+		return errors.New("invalid stored Token scope")
+	}
+	return validateScopeKeys(*keys)
+}

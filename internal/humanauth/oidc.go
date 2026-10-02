@@ -29,6 +29,7 @@ const (
 	sessionIdentitySubject = "oidc.identity.subject"
 	sessionIdentityEmail   = "oidc.identity.email"
 	sessionIdentityRole    = "oidc.identity.role"
+	sessionIdentityMFA     = "oidc.identity.mfa"
 )
 
 type RoleSource string
@@ -208,10 +209,11 @@ func (authentication *OIDC) callback(response http.ResponseWriter, request *http
 		return
 	}
 	principal := Principal{
-		Issuer:  idToken.Issuer,
-		Subject: idToken.Subject,
-		Email:   claimString(idClaims, "email"),
-		Role:    role,
+		Issuer:      idToken.Issuer,
+		Subject:     idToken.Subject,
+		Email:       claimString(idClaims, "email"),
+		Role:        role,
+		MFAVerified: verifiedMFA(idClaims),
 	}
 	if principal.ActorID() == "" || len(principal.ActorID()) > 255 {
 		writeOIDCError(response, http.StatusUnauthorized, "authentication_failed")
@@ -225,6 +227,7 @@ func (authentication *OIDC) callback(response http.ResponseWriter, request *http
 	authentication.sessions.Put(ctx, sessionIdentitySubject, principal.Subject)
 	authentication.sessions.Put(ctx, sessionIdentityEmail, principal.Email)
 	authentication.sessions.Put(ctx, sessionIdentityRole, string(principal.Role))
+	authentication.sessions.Put(ctx, sessionIdentityMFA, principal.MFAVerified)
 	response.Header().Set("Cache-Control", "no-store")
 	http.Redirect(response, request, safeReturnTo(returnTo), http.StatusSeeOther)
 }
@@ -232,10 +235,11 @@ func (authentication *OIDC) callback(response http.ResponseWriter, request *http
 func (authentication *OIDC) attachPrincipal(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		principal := Principal{
-			Issuer:  authentication.sessions.GetString(request.Context(), sessionIdentityIssuer),
-			Subject: authentication.sessions.GetString(request.Context(), sessionIdentitySubject),
-			Email:   authentication.sessions.GetString(request.Context(), sessionIdentityEmail),
-			Role:    Role(authentication.sessions.GetString(request.Context(), sessionIdentityRole)),
+			Issuer:      authentication.sessions.GetString(request.Context(), sessionIdentityIssuer),
+			Subject:     authentication.sessions.GetString(request.Context(), sessionIdentitySubject),
+			Email:       authentication.sessions.GetString(request.Context(), sessionIdentityEmail),
+			Role:        Role(authentication.sessions.GetString(request.Context(), sessionIdentityRole)),
+			MFAVerified: authentication.sessions.GetBool(request.Context(), sessionIdentityMFA),
 		}
 		if principal.Subject != "" && len(principal.ActorID()) <= 255 &&
 			(principal.Role == RoleViewer || principal.Role == RoleAdmin) {
@@ -243,6 +247,16 @@ func (authentication *OIDC) attachPrincipal(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(response, request)
 	})
+}
+
+// Only the verified ID Token can attest MFA. Role/UserInfo claims and request
+// headers are never authentication evidence. An absent or malformed amr fails closed.
+func verifiedMFA(claims map[string]json.RawMessage) bool {
+	var methods []string
+	if json.Unmarshal(claims["amr"], &methods) != nil {
+		return false
+	}
+	return slices.Contains(methods, "mfa") || (slices.Contains(methods, "pwd") && slices.Contains(methods, "otp"))
 }
 
 func validAuthorizedParty(audience []string, claims map[string]json.RawMessage, clientID string) bool {

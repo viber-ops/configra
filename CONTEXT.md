@@ -9,8 +9,16 @@ A peer context that selects Config and Vault values. It is neither a lifecycle s
 _Avoid_: Stage, tenant
 
 **API Token**:
-A machine credential formatted as `cfg_<public-id>_<secret>` whose editable, possibly empty allowlist explicitly names every Environment it may access and includes all Config and Vault values in those Environments. Its plaintext 256-bit random Secret is shown once and only its hash is stored; at creation its immutable `allow_without_mtls` flag defaults to false but may explicitly permit Token-only Authentication. Allowlist changes take effect immediately and are audited, the Token defaults to 90-day expiry, may explicitly be non-expiring in either authentication mode, and cannot be restored after revocation.
+A machine credential selecting read-only or scoped write access to explicit Environments, optionally narrowed by Config and Vault Namespace allowlists. It is delivered once and can be revoked; its grants never confer a human administrator identity.
 _Avoid_: Global token
+
+**Scoped Write Token**:
+An expiring, revocable machine credential issued by an MFA-verified Administrator for bounded Config, Vault and deployment-credential mutations. It always requires an accepted Client Certificate and cannot delegate write or administrator permissions.
+_Avoid_: Admin token, MFA bypass
+
+**Deployment Credential**:
+A read-only Token and its bound Client Certificate issued together by a Scoped Write Token for one granted Environment. It inherits the issuer's Config and Namespace restrictions and expires no later than the issuer; revoking the issuer revokes its Deployment Credentials.
+_Avoid_: Child write token, recoverable credential export
 
 **Management Server**:
 The human-facing Configra deployment that serves OIDC-authenticated management and mutations.
@@ -21,16 +29,16 @@ The English-and-Chinese human console for Environments, Configs, Vault, Notifica
 _Avoid_: Cold-start configuration editor, stage pipeline
 
 **API Server**:
-The HTTPS-facing Configra deployment that serves exact-key reads of Resolved Configs and File Fields to Machine Clients. It supports Client Certificate authentication and explicitly permitted Token-only Authentication, but does not serve raw Configs, generic Vault Field reads, or resource listing and search.
+The HTTPS-facing Configra deployment that serves exact-key content reads and authorized scoped writes to Machine Clients. Human administration and resource discovery remain on the Management Server.
 _Avoid_: Machine API, Client API
 
 **Resource Key**:
-An immutable lowercase machine identifier for an Environment, Config, Vault Namespace, Vault Item, or Field. It matches `[a-z][a-z0-9_-]{0,62}`; `.` is reserved as the Vault Reference separator. Environment Keys participate in authorization; Vault Namespace and Item Keys identify values but do not grant access.
+An immutable machine identifier for an Environment, Config, Vault Namespace, Vault Item, or Field. It identifies resources in client contracts and allowlists rather than using mutable Display Names.
 _Avoid_: Display name, mutable name
 
 **Vault Namespace**:
-The first immutable identity segment of a Vault Item, used only to organize and disambiguate Items. It has no separate record, Display Name, permissions, Revision history, Archive lifecycle, or management page; access remains determined exclusively by the requested Environment and API Token grant.
-_Avoid_: Tenant, permission scope, folder resource
+The first immutable identity segment of a Vault Item, used to organize and disambiguate Items rather than represent a tenant or separately managed resource. Scoped credentials may narrow Environment grants with a Namespace allowlist.
+_Avoid_: Tenant, folder resource
 
 **Display Name**:
 A mutable human-readable label that never identifies a resource in a client contract.
@@ -85,7 +93,7 @@ A directional operation that creates a new Target Revision equal to the read-onl
 _Avoid_: Merge
 
 **Machine Client**:
-A configuration consumer authenticated with an API Token authorized for the requested Environment and, unless that Token explicitly permits Token-only Authentication, an accepted mTLS Client Certificate.
+A configuration consumer or authorized automation authenticated with an API Token and, unless its read-only Token explicitly permits otherwise, an accepted Client Certificate.
 _Avoid_: Human session
 
 **Client Certificate**:

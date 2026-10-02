@@ -37,6 +37,11 @@ type Config struct {
 	ClickHouse    *ClickHouseConfig    `yaml:"clickhouse,omitempty"`
 	Notifications *NotificationsConfig `yaml:"notifications,omitempty"`
 	Logging       LoggingConfig        `yaml:"logging,omitempty"`
+	WriteTokens   WriteTokenConfig     `yaml:"write_tokens,omitempty"`
+}
+
+type WriteTokenConfig struct {
+	MaxTTLDays int `yaml:"max_ttl_days,omitempty"`
 }
 
 type TLSConfig struct {
@@ -136,6 +141,12 @@ func readConfig(path string) (Config, error) {
 }
 
 func (config *Config) validate(mode Mode) error {
+	if config.WriteTokens.MaxTTLDays == 0 {
+		config.WriteTokens.MaxTTLDays = 90
+	}
+	if config.WriteTokens.MaxTTLDays < 1 || config.WriteTokens.MaxTTLDays > 90 {
+		return errors.New("write Token maximum TTL must be between 1 and 90 days")
+	}
 	if err := config.validateStorage(); err != nil {
 		return err
 	}

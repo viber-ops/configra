@@ -274,9 +274,20 @@ func (store *Store) ListVaultRevisions(ctx context.Context, namespaceKey, itemKe
 func (store *Store) ReadVaultItem(ctx context.Context, namespaceKey, itemKey string, revision uint64, includeValues bool) (VaultItem, error) {
 	transaction, err := store.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if err != nil {
-		return VaultItem{}, fmt.Errorf("begin Vault Item snapshot: %w", err)
+		return VaultItem{}, fmt.Errorf("begin Vault snapshot: %w", err)
 	}
 	defer transaction.Rollback()
+	item, err := store.readVaultItem(ctx, transaction, namespaceKey, itemKey, revision, includeValues)
+	if err != nil {
+		return VaultItem{}, err
+	}
+	if err := transaction.Commit(); err != nil {
+		return VaultItem{}, fmt.Errorf("commit Vault Item snapshot: %w", err)
+	}
+	return item, nil
+}
+
+func (store *Store) readVaultItem(ctx context.Context, transaction *sql.Tx, namespaceKey, itemKey string, revision uint64, includeValues bool) (VaultItem, error) {
 	var (
 		itemID          []byte
 		currentRevision uint64
@@ -396,9 +407,6 @@ func (store *Store) ReadVaultItem(ctx context.Context, namespaceKey, itemKey str
 			}
 			item.Snapshot.Variants[index].Values = values.Values
 		}
-	}
-	if err := transaction.Commit(); err != nil {
-		return VaultItem{}, fmt.Errorf("commit Vault Item snapshot: %w", err)
 	}
 	return item, nil
 }

@@ -12,6 +12,7 @@ import (
 // RejectedMutation contains only server-selected metadata. Request IDs are not
 // OperationIDs: a rejected request must not reserve or overwrite a caller's key.
 type RejectedMutation struct {
+	FieldKey       string
 	RequestID      string
 	Actor          Actor
 	Action         string
@@ -24,9 +25,12 @@ type RejectedMutation struct {
 
 func (store *Store) RecordRejectedMutation(ctx context.Context, rejected RejectedMutation) error {
 	id, err := hex.DecodeString(rejected.RequestID)
-	if err != nil || len(id) != 12 || len(rejected.RequestID) != 24 || !validActor(rejected.Actor) ||
+	if err != nil || len(id) != 12 || len(rejected.RequestID) != 24 || !validScopedActor(rejected.Actor) ||
 		!auditLabel(rejected.Action, 128) || !auditLabel(rejected.ErrorCode, 64) || !auditLabel(rejected.ResourceType, 64) {
 		return errors.New("invalid rejected Mutation metadata")
+	}
+	if rejected.FieldKey != "" && !validResourceKey(rejected.FieldKey) {
+		return ErrValidation
 	}
 	if rejected.EnvironmentKey != "" && !validResourceKey(rejected.EnvironmentKey) {
 		return ErrValidation
@@ -39,6 +43,8 @@ func (store *Store) RecordRejectedMutation(ctx context.Context, rejected Rejecte
 	}
 	payload := struct {
 		Time           time.Time `json:"time"`
+		SourceIP       string    `json:"source_ip,omitempty"`
+		FieldKey       string    `json:"field_key,omitempty"`
 		OperationID    string    `json:"operation_id"`
 		RequestID      string    `json:"request_id"`
 		Actor          Actor     `json:"actor"`
@@ -49,7 +55,7 @@ func (store *Store) RecordRejectedMutation(ctx context.Context, rejected Rejecte
 		NamespaceKey   string    `json:"namespace_key,omitempty"`
 		ResourceType   string    `json:"resource_type"`
 		ResourceKey    string    `json:"resource_key"`
-	}{Time: time.Now().UTC(), RequestID: rejected.RequestID, Actor: rejected.Actor,
+	}{Time: time.Now().UTC(), SourceIP: auditSourceIP(ctx), FieldKey: rejected.FieldKey, RequestID: rejected.RequestID, Actor: rejected.Actor,
 		Action: rejected.Action, Outcome: OutcomeValidationFailed, ErrorCode: rejected.ErrorCode,
 		EnvironmentKey: rejected.EnvironmentKey, NamespaceKey: rejected.NamespaceKey,
 		ResourceType: rejected.ResourceType, ResourceKey: rejected.ResourceKey}

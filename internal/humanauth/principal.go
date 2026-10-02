@@ -10,10 +10,11 @@ const (
 )
 
 type Principal struct {
-	Issuer  string
-	Subject string
-	Email   string
-	Role    Role
+	Issuer      string
+	Subject     string
+	Email       string
+	Role        Role
+	MFAVerified bool
 }
 
 func (principal Principal) ActorID() string {

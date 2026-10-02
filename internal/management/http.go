@@ -479,7 +479,7 @@ func (server *server) readRawConfig(response http.ResponseWriter, request *http.
 }
 
 func (server *server) commitConfig(response http.ResponseWriter, request *http.Request) {
-	principal, ok := requireAdmin(response, request)
+	actor, ok := mutationActor(response, request)
 	if !ok {
 		return
 	}
@@ -494,7 +494,7 @@ func (server *server) commitConfig(response http.ResponseWriter, request *http.R
 	}
 	result, err := server.configs.CommitConfig(request.Context(), mysqlstore.ConfigCommit{
 		OperationID:      request.Header.Get("Idempotency-Key"),
-		Actor:            mysqlstore.Actor{Type: "user", ID: principal.ActorID()},
+		Actor:            actor,
 		EnvironmentKey:   request.PathValue("environment"),
 		ConfigKey:        request.PathValue("config"),
 		ConfigName:       body.Name,
@@ -863,6 +863,9 @@ func (server *server) createToken(response http.ResponseWriter, request *http.Re
 	}
 	var body struct {
 		DisplayName      string     `json:"display_name"`
+		Kind             string     `json:"kind"`
+		ConfigKeys       []string   `json:"config_keys"`
+		NamespaceKeys    []string   `json:"namespace_keys"`
 		EnvironmentKeys  []string   `json:"environment_keys"`
 		AllowWithoutMTLS bool       `json:"allow_without_mtls"`
 		ExpiresAt        *time.Time `json:"expires_at"`
@@ -871,11 +874,16 @@ func (server *server) createToken(response http.ResponseWriter, request *http.Re
 	if !decodeJSON(response, request, &body) {
 		return
 	}
+	if body.Kind == machine.TokenWriteScoped && !principal.MFAVerified {
+		writeError(response, http.StatusForbidden, "mfa_required")
+		return
+	}
 	var expiresAt time.Time
 	if body.ExpiresAt != nil {
 		expiresAt = body.ExpiresAt.UTC()
 	}
 	result, err := server.configs.CreateToken(request.Context(), mysqlstore.TokenCreate{
+		Kind: body.Kind, ConfigKeys: body.ConfigKeys, NamespaceKeys: body.NamespaceKeys,
 		OperationID:      request.Header.Get("Idempotency-Key"),
 		Actor:            mysqlstore.Actor{Type: "user", ID: principal.ActorID()},
 		DisplayName:      body.DisplayName,
@@ -1273,6 +1281,8 @@ func parseRevisionQuery(response http.ResponseWriter, request *http.Request) (my
 
 func writeReadError(response http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, machine.ErrForbidden):
+		writeError(response, http.StatusForbidden, "scope_forbidden")
 	case errors.Is(err, mysqlstore.ErrValidation):
 		writeError(response, http.StatusBadRequest, "invalid_request")
 	case errors.Is(err, mysqlstore.ErrNotFound), errors.Is(err, machine.ErrNotFound):
@@ -1292,6 +1302,12 @@ func writeMutationResult(response http.ResponseWriter, result any, err error) {
 			writer.committed = true
 		}
 		switch {
+		case errors.Is(err, machine.ErrForbidden):
+			writeError(response, http.StatusForbidden, "scope_forbidden")
+		case errors.Is(err, mysqlstore.ErrUnauthorized):
+			writeError(response, http.StatusUnauthorized, "unauthorized")
+		case errors.Is(err, mysqlstore.ErrNotFound):
+			writeError(response, http.StatusNotFound, "not_found")
 		case errors.Is(err, mysqlstore.ErrOperationReuse):
 			writeError(response, http.StatusConflict, "operation_id_reused")
 		case errors.Is(err, mysqlstore.ErrConflict):

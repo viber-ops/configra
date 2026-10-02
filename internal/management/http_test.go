@@ -881,6 +881,34 @@ func TestAdminManagesEnvironmentScopedAPITokensWithoutListingSecrets(t *testing.
 	}
 }
 
+func TestWriteScopedTokenIssuanceRequiresMFA(t *testing.T) {
+	repository := &recordingConfigWriter{}
+	handler := management.NewHandler(repository, nil, nil)
+	body := `{"kind":"write-scoped","display_name":"Operator","environment_keys":["production"],"config_keys":["server"],"namespace_keys":["deployment"],"expires_at":"2099-01-01T00:00:00Z"}`
+	for _, test := range []struct {
+		role   humanauth.Role
+		mfa    bool
+		status int
+	}{
+		{"", false, 401}, {humanauth.RoleViewer, true, 403}, {humanauth.RoleAdmin, false, 403}, {humanauth.RoleAdmin, true, 200},
+	} {
+		request := httptest.NewRequest(http.MethodPost, "https://management.test/v1/api-tokens", strings.NewReader(body))
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Idempotency-Key", "scoped-create-token")
+		if test.role != "" {
+			request = request.WithContext(humanauth.WithPrincipal(request.Context(), humanauth.Principal{Subject: "admin", Role: test.role, MFAVerified: test.mfa}))
+		}
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != test.status {
+			t.Fatalf("issuance HTTP %d, want %d", response.Code, test.status)
+		}
+	}
+	if len(repository.tokenCreates) != 1 || repository.tokenCreates[0].Kind != machine.TokenWriteScoped || len(repository.tokenCreates[0].ConfigKeys) != 1 || len(repository.tokenCreates[0].NamespaceKeys) != 1 {
+		t.Fatal("issuance scope was not preserved")
+	}
+}
+
 func TestAdminImportsOnlyClientCASignedCertificatesAndRevokesByFingerprint(t *testing.T) {
 	roots, certificatePEM := signedClientCertificate(t, "datacenter-a")
 	_, untrustedPEM := signedClientCertificate(t, "untrusted")

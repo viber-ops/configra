@@ -1,6 +1,7 @@
 # Configra --- 轻量配置与敏感信息管理中心设计文档
 
 > V1 Design：短小精悍、语义明确、可审计、可验证。
+> v1.1.0 新增 [scoped write token](scoped-write-tokens.zh-CN.md)；其范围与签发边界以该指南为准。
 
 ## 1. 产品定位
 
@@ -18,9 +19,8 @@ Environment。
 核心原则：**Environment 本身没有方向，跨 Environment 的 Operation
 有方向。** `a → b` 与 `b → a` 是不同操作。
 
-核心原则：**Vault Namespace 只是身份段，不是权限边界。** Vault Item 由
-`(namespace_key, item_key)` 唯一标识；Token 是否能读取仍只取决于请求的
-Environment 是否在其 allowlist 中。
+核心原则：**Vault Namespace 是身份段，不代表租户或独立 ACL 资源。** Vault Item 由
+`(namespace_key, item_key)` 唯一标识。默认 read-only Token 的权限覆盖 Environment；v1.1.0 写令牌及其部署凭据还按 Config/Namespace 白名单收窄权限。
 
 ## 2. V1 非目标
 
@@ -311,7 +311,7 @@ Token 列表永远不返回 digest 或明文；明文只在成功创建的首次
 Operation ID 重试只返回元数据。Environment allowlist 可以整体替换，Revoke
 不可撤销。
 
-V1 Token 默认只读，不设计复杂 Scope。Token 在其明确允许的 Environment 中
+v1.0 的 Token（v1.1.0 中的默认 `read-only`）只读。未设置额外白名单时，在其明确允许的 Environment 中
 可以读取全部 Config 和 Vault 值，包括所有 Namespace 下的 Secret/File；Namespace
 不参与授权，V1 没有 per-Namespace grant 或
 `allow_secrets`。`allow_without_mtls` 仅决定是否允许 Token-only
@@ -319,7 +319,7 @@ Authentication，不改变 Environment 权限。
 
 ## 11. Config API / SDK / Viper
 
-V1 Machine API 只提供两个 exact-key 内容读取端点：
+默认 read-only Token 使用以下两个 exact-key 内容读取端点；v1.1.0 写接口见 [scoped write token 合约](scoped-write-tokens.zh-CN.md)：
 
 ``` text
 GET /v1/environments/{env}/configs/{config}
@@ -327,7 +327,7 @@ GET /v1/environments/{env}/vault-items/{namespace}/{item}/fields/{field}/content
 ```
 
 第一个端点只返回已经完成 Vault 替换的 Resolved Config JSON Envelope；第二个
-端点返回 File Field 原始 bytes。Machine API 不暴露 unresolved Config、通用
+端点返回 File Field 原始 bytes。默认 read-only Token 不暴露 unresolved Config、通用
 Vault Field 读取、list 或 search。禁止日志记录 Resolved Config body 与 File
 bytes。
 

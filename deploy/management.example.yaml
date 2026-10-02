@@ -23,6 +23,10 @@ notifications:
   allowed_internal_hosts: [hooks.example.internal]
   allowed_cidrs: [10.20.0.0/16]
   root_ca_file: /run/configra/tls/notification-ca.pem
+# Optional shorter issuance policy (1..90 days); scoped writers must set an expiry.
+write_tokens:
+  max_ttl_days: 90
+# Write-token issuance requires signed ID Token amr=[mfa] or [pwd, otp].
 oidc:
   issuer: https://identity.example.com
   client_id: configra
