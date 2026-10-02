@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 
 	"github.com/viber-ops/configra/internal/vaultcrypto"
 )
 
 const (
-	schemaVersion     = 3
+	schemaVersion     = 4
 	migrationLockName = "configra:schema-migration"
 )
 
@@ -97,11 +97,16 @@ func initializeOrVerify(ctx context.Context, db *sql.DB, provider *vaultcrypto.L
 	}
 	defer releaseMigrationLock(connection)
 
-	if _, err := connection.ExecContext(ctx, schemaMigrationsDDL); err != nil {
-		return fmt.Errorf("create schema migration table: %w", err)
-	}
 	var version uint64
-	if err := connection.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
+	err = connection.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version)
+	var missing *mysql.MySQLError
+	if errors.As(err, &missing) && missing.Number == 1146 {
+		if _, err := connection.ExecContext(ctx, schemaMigrationsDDL); err != nil {
+			return fmt.Errorf("create schema migration table: %w", err)
+		}
+		err = connection.QueryRowContext(ctx, "SELECT COALESCE(MAX(version),0) FROM schema_migrations").Scan(&version)
+	}
+	if err != nil {
 		return fmt.Errorf("read schema version: %w", err)
 	}
 	if version > schemaVersion {
@@ -128,6 +133,14 @@ func initializeOrVerify(ctx context.Context, db *sql.DB, provider *vaultcrypto.L
 		}
 		if _, err := connection.ExecContext(ctx, "INSERT INTO schema_migrations (version) VALUES (3)"); err != nil {
 			return fmt.Errorf("record schema v3: %w", err)
+		}
+	}
+	if version > 0 && version < 4 {
+		if err := applySchemaV4(ctx, connection); err != nil {
+			return err
+		}
+		if _, err := connection.ExecContext(ctx, "INSERT INTO schema_migrations (version) VALUES (4)"); err != nil {
+			return errors.New("record schema v4")
 		}
 	}
 	return nil
@@ -172,6 +185,9 @@ func initializeSchema(ctx context.Context, connection *sql.Conn, provider *vault
 		return err
 	}
 	if err := applySchemaV3(ctx, connection); err != nil {
+		return err
+	}
+	if err := applySchemaV4(ctx, connection); err != nil {
 		return err
 	}
 	sentinel, err := provider.CreateSentinel()

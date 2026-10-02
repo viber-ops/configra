@@ -12,6 +12,10 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/viber-ops/configra/kubernetes/internal/telemetry"
 	"google.golang.org/grpc"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	controllerMetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	metrics "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	pb "sigs.k8s.io/secrets-store-csi-driver/provider/v1alpha1"
@@ -68,6 +73,7 @@ func run() error {
 	socket := flags.String("socket", "/provider/configra.sock", "CSI provider Unix socket")
 	namespace := flags.String("namespace", "", "application namespace watched by the sync controller")
 	health := flags.String("health-address", ":8081", "HTTP health probe address")
+	metricsAddress := flags.String("metrics-address", "127.0.0.1:8080", "Internal Prometheus metrics address; use 0 to disable")
 	leaderElection := flags.Bool("leader-elect", true, "elect one active sync controller per namespace")
 	if err := flags.Parse(os.Args[2:]); err != nil {
 		return err
@@ -86,15 +92,19 @@ func run() error {
 	}
 	ctx := ctrl.SetupSignalHandler()
 	if mode == "provider" {
-		return runProvider(ctx, reader, *socket, *health)
+		registry := prometheus.NewRegistry()
+		registry.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+		observed := telemetry.New(registry)
+		return runProvider(ctx, observed.Wrap(reader), *socket, *health, *metricsAddress, promhttp.HandlerFor(registry, promhttp.HandlerOpts{}), observed)
 	}
 	if *namespace == "" || len(validation.IsDNS1123Label(*namespace)) != 0 {
 		return errors.New("sync requires one valid --namespace")
 	}
-	return runController(ctx, reader, *namespace, *health, *leaderElection)
+	observed := telemetry.New(controllerMetrics.Registry)
+	return runController(ctx, observed.Wrap(reader), *namespace, *health, *leaderElection, *metricsAddress)
 }
 
-func runProvider(ctx context.Context, reader source.Fetcher, socket, healthAddress string) error {
+func runProvider(ctx context.Context, reader source.Fetcher, socket, healthAddress, metricsAddress string, metricHandler http.Handler, observed *telemetry.Metrics) error {
 	if !filepath.IsAbs(socket) || filepath.Base(socket) != "configra.sock" {
 		return errors.New("provider socket must be an absolute path ending in configra.sock")
 	}
@@ -117,7 +127,7 @@ func runProvider(ctx context.Context, reader source.Fetcher, socket, healthAddre
 	if err := os.Chmod(socket, 0600); err != nil {
 		return errors.New("restrict provider socket permissions")
 	}
-	server := grpc.NewServer(grpc.MaxRecvMsgSize(1<<20), grpc.MaxSendMsgSize(4<<20), grpc.MaxConcurrentStreams(4))
+	server := grpc.NewServer(grpc.MaxRecvMsgSize(1<<20), grpc.MaxSendMsgSize(4<<20), grpc.MaxConcurrentStreams(4), grpc.UnaryInterceptor(observed.Intercept))
 	pb.RegisterCSIDriverProviderServer(server, &provider.Server{Source: reader})
 	probe := &http.Server{Addr: healthAddress, ReadHeaderTimeout: 3 * time.Second, Handler: http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/healthz" && request.URL.Path != "/readyz" {
@@ -126,7 +136,12 @@ func runProvider(ctx context.Context, reader source.Fetcher, socket, healthAddre
 		}
 		response.WriteHeader(http.StatusNoContent)
 	})}
-	result := make(chan error, 2)
+	result := make(chan error, 3)
+	var metricServer *http.Server
+	if metricsAddress != "0" {
+		metricServer = &http.Server{Addr: metricsAddress, ReadHeaderTimeout: 3 * time.Second, Handler: metricHandler}
+		go func() { result <- metricServer.ListenAndServe() }()
+	}
 	go func() { result <- server.Serve(listener) }()
 	go func() { result <- probe.ListenAndServe() }()
 	var runErr error
@@ -138,13 +153,16 @@ func runProvider(ctx context.Context, reader source.Fetcher, socket, healthAddre
 	shutdown, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	_ = probe.Shutdown(shutdown)
+	if metricServer != nil {
+		_ = metricServer.Shutdown(shutdown)
+	}
 	if runErr != nil && !errors.Is(runErr, http.ErrServerClosed) && !errors.Is(runErr, grpc.ErrServerStopped) {
 		return errors.New("provider listener stopped")
 	}
 	return nil
 }
 
-func runController(ctx context.Context, reader source.Fetcher, namespace, healthAddress string, leaderElection bool) error {
+func runController(ctx context.Context, reader source.Fetcher, namespace, healthAddress string, leaderElection bool, metricsAddress string) error {
 	ctrl.SetLogger(zap.New())
 	scheme := runtime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {
@@ -159,7 +177,7 @@ func runController(ctx context.Context, reader source.Fetcher, namespace, health
 	}
 	manager, err := ctrl.NewManager(config, ctrl.Options{
 		Scheme: scheme, Cache: cache.Options{DefaultNamespaces: map[string]cache.Config{namespace: {}}},
-		Metrics: metrics.Options{BindAddress: "0"}, HealthProbeBindAddress: healthAddress,
+		Metrics: metrics.Options{BindAddress: metricsAddress}, HealthProbeBindAddress: healthAddress,
 		LeaderElection: leaderElection, LeaderElectionID: "configra-binding-controller", LeaderElectionNamespace: namespace,
 	})
 	if err != nil {

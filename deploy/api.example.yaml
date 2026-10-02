@@ -1,6 +1,15 @@
 # Client CA is a cold-start trust root. Individual accepted certificates and
 # Token allowlists are managed dynamically by Configra.
 version: 1
+# Optional private HTTP metrics listener, separate from public HTTPS.
+observability:
+  listen: 127.0.0.1:9091
+# Per-process budgets; choose values from mixed read/write measurements.
+api_write_limits:
+  concurrent: 4
+  requests_per_second: 50
+  burst: 100
+  per_token_requests_per_second: 25
 listen: :9443
 tls:
   certificate_file: /run/configra/tls/server.crt

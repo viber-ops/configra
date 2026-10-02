@@ -13,6 +13,12 @@ These repository guides describe the checked-out source:
 | Install a binary bundle / 安装二进制包 | [Release installation](release-installation.md) |
 | Deploy the service on Kubernetes / 部署服务 | [Service deployment](../deploy/kubernetes/README.md) |
 | Consume configuration in Pods / Pod 接入 | [CSI and native synchronization](../kubernetes/README.md) |
+| Operate deployments / 部署 CLI | [configractl](cli.md) |
+| Publish/rollback whole sets / 整套发布回滚 | [Release sets](release-sets.md) |
+| Revoke human sessions / 撤销人工会话 | [Session control](session-control.md) |
+| Monitor and retain data / 监控与数据保留 | [Metrics](../deploy/monitoring/README.md), [Outbox retention](data-retention.md) |
+| Production roles and HA / 生产权限与 HA | [DB roles](../deploy/mysql/README.md), [HA overlay](../deploy/kubernetes/production/README.md) |
+| Upgrade to v1.2.0 / 升级至 v1.2.0 | [Schema 3 → 4](releases/v1.2.0.md) |
 | Automate scoped writes / 自动化范围写入 | [English](scoped-write-tokens.md) · [中文](scoped-write-tokens.zh-CN.md) |
 | Upgrade to v1.1.0 / 升级至 v1.1.0 | [Release and migration](releases/v1.1.0.md) |
 | Manage CAs and client certificates / 管理证书 | [Managed certificates](managed-certificates.md) |
@@ -26,9 +32,10 @@ These repository guides describe the checked-out source:
 | How does the domain work? / 领域模型是什么？ | [Terminology](../CONTEXT.md), [detailed design](design.md) |
 | Why were these choices made? / 为什么这样设计？ | [Numbered architecture decisions](adr/) |
 | What did the security review find? / 安全审查结论是什么？ | [Security and architecture review](security-architecture-review.md) |
+| Which operational capabilities should come next? / 哪些运维与架构能力应优先补齐？ | [v1.1.0 operations and architecture review](research/operations-architecture-review-2026-10-02.md) |
 | How should the UI behave? / 界面如何组织？ | [UI design, routes and screenshots](ui.md) |
 | How are release materials assembled? / 如何维护发布材料？ | [Distribution tooling](../scripts/DISTRIBUTION.md) |
-| What was actually tested? / 哪些操作真正验证过？ | [2026-09-22 verification record](verification/2026-09-22.md), [September 12 release checks](verification/2026-09-12.md), [migration record](verification/2026-09-11-migration.md) |
+| What was actually tested? / 哪些操作真正验证过？ | [2026-10-03 verification](verification/2026-10-03.md), [2026-09-22 verification record](verification/2026-09-22.md), [September 12 release checks](verification/2026-09-12.md), [migration record](verification/2026-09-11-migration.md) |
 
 [Contributing](../CONTRIBUTING.md) and [private security reporting](../SECURITY.md)
 describe the contribution and disclosure process. [Research notes](research/) retain

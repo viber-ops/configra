@@ -1,5 +1,7 @@
 # Secret values are injected through environment variables or mounted files.
 version: 1
+observability:
+  listen: 127.0.0.1:9090
 listen: :8443
 tls:
   certificate_file: /run/configra/tls/server.crt

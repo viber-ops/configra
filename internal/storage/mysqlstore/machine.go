@@ -34,7 +34,7 @@ func (store *Store) TokenForEnvironment(ctx context.Context, publicID, environme
 	// archived grants: resource reads still return 404 until unarchived.
 	err := store.db.QueryRowContext(ctx, `
 		SELECT token.id, token.secret_digest, token.allow_without_mtls, token.expires_at, token.revoked_at,
-		       token.kind, token.config_keys, token.namespace_keys, token.deployment_certificate_fingerprint,
+		       token.kind, token.config_keys, token.namespace_keys, token.deployment_certificate_fingerprint,COALESCE(token.parent_public_id,''),
 		       EXISTS (
 		           SELECT 1 FROM api_token_environments AS grant_record
 		           JOIN environments AS environment ON environment.id = grant_record.environment_id
@@ -43,7 +43,7 @@ func (store *Store) TokenForEnvironment(ctx context.Context, publicID, environme
 		FROM api_tokens AS token
 		WHERE token.public_id = ?
 	`, environmentKey, publicID).Scan(&tokenID, &digest, &token.AllowWithoutMTLS, &expiresAt, &revokedAt,
-		&token.Kind, &configKeys, &namespaceKeys, &token.CertificateFingerprint, &token.EnvironmentGranted)
+		&token.Kind, &configKeys, &namespaceKeys, &token.CertificateFingerprint, &token.ParentPublicID, &token.EnvironmentGranted)
 	if errors.Is(err, sql.ErrNoRows) {
 		return machine.Token{}, machine.ErrNotFound
 	}

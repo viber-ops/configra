@@ -83,6 +83,20 @@ func (reader *Reader) Read(ctx context.Context, objects []Object, credentials ma
 		return nil, errors.New("invalid Configra client credentials")
 	}
 	defer client.CloseIdleConnections()
+	if objects[0].Type == "release" {
+		bundle, err := client.ReadRelease(ctx, objects[0].Environment, objects[0].Config, "", "")
+		if err != nil {
+			return nil, errors.New("Configra release read failed")
+		}
+		result := []Material{{Path: bundle.Manifest.ConfigPath, Version: bundle.ETag, Bytes: []byte(bundle.Config.Content), Format: bundle.Config.Format, Sensitive: len(bundle.Manifest.VaultRevisions) > 0}}
+		for _, file := range bundle.Files {
+			result = append(result, Material{Path: file.Path, Version: bundle.ETag, Bytes: file.Bytes, Sensitive: true})
+		}
+		if err := ValidateMaterials(objects, result); err != nil {
+			return nil, err
+		}
+		return result, nil
+	}
 	var result []Material
 	total := 0
 	for _, object := range objects {
@@ -117,6 +131,14 @@ func ValidateObjects(objects []Object) error {
 	if len(objects) == 0 || len(objects) > 32 {
 		return errors.New("between 1 and 32 objects are required")
 	}
+	for _, object := range objects {
+		if object.Type == "release" {
+			if len(objects) != 1 || !resourceKey.MatchString(object.Environment) || !resourceKey.MatchString(object.Config) || object.Path != "." || object.Namespace != "" || object.Item != "" || object.Field != "" {
+				return errors.New("one release source with root path and no other objects is required")
+			}
+			return nil
+		}
+	}
 	seen := map[string]bool{}
 	for _, object := range objects {
 		if !resourceKey.MatchString(object.Environment) || !ValidPath(object.Path) || seen[object.Path] {
@@ -139,6 +161,36 @@ func ValidateObjects(objects []Object) error {
 			}
 		default:
 			return errors.New("object type must be config or file")
+		}
+	}
+	return nil
+}
+
+// Both adapters verify this batch contract before writing any target. Release
+// members share one ETag; normal objects still match their explicit mapping.
+func ValidateMaterials(objects []Object, materials []Material) error {
+	if ValidateObjects(objects) != nil || len(materials) < 1 || len(materials) > 32 {
+		return errors.New("invalid Configra material batch")
+	}
+	release := objects[0].Type == "release"
+	if !release && len(materials) != len(objects) {
+		return errors.New("incomplete Configra material batch")
+	}
+	seen := map[string]bool{}
+	total := 0
+	for index, material := range materials {
+		if !ValidPath(material.Path) || seen[material.Path] || material.Version == "" || (!release && material.Path != objects[index].Path) || (release && material.Version != materials[0].Version) {
+			return errors.New("inconsistent Configra material batch")
+		}
+		for previous := range seen {
+			if strings.HasPrefix(previous, material.Path+"/") || strings.HasPrefix(material.Path, previous+"/") {
+				return errors.New("conflicting Configra material paths")
+			}
+		}
+		seen[material.Path] = true
+		total += len(material.Bytes)
+		if total > MaxContentBytes {
+			return errors.New("resolved objects exceed the 3 MiB mount limit")
 		}
 	}
 	return nil

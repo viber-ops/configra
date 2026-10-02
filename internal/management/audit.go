@@ -17,6 +17,7 @@ import (
 type mutationAuditRoute struct{ action, resourceType, resourceParameter string }
 
 var mutationAuditRoutes = map[string]mutationAuditRoute{
+	"POST /v1/session-policies":                                                        {"identity.change", "identity", ""},
 	"POST /v1/environments":                                                            {"environment.create", "environment", "environment"},
 	"PATCH /v1/environments/{environment}":                                             {"environment.rename", "environment", "environment"},
 	"POST /v1/environments/{environment}/archive":                                      {"environment.archive", "environment", "environment"},

@@ -34,6 +34,7 @@ const (
 
 type Token struct {
 	PublicID               string
+	ParentPublicID         string
 	SecretDigest           [sha256.Size]byte
 	EnvironmentGranted     bool // For the Environment passed to TokenForEnvironment.
 	AllowWithoutMTLS       bool
@@ -83,6 +84,8 @@ type Repository interface {
 	IsCertificateActive(context.Context, [sha256.Size]byte) (bool, error)
 	ReadResolvedConfig(context.Context, string, string, string) (ResolvedConfig, error)
 	ReadFile(context.Context, string, string, string, string, string) (FileContent, error)
+	ReadRelease(context.Context, string, string, string, string) (ReleaseBundle, error)
+	ReadReleaseState(context.Context, string, string) (ReleaseState, error)
 }
 
 type Authentication string
@@ -116,9 +119,53 @@ func NewHandler(repository Repository, publisher AccessPublisher) http.Handler {
 	}
 	server := &server{repository: repository, publisher: publisher, now: time.Now}
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/environments/{environment}/identity", server.readIdentity)
 	mux.HandleFunc("GET /v1/environments/{environment}/configs/{config}", server.readResolvedConfig)
+	mux.HandleFunc("GET /v1/environments/{environment}/configs/{config}/release", server.readRelease)
+	mux.HandleFunc("GET /v1/environments/{environment}/configs/{config}/release-state", server.readRelease)
+	mux.HandleFunc("GET /v1/environments/{environment}/configs/{config}/releases/{release}", server.readRelease)
 	mux.HandleFunc("GET /v1/environments/{environment}/vault-items/{namespace}/{item}/fields/{field}/content", server.readFile)
 	return mux
+}
+
+func (server *server) readIdentity(response http.ResponseWriter, request *http.Request) {
+	environment := request.PathValue("environment")
+	if !validResourceKey(environment) {
+		writeError(response, 400, "invalid_resource_key")
+		return
+	}
+	token, authentication, status := server.authenticate(request, environment)
+	if status != 0 {
+		writeError(response, status, statusCode(status))
+		return
+	}
+	var expires, certificateExpiry *time.Time
+	if !token.ExpiresAt.IsZero() {
+		value := token.ExpiresAt
+		expires = &value
+	}
+	fingerprint := ""
+	if request.TLS != nil && len(request.TLS.PeerCertificates) > 0 {
+		certificate := request.TLS.PeerCertificates[0]
+		value := certificate.NotAfter.UTC()
+		certificateExpiry = &value
+		digest := sha256.Sum256(certificate.Raw)
+		fingerprint = hex.EncodeToString(digest[:])
+	}
+	response.Header().Set("Cache-Control", "no-store")
+	response.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(response).Encode(struct {
+		PublicID               string         `json:"public_id"`
+		ParentPublicID         string         `json:"parent_public_id,omitempty"`
+		Kind                   string         `json:"kind"`
+		Environment            string         `json:"environment"`
+		ConfigKeys             []string       `json:"config_keys"`
+		NamespaceKeys          []string       `json:"namespace_keys"`
+		ExpiresAt              *time.Time     `json:"expires_at"`
+		Authentication         Authentication `json:"authentication"`
+		CertificateFingerprint string         `json:"certificate_fingerprint,omitempty"`
+		CertificateExpiresAt   *time.Time     `json:"certificate_expires_at,omitempty"`
+	}{token.PublicID, token.ParentPublicID, token.Kind, environment, token.ConfigKeys, token.NamespaceKeys, expires, authentication, fingerprint, certificateExpiry})
 }
 
 func (server *server) readFile(response http.ResponseWriter, request *http.Request) {
@@ -283,14 +330,14 @@ func (server *server) authenticate(request *http.Request, environment string) (T
 		(!token.ExpiresAt.IsZero() && !server.now().Before(token.ExpiresAt)) {
 		return Token{}, "", http.StatusUnauthorized
 	}
-	if !token.EnvironmentGranted {
-		return token, "", http.StatusForbidden
-	}
 	if request.TLS == nil {
 		return Token{}, "", http.StatusUnauthorized
 	}
 	if len(request.TLS.PeerCertificates) == 0 {
 		if token.AllowWithoutMTLS && token.Kind != TokenWriteScoped && len(token.CertificateFingerprint) == 0 {
+			if !token.EnvironmentGranted {
+				return token, "", http.StatusForbidden
+			}
 			return token, AuthenticationTokenOnly, 0
 		}
 		return Token{}, "", http.StatusUnauthorized
@@ -305,6 +352,9 @@ func (server *server) authenticate(request *http.Request, environment string) (T
 	}
 	if !active {
 		return Token{}, "", http.StatusUnauthorized
+	}
+	if !token.EnvironmentGranted {
+		return token, "", http.StatusForbidden
 	}
 	return token, AuthenticationMTLS, 0
 }

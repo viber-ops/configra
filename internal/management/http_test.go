@@ -1412,6 +1412,13 @@ func (writer *recordingConfigWriter) ReadResolvedConfig(_ context.Context, envir
 	writer.resolvedReads = append(writer.resolvedReads, [2]string{environment, config})
 	return writer.resolved, writer.resolvedErr
 }
+func (writer *recordingConfigWriter) ChangeSessions(context.Context, mysqlstore.SessionChange) (mysqlstore.SessionChangeResult, error) {
+	return mysqlstore.SessionChangeResult{}, nil
+}
+func (writer *recordingConfigWriter) ListSessionPolicies(context.Context, mysqlstore.InventoryQuery) (mysqlstore.InventoryPage[mysqlstore.SessionPolicySummary], error) {
+	return mysqlstore.InventoryPage[mysqlstore.SessionPolicySummary]{Items: []mysqlstore.SessionPolicySummary{}}, nil
+}
+
 func (writer *recordingConfigWriter) RecordRejectedMutation(_ context.Context, request mysqlstore.RejectedMutation) error {
 	writer.rejectedMutations = append(writer.rejectedMutations, request)
 	return nil

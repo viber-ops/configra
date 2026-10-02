@@ -52,6 +52,7 @@ jobs:
           cd "dist/$RELEASE_TAG"
           sha256sum -c SHA256SUMS
           "configra_${RELEASE_TAG#v}_linux_amd64/configra" --version
+          "configra_${RELEASE_TAG#v}_linux_amd64/configractl" --version
           "configra_${RELEASE_TAG#v}_linux_amd64/configra-kubernetes" --version
       - name: Create reviewable draft release
         env:

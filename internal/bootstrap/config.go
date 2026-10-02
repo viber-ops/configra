@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/url"
 	"os"
@@ -27,17 +28,30 @@ const (
 )
 
 type Config struct {
-	Version       int                  `yaml:"version"`
-	Listen        string               `yaml:"listen"`
-	TLS           TLSConfig            `yaml:"tls"`
-	MySQL         MySQLConfig          `yaml:"mysql"`
-	KeyProvider   KeyProviderConfig    `yaml:"key_provider"`
-	OIDC          *OIDCConfig          `yaml:"oidc,omitempty"`
-	NATS          *NATSConfig          `yaml:"nats,omitempty"`
-	ClickHouse    *ClickHouseConfig    `yaml:"clickhouse,omitempty"`
-	Notifications *NotificationsConfig `yaml:"notifications,omitempty"`
-	Logging       LoggingConfig        `yaml:"logging,omitempty"`
-	WriteTokens   WriteTokenConfig     `yaml:"write_tokens,omitempty"`
+	Version        int                  `yaml:"version"`
+	Listen         string               `yaml:"listen"`
+	TLS            TLSConfig            `yaml:"tls"`
+	MySQL          MySQLConfig          `yaml:"mysql"`
+	KeyProvider    KeyProviderConfig    `yaml:"key_provider"`
+	OIDC           *OIDCConfig          `yaml:"oidc,omitempty"`
+	NATS           *NATSConfig          `yaml:"nats,omitempty"`
+	ClickHouse     *ClickHouseConfig    `yaml:"clickhouse,omitempty"`
+	Notifications  *NotificationsConfig `yaml:"notifications,omitempty"`
+	Logging        LoggingConfig        `yaml:"logging,omitempty"`
+	WriteTokens    WriteTokenConfig     `yaml:"write_tokens,omitempty"`
+	Observability  ObservabilityConfig  `yaml:"observability,omitempty"`
+	APIWriteLimits APIWriteLimitsConfig `yaml:"api_write_limits,omitempty"`
+}
+
+type APIWriteLimitsConfig struct {
+	Concurrent                int     `yaml:"concurrent,omitempty"`
+	RequestsPerSecond         float64 `yaml:"requests_per_second,omitempty"`
+	Burst                     int     `yaml:"burst,omitempty"`
+	PerTokenRequestsPerSecond float64 `yaml:"per_token_requests_per_second,omitempty"`
+}
+
+type ObservabilityConfig struct {
+	Listen string `yaml:"listen,omitempty"`
 }
 
 type WriteTokenConfig struct {
@@ -118,6 +132,19 @@ func LoadForMaintenance(path string) (Config, error) {
 	return config, nil
 }
 
+// LoadForMetadataMaintenance needs database settings only; it neither loads nor
+// grants access to a Master Key. Use only with narrowly scoped metadata tools.
+func LoadForMetadataMaintenance(path string) (Config, error) {
+	config, err := readConfig(path)
+	if err != nil {
+		return Config{}, err
+	}
+	if err := config.validateDatabase(); err != nil {
+		return Config{}, err
+	}
+	return config, nil
+}
+
 func readConfig(path string) (Config, error) {
 	document, err := readLimitedFile(path, maxConfigBytes)
 	if err != nil {
@@ -141,6 +168,26 @@ func readConfig(path string) (Config, error) {
 }
 
 func (config *Config) validate(mode Mode) error {
+	if config.APIWriteLimits.Concurrent == 0 {
+		config.APIWriteLimits.Concurrent = 4
+	}
+	if config.APIWriteLimits.RequestsPerSecond == 0 {
+		config.APIWriteLimits.RequestsPerSecond = 50
+	}
+	if config.APIWriteLimits.Burst == 0 {
+		config.APIWriteLimits.Burst = 100
+	}
+	if config.APIWriteLimits.PerTokenRequestsPerSecond == 0 {
+		config.APIWriteLimits.PerTokenRequestsPerSecond = config.APIWriteLimits.RequestsPerSecond / 2
+	}
+	if config.APIWriteLimits.Concurrent < 1 || config.APIWriteLimits.Concurrent > 8 || config.APIWriteLimits.Burst < 1 || config.APIWriteLimits.Burst > 10000 {
+		return errors.New("API write concurrency must be 1..8 and burst 1..10000")
+	}
+	for _, value := range []float64{config.APIWriteLimits.RequestsPerSecond, config.APIWriteLimits.PerTokenRequestsPerSecond} {
+		if math.IsNaN(value) || math.IsInf(value, 0) || value < 0.1 || value > 10000 {
+			return errors.New("API write rates must be finite, between 0.1 and 10000 per second")
+		}
+	}
 	if config.WriteTokens.MaxTTLDays == 0 {
 		config.WriteTokens.MaxTTLDays = 90
 	}
@@ -152,6 +199,14 @@ func (config *Config) validate(mode Mode) error {
 	}
 	if err := validateListen(config.Listen); err != nil {
 		return err
+	}
+	if config.Observability.Listen != "" {
+		if err := validateListen(config.Observability.Listen); err != nil {
+			return errors.New("invalid internal metrics listen address")
+		}
+		if config.Observability.Listen == config.Listen {
+			return errors.New("metrics and public HTTPS require separate listeners")
+		}
 	}
 	if config.TLS.CertificateFile == "" || config.TLS.PrivateKeyFile == "" {
 		return errors.New("TLS Certificate and Private Key files are required")
@@ -222,14 +277,21 @@ func (config *Config) validate(mode Mode) error {
 }
 
 func (config Config) validateStorage() error {
+	if err := config.validateDatabase(); err != nil {
+		return err
+	}
+	if config.KeyProvider.MasterKeyFile == "" {
+		return errors.New("Master Key file is required")
+	}
+	return nil
+}
+
+func (config Config) validateDatabase() error {
 	if config.Version != 1 {
 		return errors.New("bootstrap Config version must be 1")
 	}
 	if !validEnvironmentVariable(config.MySQL.DSNEnv) {
 		return errors.New("MySQL DSN environment variable name is invalid")
-	}
-	if config.KeyProvider.MasterKeyFile == "" {
-		return errors.New("Master Key file is required")
 	}
 	if os.Getenv(config.MySQL.DSNEnv) == "" {
 		return fmt.Errorf("environment variable %s is required", config.MySQL.DSNEnv)

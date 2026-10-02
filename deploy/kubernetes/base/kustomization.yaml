@@ -7,4 +7,4 @@ resources:
 images:
   - name: configra
     newName: registry.example.com/configra
-    newTag: v1.1.0
+    newTag: v1.2.0

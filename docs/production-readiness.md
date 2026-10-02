@@ -2,18 +2,28 @@
 
 This document is the completion contract for Configra V1. A capability is complete only when its evidence below exists and passes from a clean checkout; implementation progress or a narrower test is not substitute evidence.
 
-## Current status — 2026-10-02
+## Current status — 2026-10-03
 
-The release target is **v1.1.0** for both the server and Go SDK. It adds
-[MFA-issued scoped writers](scoped-write-tokens.md), immutable scope inheritance
-for read-only deployment credentials and MySQL schema 3. Local real-dependency
-and hosted CI evidence is recorded in [October 2 verification](verification/2026-10-02.md).
-The unchanged ten-minute capacity gate passes on the recorded Mac/Docker host;
-the hosted three-node Kubernetes gate also passes. Earlier local timeouts and
-the hosted Linux warmup failure remain recorded, so current native Linux
-capacity is not claimed. Downloaded tagged archives still require independent
-verification before publication; previous-version results do not establish this
-candidate's acceptance.
+The release target is **v1.2.0** for the server and Go SDK, adding the Cobra
+operator CLI, immutable release sets, pre-install validation, identity/session
+lifecycle, private metrics, write admission, metadata retention and production
+references. [Upgrade](releases/v1.2.0.md) includes MySQL schema 3→4 and separate
+migration/service roles. Scope and secret redaction remain part of acceptance.
+
+Current candidate root/SDK/Kubernetes race tests, scoped SDK/actual CLI real
+MySQL/NATS/ClickHouse E2E, 17-File activation/rollback, restricted MySQL role tests,
+provider/binding batch checks and mixed read/write burst acceptance pass.
+Prometheus rules and HA/backup manifests render/validate. Current actual-image
+recovery/rotation, unchanged ten-minute capacity, hosted three-node Kubernetes,
+server/SDK CI and twelve source executable/material checks pass; see the
+[October 3 verification](verification/2026-10-03.md), including retained failures
+and deployment boundaries. Tagged downloads are checked independently before
+publication; prior-version passes do not substitute for this candidate.
+
+v1.1.0 is published and its recorded evidence remains in
+[October 2 verification](verification/2026-10-02.md). Its unchanged capacity gate
+passed on the recorded Mac/Docker host and the hosted three-node Kubernetes gate
+passed. Earlier failures remain recorded; no new native Linux capacity is claimed.
 
 The table below retains the **v1.0.1 / SDK v1.0.0 baseline**. Its native Linux
 integration/capacity/recovery and three-node Kubernetes results, hosted CI and
@@ -77,9 +87,10 @@ independent-host failure behavior still need deployment-specific verification.
 Tests exercise behavior only through these already-decided interfaces:
 
 1. **Management HTTP** — OIDC-authenticated human queries and Mutations used by the Management UI.
-2. **Machine Read HTTP** — the two exact V1 endpoints fixed by ADR-0018, including Token, mTLS, ETag, limits, and stable error envelopes.
+2. **Machine HTTP** — exact Config/File and scoped write/credential/release endpoints, including Token, mTLS, ETag, limits, and stable error envelopes.
 3. **Go Client and Viper Handler** — exported `configra-go` interfaces for resolved Config, File bytes, Load, Reload, Current, Watch, and Change Callback.
 4. **Process and container** — startup validation, readiness, shutdown, migration, Crypto Sentinel verification, and dependency failure behavior.
+5. **Operator CLI** — the distributed Cobra executable using the SDK against real authenticated services, stable exit codes, private files, validation/rotation and value-free output.
 
 Domain behavior may have fast package tests, but acceptance tests do not query implementation tables or mock Configra's own modules. MySQL, ClickHouse, NATS, TLS, and OIDC test adapters sit only at real external seams.
 The release image contains no embedded Identity Provider, local users, test identities, or authentication bypass. Production acceptance authenticates through the configured external OIDC Provider and returns through the fixed Configra callback.

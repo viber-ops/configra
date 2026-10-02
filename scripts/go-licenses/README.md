@@ -12,6 +12,9 @@ GOTOOLCHAIN=go1.26.7 GOWORK=off GOFLAGS=-mod=readonly \
   -out /absolute/path/to/new/module-materials
 ```
 
+For `configractl`, use the same root module with its executable. Three commands
+across four platforms have independent package-selection guards.
+
 For the Kubernetes executable, run the collector from `kubernetes/`. Normal
 release and Docker builds invoke it automatically. The output directory must be
 new. Failed collection does not publish the temporary material directory.

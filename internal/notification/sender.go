@@ -309,10 +309,15 @@ func elapsedMilliseconds(started time.Time) uint32 {
 
 func validEvent(event Event) bool {
 	_, deliveryErr := hex.DecodeString(event.DeliveryID)
+	actorValid := event.Actor.Type == "user" || event.Actor.Type == "system"
+	if event.Actor.Type == "token" {
+		id, err := hex.DecodeString(event.Actor.ID)
+		actorValid = err == nil && len(id) == 8 && len(event.Actor.ID) == 16 && event.Actor.ID == strings.ToLower(event.Actor.ID)
+	}
 	return event.SchemaVersion == 1 && len(event.DeliveryID) == 32 && deliveryErr == nil && validEventType(event.Type) &&
 		!event.Time.IsZero() && event.OperationID != "" && event.Outcome == mysqlstore.OutcomeSuccess &&
-		(event.Actor.Type == "user" || event.Actor.Type == "system") && event.Actor.ID != "" &&
-		event.ResourceType != "" && event.Resource != ""
+		actorValid && event.Actor.ID != "" &&
+		event.ResourceType != "" && event.Resource != "" && validNotificationResource(event.ResourceType, event.Resource)
 }
 
 func ValidateDestinationURL(provider mysqlstore.NotificationProvider, value string) error {

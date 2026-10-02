@@ -21,6 +21,7 @@ import (
 	"github.com/viber-ops/configra/internal/logworker"
 	"github.com/viber-ops/configra/internal/management"
 	"github.com/viber-ops/configra/internal/notification"
+	"github.com/viber-ops/configra/internal/observability"
 	"github.com/viber-ops/configra/internal/storage/mysqlstore"
 	"github.com/viber-ops/configra/internal/vaultcrypto"
 )
@@ -47,7 +48,7 @@ func NewCommand() *cobra.Command {
 		_ = command.MarkFlagRequired("config")
 		root.AddCommand(command)
 	}
-	root.AddCommand(newDoctorCommand(), newKeyRotationCommand())
+	root.AddCommand(newDoctorCommand(), newKeyRotationCommand(), newSessionsCommand(), newPruneCommand(), newMigrateCommand())
 	return root
 }
 
@@ -97,6 +98,15 @@ func run(ctx context.Context, mode bootstrap.Mode, configPath string) error {
 			return err
 		}
 		defer store.Close()
+		metrics := observability.New(string(mode), store)
+		stopMetrics, err := metrics.Start(ctx, config.Observability.Listen)
+		if err != nil {
+			return err
+		}
+		defer stopMetrics()
+		if certificate, err := x509.ParseCertificate(tlsConfig.Certificates[0].Certificate[0]); err == nil {
+			metrics.ServerCertificateExpiry(certificate.NotAfter)
+		}
 		store.WriteTokenMaxTTL = time.Duration(config.WriteTokens.MaxTTLDays) * 24 * time.Hour
 		sessionStore := store.NewManagementSessionStore(5 * time.Minute)
 		defer sessionStore.StopCleanup()
@@ -123,6 +133,7 @@ func run(ctx context.Context, mode bootstrap.Mode, configPath string) error {
 			ViewerValues:          oidcConfig.ViewerValues,
 			AdminValues:           oidcConfig.AdminValues,
 			AllowInsecureLoopback: oidcConfig.AllowInsecureLoopback,
+			SessionAuthority:      store,
 		}, sessions)
 		if err != nil {
 			return err
@@ -133,6 +144,8 @@ func run(ctx context.Context, mode bootstrap.Mode, configPath string) error {
 		}
 		defer logs.Close()
 		consumer, err := accessnats.ConnectConsumer(accessnats.Config{
+			OnDrop:          func(count uint64) { metrics.Dropped("consume", count) },
+			OnConnection:    func(ok bool) { metrics.Worker("access", ok) },
 			URLs:            config.NATS.URLs,
 			CredentialsFile: config.NATS.CredentialsFile,
 			RootCAFile:      config.NATS.RootCAFile,
@@ -158,10 +171,13 @@ func run(ctx context.Context, mode bootstrap.Mode, configPath string) error {
 		defer notificationSender.CloseIdleConnections()
 		workerContext, cancelWorker := context.WithCancel(ctx)
 		workerDone := make(chan struct{})
+		var workerErr error
 		go func() {
 			defer close(workerDone)
-			if err := logworker.Run(workerContext, store, logs, consumer, notificationSender, logger); err != nil {
+			workerErr = logworker.Run(workerContext, store, logs, consumer, notificationSender, logger, metrics.Worker)
+			if workerErr != nil {
 				logger.Error("Log Worker stopped unexpectedly")
+				cancelWorker()
 			}
 		}()
 		defer func() {
@@ -169,7 +185,10 @@ func run(ctx context.Context, mode bootstrap.Mode, configPath string) error {
 			<-workerDone
 		}()
 		handler := withHealth(authentication.Handler(management.NewHandler(store, consumer, clientCAs, logs)), store.Ping)
-		return serve(ctx, config.Listen, tlsConfig, handler, logger, mode)
+		serveErr := serve(workerContext, config.Listen, tlsConfig, metrics.Instrument(handler), logger, mode)
+		cancelWorker()
+		<-workerDone
+		return errors.Join(serveErr, workerErr)
 	}
 
 	store, err := mysqlstore.OpenAPI(startupContext, config.MySQLDSN(), provider)
@@ -177,6 +196,15 @@ func run(ctx context.Context, mode bootstrap.Mode, configPath string) error {
 		return err
 	}
 	defer store.Close()
+	metrics := observability.New(string(mode), store)
+	stopMetrics, err := metrics.Start(ctx, config.Observability.Listen)
+	if err != nil {
+		return err
+	}
+	defer stopMetrics()
+	if certificate, err := x509.ParseCertificate(tlsConfig.Certificates[0].Certificate[0]); err == nil {
+		metrics.ServerCertificateExpiry(certificate.NotAfter)
+	}
 	trust, err := clientcert.NewTrustManager(startupContext, tlsConfig.ClientCAs, store.ActiveCertificateAuthorities)
 	if err != nil {
 		return err
@@ -190,6 +218,8 @@ func run(ctx context.Context, mode bootstrap.Mode, configPath string) error {
 	}()
 	defer func() { cancelTrust(); <-trustDone }()
 	publisher, err := accessnats.Connect(accessnats.Config{
+		OnDrop:          func(count uint64) { metrics.Dropped("publish", count) },
+		OnConnection:    func(ok bool) { metrics.Worker("access", ok) },
 		URLs:            config.NATS.URLs,
 		CredentialsFile: config.NATS.CredentialsFile,
 		RootCAFile:      config.NATS.RootCAFile,
@@ -204,8 +234,9 @@ func run(ctx context.Context, mode bootstrap.Mode, configPath string) error {
 			logger.Warn("NATS Access Event flush did not complete")
 		}
 	}()
-	handler := withHealth(management.NewMachineHandler(store, publisher), store.Ping)
-	return serve(ctx, config.Listen, tlsConfig, handler, logger, mode)
+	limits := config.APIWriteLimits
+	handler := withHealth(management.NewMachineHandler(store, publisher, management.WriteLimits{Concurrent: limits.Concurrent, RequestsPerSecond: limits.RequestsPerSecond, Burst: limits.Burst, PerTokenRequestsPerSecond: limits.PerTokenRequestsPerSecond}), store.Ping)
+	return serve(ctx, config.Listen, tlsConfig, metrics.Instrument(handler), logger, mode)
 }
 
 func withHealth(next http.Handler, ping func(context.Context) error) http.Handler {

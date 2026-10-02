@@ -15,6 +15,9 @@ assert.match(version, /^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/, 'Pass a release di
 const expectedSDK = readFileSync(join(root, 'kubernetes/go.mod'), 'utf8')
   .match(/^\s*github\.com\/viber-ops\/configra-go\s+(\S+)$/m)?.[1];
 assert.ok(expectedSDK, 'Kubernetes declares its SDK version');
+const expectedClientSDK = readFileSync(join(root, 'go.mod'), 'utf8')
+  .match(/^\s*github\.com\/viber-ops\/configra-go\s+(\S+)$/m)?.[1];
+assert.ok(expectedClientSDK, 'CLI declares its SDK version');
 const checksums = new Map(
   readFileSync(join(directory, 'SHA256SUMS'), 'utf8').trim().split('\n').map((line) => {
     const match = /^([a-f0-9]{64})  (configra_[A-Za-z0-9_.-]+\.tar\.gz)$/.exec(line);
@@ -66,7 +69,7 @@ for (const platform of ['darwin', 'linux']) {
     assert.equal(build.arch, arch);
     assert.match(build.commit, /^[a-f0-9]{40}$/);
     assert.equal(build.cgo, false);
-    for (const binary of ['configra', 'configra-kubernetes']) {
+    for (const binary of ['configra', 'configractl', 'configra-kubernetes']) {
       assert.ok(entries.includes(`${name}/${binary}`), `${name}: missing ${binary}`);
       const temporary = mkdtempSync(join(tmpdir(), 'configra-release-check-'));
       try {
@@ -118,9 +121,9 @@ for (const platform of ['darwin', 'linux']) {
           assert.equal(createHash('sha256').update(zip).digest('hex'),
             'dc93f5770556406e82bf750a980d2316f882a19d883a3689eadb820708c2b651', 'Exact upstream MPL source is delivered');
         }
-        if (binary === 'configra-kubernetes') {
+        if (binary === 'configra-kubernetes' || binary === 'configractl') {
           const sdk = info.Deps.find((dep) => dep.Path === 'github.com/viber-ops/configra-go');
-          assert.equal(sdk?.Version, expectedSDK, `${name}: SDK matches the published module pin`);
+          assert.equal(sdk?.Version, binary === 'configractl' ? expectedClientSDK : expectedSDK, `${name}: SDK matches the published module pin`);
           assert.match(sdk.Sum, /^h1:[A-Za-z0-9+/]+=*$/, `${name}: SDK source checksum is recorded`);
         }
       } finally {

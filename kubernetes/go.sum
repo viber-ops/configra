@@ -126,6 +126,10 @@ github.com/subosito/gotenv v1.6.0 h1:9NlTDc1FTs4qu0DDq7AEtTPNw6SVm7uBMsUCUjABIf8
 github.com/subosito/gotenv v1.6.0/go.mod h1:Dk4QP5c2W3ibzajGcXpNraDfq2IrhjMIvMSWPKKo0FU=
 github.com/viber-ops/configra-go v1.0.0 h1:6oHBwkKCR/xyGHLum7ZW4cMiNlyDHFeBkDd56xdm6JI=
 github.com/viber-ops/configra-go v1.0.0/go.mod h1:pl4nVulwmGBReCrZMajV3AHs9O4oJLUIPmGVrOGOiOs=
+github.com/viber-ops/configra-go v1.1.1-0.20261002200032-fc42d0fab0f1 h1:GGY89MvPZCH8x2EhQZwEdLVbL0b6XQA75Wy2t9eeTlI=
+github.com/viber-ops/configra-go v1.1.1-0.20261002200032-fc42d0fab0f1/go.mod h1:pl4nVulwmGBReCrZMajV3AHs9O4oJLUIPmGVrOGOiOs=
+github.com/viber-ops/configra-go v1.2.0 h1:m46ISfz/OiQxBRBFNUuthlY4QkaNKXPPhH5xqTOUI58=
+github.com/viber-ops/configra-go v1.2.0/go.mod h1:pl4nVulwmGBReCrZMajV3AHs9O4oJLUIPmGVrOGOiOs=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=
 github.com/x448/float16 v0.8.4/go.mod h1:14CWIYCyZA/cWjXOioeEpHeN/83MdbZDRQHoFcYsOfg=
 go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=

@@ -32,6 +32,8 @@ const maxManagementRequestBytes = 32 << 20
 type ConfigRepository interface {
 	AuthorityRepository
 	RecordRejectedMutation(context.Context, mysqlstore.RejectedMutation) error
+	ChangeSessions(context.Context, mysqlstore.SessionChange) (mysqlstore.SessionChangeResult, error)
+	ListSessionPolicies(context.Context, mysqlstore.InventoryQuery) (mysqlstore.InventoryPage[mysqlstore.SessionPolicySummary], error)
 	ListEnvironments(context.Context, mysqlstore.EnvironmentQuery) (mysqlstore.InventoryPage[mysqlstore.Environment], error)
 	ApplyEnvironmentChange(context.Context, mysqlstore.EnvironmentChange) (mysqlstore.EnvironmentChangeResult, error)
 	ListConfigs(context.Context, mysqlstore.ConfigQuery) (mysqlstore.InventoryPage[mysqlstore.ConfigSummary], error)
@@ -94,6 +96,8 @@ func NewHandler(configs ConfigRepository, publisher machine.AccessPublisher, cli
 	mux.Handle("GET /{$}", interfaceHandler)
 	mux.Handle("GET /ui/", interfaceHandler)
 	mux.HandleFunc("GET /v1/me", server.readMe)
+	mux.HandleFunc("GET /v1/session-policies", server.listSessionPolicies)
+	mux.HandleFunc("POST /v1/session-policies", server.changeSessions)
 	mux.HandleFunc("GET /v1/environments", server.listEnvironments)
 	mux.HandleFunc("POST /v1/environments", server.createEnvironment)
 	mux.HandleFunc("PATCH /v1/environments/{environment}", server.renameEnvironment)
@@ -1306,7 +1310,9 @@ func writeMutationResult(response http.ResponseWriter, result any, err error) {
 			writeError(response, http.StatusForbidden, "scope_forbidden")
 		case errors.Is(err, mysqlstore.ErrUnauthorized):
 			writeError(response, http.StatusUnauthorized, "unauthorized")
-		case errors.Is(err, mysqlstore.ErrNotFound):
+		case errors.Is(err, machine.ErrUnresolved):
+			writeError(response, http.StatusUnprocessableEntity, "unresolved_vault_reference")
+		case errors.Is(err, mysqlstore.ErrNotFound), errors.Is(err, machine.ErrNotFound):
 			writeError(response, http.StatusNotFound, "not_found")
 		case errors.Is(err, mysqlstore.ErrOperationReuse):
 			writeError(response, http.StatusConflict, "operation_id_reused")
