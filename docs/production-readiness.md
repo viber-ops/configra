@@ -13,10 +13,12 @@ migration/service roles. Scope and secret redaction remain part of acceptance.
 Current candidate root/SDK/Kubernetes race tests, scoped SDK/actual CLI real
 MySQL/NATS/ClickHouse E2E, 17-File activation/rollback, restricted MySQL role tests,
 provider/binding batch checks and mixed read/write burst acceptance pass.
-Prometheus rules and HA/backup manifests render/validate. Full final-image,
-ten-minute capacity, three-node Kubernetes, hosted CI and downloaded tagged
-archive verification are still required before publishing v1.2.0; prior-version
-passes do not satisfy those gates.
+Prometheus rules and HA/backup manifests render/validate. Current actual-image
+recovery/rotation, unchanged ten-minute capacity, hosted three-node Kubernetes,
+server/SDK CI and twelve source executable/material checks pass; see the
+[October 3 verification](verification/2026-10-03.md), including retained failures
+and deployment boundaries. Tagged downloads are checked independently before
+publication; prior-version passes do not substitute for this candidate.
 
 v1.1.0 is published and its recorded evidence remains in
 [October 2 verification](verification/2026-10-02.md). Its unchanged capacity gate
