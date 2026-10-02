@@ -117,7 +117,7 @@ for (const platform of ['darwin', 'linux']) {
     run(process.execPath, [join(root, 'web/scripts/export-licenses.mjs'), join(root, 'web/dist'), join(stage, 'licenses/ui')]);
     for (const binary of ['configra', 'configractl', 'configra-kubernetes']) {
       run(licenseTool, ['-binary', join(stage, binary), '-out', join(stage, 'licenses', `${binary}-modules`)], {
-        cwd: binary === 'configra' ? root : join(root, 'kubernetes'), env,
+        cwd: binary === 'configra-kubernetes' ? join(root, 'kubernetes') : root, env,
       });
     }
     writeFileSync(
