@@ -954,3 +954,7 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
 .vault-save-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+
+.token-form input[aria-invalid="true"] { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
+
+.token-form fieldset[aria-invalid="true"] { outline: 1px solid var(--danger); outline-offset: 4px; border-radius: 4px; }

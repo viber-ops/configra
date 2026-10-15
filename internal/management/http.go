@@ -30,6 +30,7 @@ import (
 const maxManagementRequestBytes = 32 << 20
 
 type ConfigRepository interface {
+	WriteTokenLifetime() time.Duration
 	AuthorityRepository
 	RecordRejectedMutation(context.Context, mysqlstore.RejectedMutation) error
 	ChangeSessions(context.Context, mysqlstore.SessionChange) (mysqlstore.SessionChangeResult, error)
@@ -164,11 +165,12 @@ func (server *server) readMe(response http.ResponseWriter, request *http.Request
 		return
 	}
 	writeJSON(response, struct {
-		Issuer  string         `json:"issuer"`
-		Subject string         `json:"subject"`
-		Email   string         `json:"email"`
-		Role    humanauth.Role `json:"role"`
-	}{principal.Issuer, principal.Subject, principal.Email, principal.Role})
+		Issuer               string         `json:"issuer"`
+		Subject              string         `json:"subject"`
+		Email                string         `json:"email"`
+		Role                 humanauth.Role `json:"role"`
+		WriteTokenMaxTTLDays int            `json:"write_token_max_ttl_days"`
+	}{principal.Issuer, principal.Subject, principal.Email, principal.Role, int(server.configs.WriteTokenLifetime() / (24 * time.Hour))})
 }
 
 func (server *server) listEnvironments(response http.ResponseWriter, request *http.Request) {
@@ -1305,6 +1307,11 @@ func writeMutationResult(response http.ResponseWriter, result any, err error) {
 		if writer, ok := response.(*auditResponseWriter); ok && mysqlstore.AuditWasCommitted(err) {
 			writer.committed = true
 		}
+		var issue *mysqlstore.TokenValidationError
+		if errors.As(err, &issue) {
+			writeError(response, http.StatusUnprocessableEntity, "validation_failed", issue)
+			return
+		}
 		switch {
 		case errors.Is(err, machine.ErrForbidden):
 			writeError(response, http.StatusForbidden, "scope_forbidden")
@@ -1346,19 +1353,23 @@ func writeJSONResponse(response http.ResponseWriter, value any) bool {
 	return err == nil && written == len(payload)
 }
 
-func writeError(response http.ResponseWriter, status int, code string) {
+func writeError(response http.ResponseWriter, status int, code string, validation ...*mysqlstore.TokenValidationError) {
 	requestID := newErrorRequestID()
 	if writer, ok := response.(*auditResponseWriter); ok {
 		requestID, writer.errorCode = writer.requestID, code
 	}
 	body := struct {
 		Error struct {
-			Code      string `json:"code"`
-			RequestID string `json:"request_id"`
+			Code                             string `json:"code"`
+			RequestID                        string `json:"request_id"`
+			*mysqlstore.TokenValidationError `json:",omitempty"`
 		} `json:"error"`
 	}{}
 	body.Error.Code = code
 	body.Error.RequestID = requestID
+	if len(validation) > 0 {
+		body.Error.TokenValidationError = validation[0]
+	}
 	response.Header().Set("Cache-Control", "no-store")
 	response.Header().Set("Content-Type", "application/json")
 	response.WriteHeader(status)

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { AuthorityManagement, CertificateManagement, authorityLabel } from './security/Certificates.jsx';
 import { Sessions, sessionLabel } from './security/Sessions.jsx';
 import { request, managementError, ActionError, useInventory, InventoryPagination } from './management.jsx';
+import { validateTokenInput, tokenValidationMessage, localDateTime } from './token-validation.js';
 import './styles.css';
 import './workspace.css';
 
@@ -26,7 +27,24 @@ const messages = {
     configAllowlist: 'Config key allowlist',
     namespaceAllowlist: 'Vault namespace allowlist',
     scopeHint: 'Comma-separated resource keys; leave empty to allow all in the selected environments.',
-    writeTokenHint: 'Requires verified OIDC MFA, mTLS and an explicit expiry (maximum 90 days, or the shorter server policy). Scopes are immutable; rotate to change them.',
+    writeTokenHint: 'Requires verified OIDC MFA, mTLS and an explicit expiry. Scopes are immutable; rotate to change them.',
+    tokenValidationFallback: 'Check the token name, selected environments, expiry and key allowlists. The server did not identify a field.',
+    writeTokenDeadline: 'Maximum {days} days. Latest expiry: {date} (your local time).',
+    tokenValidation_write_token_expiry_limit: 'Must be within {days} days of issuance. Choose an earlier date.',
+    tokenValidation_expiry_required: 'Choose an expiry for this write token.',
+    tokenValidation_expiry_in_past: 'Choose a future date and time.',
+    tokenValidation_expiry_invalid: 'Enter a valid date and time.',
+    tokenValidation_scope_key_invalid: 'Use 1–63 ASCII characters: start with a–z, then use a–z, 0–9, underscore (_) or hyphen (-). Separate keys with commas.',
+    tokenValidation_scope_keys_duplicate: 'Remove duplicate keys.',
+    tokenValidation_scope_keys_too_many: 'Use at most 256 keys.',
+    tokenValidation_environment_required: 'Select at least one environment.',
+    tokenValidation_environment_keys_invalid: 'Select valid, distinct environment keys.',
+    tokenValidation_environment_unavailable: 'An environment is unavailable or archived. Refresh the list and select again.',
+    tokenValidation_token_name_invalid: 'Enter a token name of 1–255 UTF-8 bytes.',
+    tokenValidation_token_kind_invalid: 'Select a supported token type.',
+    tokenValidation_write_token_requires_user: 'A signed-in administrator must issue write tokens.',
+    tokenValidation_write_token_requires_mtls: 'Write tokens require mTLS.',
+    tokenValidation_expiry_conflicts_with_never: 'Clear the expiry or turn off Never expires.',
     mfa_required: 'MFA evidence is required. Sign in again after enabling MFA at your identity provider.',
     allowedEnvironments: 'Allowed environments',
     apiTokens: 'API tokens',
@@ -360,7 +378,24 @@ const messages = {
     configAllowlist: 'Config 资源键白名单',
     namespaceAllowlist: 'Vault namespace 白名单',
     scopeHint: '用逗号分隔资源键；留空允许所选环境内的全部资源。',
-    writeTokenHint: '需要 OIDC MFA 证明、mTLS 和明确过期时间（最长 90 天，或服务端设置的更短期限）。范围不可修改；变更时请轮换令牌。',
+    writeTokenHint: '需要 OIDC MFA 证明、mTLS 和明确过期时间。范围不可修改；变更时请轮换令牌。',
+    tokenValidationFallback: '请检查 Token 名称、所选环境、过期时间和 key 白名单。服务端未提供具体字段。',
+    writeTokenDeadline: '最长 {days} 天。最晚可选：{date}（你的本地时间）。',
+    tokenValidation_write_token_expiry_limit: '不得超过签发后 {days} 天，请选择更早的日期。',
+    tokenValidation_expiry_required: '写令牌必须设置过期时间。',
+    tokenValidation_expiry_in_past: '请选择未来的日期和时间。',
+    tokenValidation_expiry_invalid: '请输入有效的日期和时间。',
+    tokenValidation_scope_key_invalid: '每个 key 为 1–63 个 ASCII 字符，以小写 a–z 开头，其后仅允许 a–z、0–9、下划线 (_) 和半角连字符 (-)。多个 key 用半角逗号分隔。',
+    tokenValidation_scope_keys_duplicate: '请移除重复的 key。',
+    tokenValidation_scope_keys_too_many: '最多允许 256 个 key。',
+    tokenValidation_environment_required: '请至少选择一个环境。',
+    tokenValidation_environment_keys_invalid: '请选择有效且不重复的环境 key。',
+    tokenValidation_environment_unavailable: '某个环境不存在或已归档，请刷新列表并重新选择。',
+    tokenValidation_token_name_invalid: '请输入名称，UTF-8 编码长度需为 1–255 字节。',
+    tokenValidation_token_kind_invalid: '请选择支持的令牌类型。',
+    tokenValidation_write_token_requires_user: '写令牌必须由已登录的管理员签发。',
+    tokenValidation_write_token_requires_mtls: '写令牌必须使用 mTLS。',
+    tokenValidation_expiry_conflicts_with_never: '请清空过期时间，或关闭“永不过期”。',
     mfa_required: '需要 MFA 证明。请在身份提供方启用 MFA 后重新登录。',
     allowedEnvironments: '允许访问的 Environment',
     apiTokens: 'API Token',
@@ -769,10 +804,10 @@ function EnvironmentSelect({ label, value, onChange, name, required = false, sco
   </div>;
 }
 
-function EnvironmentChoices({ label, scope = '', checked, onChange, t }) {
+function EnvironmentChoices({ label, scope = '', checked, onChange, t, invalid = false, describedBy }) {
   const [search, setSearch] = useState('');
   const collection = useInventory(`/v1/environments?include_archived=true&q=${encodeURIComponent(search)}${scope}`);
-  return <fieldset className="vault-environment-picker"><legend>{label}</legend>
+  return <fieldset className="vault-environment-picker" aria-invalid={invalid || undefined} aria-describedby={describedBy}><legend>{label}</legend>
     <input type="search" aria-label={`${label} · ${t.search}`} placeholder={t.search} value={search} onChange={event => setSearch(event.target.value)} />
     <div className="choice-grid">{collection.items.map(environment => <label className={environment.archived ? 'choice-disabled' : ''} key={environment.key}>
       <input type="checkbox" checked={checked(environment)} disabled={environment.archived && !checked(environment)} aria-label={`${label} ${environment.display_name} ${environment.key}`} onChange={event => onChange(environment.key, event.target.checked)} />
@@ -1959,19 +1994,23 @@ function Administration({ t, principal }) {
         <button type="button" role="tab" aria-selected={tab === 'notifications'} onClick={() => setTab('notifications')}>{t.notifications}</button>
         <button type="button" role="tab" aria-selected={tab === 'deployment'} onClick={() => setTab('deployment')}>{t.deploymentStatus}</button>
       </div>
-      {tab === 'tokens' ? <TokensPanel t={t} /> : tab === 'certificates' ? <CertificateManagement t={t} onAuthorities={() => setTab('authorities')} /> : tab === 'authorities' ? <AuthorityManagement t={t} onCertificates={() => setTab('certificates')} /> : tab === 'sessions' ? <Sessions t={t} principal={principal} /> : tab === 'notifications' ? <Notifications t={t} embedded /> : <DeploymentPanel t={t} />}
+      {tab === 'tokens' ? <TokensPanel t={t} principal={principal} /> : tab === 'certificates' ? <CertificateManagement t={t} onAuthorities={() => setTab('authorities')} /> : tab === 'authorities' ? <AuthorityManagement t={t} onCertificates={() => setTab('certificates')} /> : tab === 'sessions' ? <Sessions t={t} principal={principal} /> : tab === 'notifications' ? <Notifications t={t} embedded /> : <DeploymentPanel t={t} />}
     </div>
   );
 }
 
-function TokensPanel({ t }) {
+function TokensPanel({ t, principal }) {
   const [creating, setCreating] = useState(false);
   const [neverExpires, setNeverExpires] = useState(false);
   const [writeScoped, setWriteScoped] = useState(false);
   const [created, setCreated] = useState(null);
   const [editing, setEditing] = useState('');
   const [confirming, setConfirming] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState(null);
+  const configuredDays = principal.write_token_max_ttl_days;
+  const maxDays = Number.isInteger(configuredDays) && configuredDays >= 1 && configuredDays <= 90 ? configuredDays : 90;
+  const deadline = localDateTime(new Date(Date.now() + maxDays * 86400000));
+  const inputFeedback = field => ({ 'aria-invalid': error?.field === field || undefined, 'aria-describedby': error?.field === field ? 'token-create-error' : undefined });
   const [refresh, setRefresh] = useState(0);
   const [search, setSearch] = useState('');
   const [environmentKeys, setEnvironmentKeys] = useState([]);
@@ -1981,8 +2020,15 @@ function TokensPanel({ t }) {
   const state = useInventory(`/v1/api-tokens?include_revoked=true&q=${encodeURIComponent(search)}`, refresh);
   const create = async event => {
     event.preventDefault();
-    setError('');
-    const data = new FormData(event.currentTarget);
+    setError(null);
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const expiryInput = form.elements.namedItem('expires_at');
+    if (expiryInput?.validity.badInput) {
+      setError(tokenValidationMessage({ field: 'expires_at', reason: 'expiry_invalid' }, t, maxDays));
+      expiryInput.focus();
+      return;
+    }
     const body = {
       display_name: data.get('display_name'),
       environment_keys: environmentKeys,
@@ -1995,7 +2041,14 @@ function TokensPanel({ t }) {
         if (data.get(key)?.trim()) body[key] = data.get(key).split(',').map(value => value.trim());
       }
     }
-    if ((!neverExpires || writeScoped) && data.get('expires_at')) body.expires_at = new Date(data.get('expires_at')).toISOString();
+    if ((!neverExpires || writeScoped) && data.get('expires_at')) body.expires_at = data.get('expires_at');
+    const invalid = validateTokenInput(body, maxDays);
+    if (invalid) {
+      setError(tokenValidationMessage(invalid, t, maxDays));
+      form.elements.namedItem(invalid.field)?.focus();
+      return;
+    }
+    if (body.expires_at) body.expires_at = new Date(body.expires_at).toISOString();
     try {
       const result = await request('/v1/api-tokens', {
         method: 'POST',
@@ -2006,7 +2059,8 @@ function TokensPanel({ t }) {
       setCreating(false);
       setRefresh(value => value + 1);
     } catch (error) {
-      setError(t[error.code] || t.operationFailed);
+      setError(tokenValidationMessage(error, t, maxDays));
+      form.elements.namedItem(error.field)?.focus();
     }
   };
   const saveGrants = async event => {
@@ -2023,7 +2077,7 @@ function TokensPanel({ t }) {
       setGrants({});
       setRefresh(value => value + 1);
     } catch {
-      setError(t.operationFailed);
+      setError({ message: t.operationFailed });
     } finally {
       setSaving(false);
     }
@@ -2034,24 +2088,24 @@ function TokensPanel({ t }) {
       setConfirming('');
       setRefresh(value => value + 1);
     } catch {
-      setError(t.operationFailed);
+      setError({ message: t.operationFailed });
     }
   };
   return (
     <section className="admin-panel tokens-panel">
-      <div className="panel-actions"><span>{t.tokenEnvironmentGrant}</span><button className="primary-action compact-action" type="button" onClick={() => { setCreating(value => !value); setEnvironmentKeys([]); }}>{t.newAPIToken}</button></div>
+      <div className="panel-actions"><span>{t.tokenEnvironmentGrant}</span><button className="primary-action compact-action" type="button" onClick={() => { setCreating(value => !value); setEnvironmentKeys([]); setError(null); setCreated(null); }}>{t.newAPIToken}</button></div>
       <label>{t.search}<input type="search" value={search} onChange={event => setSearch(event.target.value)} /></label>
       {created && <div className="one-time-secret" role="alert"><strong>{t.tokenOnce}</strong><code>{created}</code><button type="button" onClick={() => navigator.clipboard.writeText(created).catch(() => {})}>{t.copy}</button></div>}
       {creating && (
-        <form className="token-form" onSubmit={create}>
-          <label>{t.tokenName}<input name="display_name" required maxLength="255" autoComplete="off" /></label>
-          <EnvironmentChoices label={t.allowedEnvironments} checked={environment => environmentKeys.includes(environment.key)} onChange={(key, checked) => setEnvironmentKeys(current => checked ? [...current, key] : current.filter(value => value !== key))} t={t} />
-          <label className="check-line"><input type="checkbox" checked={writeScoped} onChange={event => { setWriteScoped(event.target.checked); setNeverExpires(false); }} />{t.writeScoped}</label>
-          {writeScoped && <><p className="scope-note">{t.writeTokenHint}</p><label>{t.configAllowlist}<input name="config_keys" maxLength="16384" autoComplete="off" /><small>{t.scopeHint}</small></label><label>{t.namespaceAllowlist}<input name="namespace_keys" maxLength="16384" autoComplete="off" /><small>{t.scopeHint}</small></label></>}
+        <form className="token-form" noValidate onSubmit={create} onInput={() => setError(null)}>
+          <label>{t.tokenName}<input {...inputFeedback('display_name')} name="display_name" required maxLength="255" autoComplete="off" /></label>
+          <EnvironmentChoices invalid={error?.field === 'environment_keys'} describedBy={error?.field === 'environment_keys' ? 'token-create-error' : undefined} label={t.allowedEnvironments} checked={environment => environmentKeys.includes(environment.key)} onChange={(key, checked) => setEnvironmentKeys(current => checked ? [...current, key] : current.filter(value => value !== key))} t={t} />
+          <label className="check-line"><input type="checkbox" checked={writeScoped} onChange={event => { setWriteScoped(event.target.checked); setNeverExpires(false); setError(null); }} />{t.writeScoped}</label>
+          {writeScoped && <><p className="scope-note">{t.writeTokenHint}</p><label>{t.configAllowlist}<input {...inputFeedback('config_keys')} name="config_keys" maxLength="16384" autoComplete="off" /><small>{t.scopeHint}</small></label><label>{t.namespaceAllowlist}<input {...inputFeedback('namespace_keys')} name="namespace_keys" maxLength="16384" autoComplete="off" /><small>{t.scopeHint}</small></label></>}
           {!writeScoped && <label className="check-line"><input type="checkbox" name="allow_without_mtls" />{t.allowWithoutMTLS}</label>}
           {!writeScoped && <label className="check-line"><input type="checkbox" checked={neverExpires} onChange={event => setNeverExpires(event.target.checked)} />{t.neverExpires}</label>}
-          {!neverExpires && <label>{t.expiresAt}<input type="datetime-local" name="expires_at" required={writeScoped} />{!writeScoped && <small>{t.locale.startsWith('zh') ? '留空使用默认的 90 天有效期。' : 'Leave empty for the default 90-day lifetime.'}</small>}</label>}
-          <div className="form-actions"><span className="inline-error" role="alert">{error}</span><button className="primary-action compact-action" type="submit" disabled={writeScoped && environmentKeys.length === 0}>{t.createAPIToken}</button></div>
+          {!neverExpires && <label><span>{t.expiresAt}</span><input {...inputFeedback('expires_at')} aria-label={t.expiresAt} type="datetime-local" name="expires_at" required={writeScoped} max={writeScoped ? deadline : undefined} />{writeScoped ? <small>{t.writeTokenDeadline.replace('{days}', maxDays).replace('{date}', deadline.replace('T', ' '))}</small> : <small>{t.locale.startsWith('zh') ? '留空使用默认的 90 天有效期。' : 'Leave empty for the default 90-day lifetime.'}</small>}</label>}
+          <div className="form-actions"><div id="token-create-error"><ActionError error={error} t={t} /></div><button className="primary-action compact-action" type="submit" >{t.createAPIToken}</button></div>
         </form>
       )}
       {editing && <form className="grant-form" onSubmit={saveGrants}><strong>{editing.display_name}</strong>
@@ -2059,7 +2113,7 @@ function TokensPanel({ t }) {
         <button className="primary-action compact-action" type="submit" disabled={saving || !Object.keys(grants).length}>{t.saveEnvironmentGrants}</button>
         <button type="button" disabled={saving} onClick={() => { if (confirmDiscard()) { setEditing(''); setGrants({}); } }}>{t.cancel}</button>
       </form>}
-      {!creating && error && <p className="inline-error" role="alert">{error}</p>}
+      {!creating && error && <ActionError error={error} t={t} />}
       <CollectionState state={state} t={t}>
         <div className="table-frame"><table><thead><tr><th>{t.tokenName}</th><th>{t.prefix}</th><th>{t.environments}</th><th>mTLS</th><th>{t.expiresAt}</th><th>{t.status}</th><th /></tr></thead>
           <tbody>{state.items.map(token => <tr key={token.public_id}><td><strong title={token.display_name}>{token.display_name}</strong><code className="row-subkey">{token.public_id}</code><small>{token.kind || 'read-only'}</small>{(token.kind === 'write-scoped' || token.parent_public_id) && <details><summary>{t.allowedEnvironments}</summary><p>{t.configAllowlist}: {token.config_keys == null ? '*' : token.config_keys.join(', ') || '∅'}</p><p>{t.namespaceAllowlist}: {token.namespace_keys == null ? '*' : token.namespace_keys.join(', ') || '∅'}</p></details>}</td><td><code title={token.display_prefix}>{token.display_prefix}</code></td><td><div className="environment-links">{token.environment_keys.map(environment => <code key={environment}>{environment}</code>)}{token.environment_count > token.environment_keys.length && <span>+{token.environment_count - token.environment_keys.length}</span>}</div></td><td>{token.allow_without_mtls ? t.tokenOnlyAllowed : t.mtlsRequired}</td><td><time>{token.expires_at ? formatDate(token.expires_at, t.locale) : t.neverExpires}</time></td><td><span className={token.revoked ? 'status archived' : 'status active'}>{token.revoked ? t.revoked : t.statusActive}</span></td><td>{!token.revoked && <div className="row-actions">{token.kind !== 'write-scoped' && !token.parent_public_id && <button type="button" disabled={saving} aria-label={`${t.editEnvironments} ${token.display_name}`} onClick={() => { if (confirmDiscard()) { setEditing(token); setGrants({}); } }}>{t.editEnvironments}</button>}{confirming === token.public_id ? <button className="danger-link" type="button" aria-label={`${t.confirmRevoke} ${token.display_name}`} onClick={() => revoke(token.public_id)}>{t.confirmRevoke}</button> : <button className="danger-link" type="button" aria-label={`${t.revoke} ${token.display_name}`} onClick={() => setConfirming(token.public_id)}>{t.revoke}</button>}</div>}</td></tr>)}</tbody>

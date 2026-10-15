@@ -12,6 +12,9 @@ export async function request(path, options = {}) {
       const failure = (await response.json()).error;
       error.code = failure?.code;
       error.requestID = failure?.request_id;
+      error.field = failure?.field;
+      error.reason = failure?.reason;
+      error.maxTTLDays = failure?.max_ttl_days;
     } catch {
       // The HTTP status remains enough for non-JSON failures.
     }

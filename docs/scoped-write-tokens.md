@@ -43,6 +43,13 @@ write_tokens:
   max_ttl_days: 14 # 1..90; defaults to 90
 ```
 
+The limit is measured as days of 24 hours from issuance, not calendar months.
+Management exposes the effective limit as `write_token_max_ttl_days` in `/v1/me`.
+Token-creation `422 validation_failed` responses may also include a safe `field`,
+`reason` and `max_ttl_days`; they never include submitted values. New failed
+Operations retain this metadata for identical retries. The UI names the field,
+shows the actual limit and retains the Request ID for audit lookup.
+
 Omitted/null Config or Namespace allowlists allow all keys inside the granted
 Environments; explicit `[]` denies all in that dimension. The UI's blank allowlist
 means omitted. Lists contain at most 256 unique resource keys. `never_expires`
@@ -56,7 +63,7 @@ digits, `_` or `-`). Reuse it only with identical content. Config/Vault writes u
 `expected_revision`: `0` creates, the current revision updates, and stale values
 return `409 revision_conflict`. Success/no-change replies contain `outcome` and
 `revision`; changed content retains immutable history. Errors contain only a safe
-code and Request ID, never request/response values.
+code and Request ID (plus the Token validation metadata above), never request/response values.
 
 For a Vault Item already used in another Environment, `expected_revision: 0`
 also creates the selected Environment's missing Variant. Supply every Field value
