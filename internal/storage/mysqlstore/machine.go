@@ -32,7 +32,7 @@ func (store *Store) TokenForEnvironment(ctx context.Context, publicID, environme
 	)
 	// Check only the requested grant using the existing unique indexes. Keep
 	// archived grants: resource reads still return 404 until unarchived.
-	statement, err := store.authenticationStatement(ctx, tokenAuthenticationQuery)
+	statement, err := store.machineStatement(ctx, tokenAuthenticationQuery)
 	if err != nil {
 		return machine.Token{}, err
 	}
@@ -62,7 +62,7 @@ func (store *Store) TokenForEnvironment(ctx context.Context, publicID, environme
 
 func (store *Store) IsCertificateActive(ctx context.Context, fingerprint [sha256.Size]byte) (bool, error) {
 	var active bool
-	statement, err := store.authenticationStatement(ctx, certificateAuthenticationQuery)
+	statement, err := store.machineStatement(ctx, certificateAuthenticationQuery)
 	if err != nil {
 		return false, err
 	}
@@ -79,7 +79,7 @@ func (store *Store) ReadResolvedConfig(
 	configKey string,
 	ifNoneMatch string,
 ) (machine.ResolvedConfig, error) {
-	transaction, err := store.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+	transaction, err := store.beginMachineSnapshot(ctx, resolvedConfigQuery, configReferencesQuery, vaultMetadataQuery, vaultFieldTypesQuery, vaultPayloadQuery)
 	if err != nil {
 		return machine.ResolvedConfig{}, fmt.Errorf("begin resolved Config snapshot: %w", err)
 	}
@@ -92,20 +92,7 @@ func (store *Store) ReadResolvedConfig(
 		format        string
 		canonical     []byte
 	)
-	err = transaction.QueryRowContext(ctx, `
-		SELECT environment.id, config.id, state.current_revision, revision_record.format, revision_record.content
-		FROM environments AS environment
-		JOIN config_env_states AS state ON state.environment_id = environment.id
-		JOIN configs AS config ON config.id = state.config_id
-		JOIN config_revisions AS revision_record
-		  ON revision_record.config_id = state.config_id
-		 AND revision_record.environment_id = state.environment_id
-		 AND revision_record.revision = state.current_revision
-		WHERE environment.resource_key = ?
-		  AND environment.archived_at IS NULL
-		  AND config.resource_key = ?
-		  AND config.archived_at IS NULL
-	`, environmentKey, configKey).Scan(&environmentID, &configID, &revision, &format, &canonical)
+	err = transaction.QueryRowContext(ctx, machineQueries[resolvedConfigQuery], environmentKey, configKey).Scan(&environmentID, &configID, &revision, &format, &canonical)
 	if errors.Is(err, sql.ErrNoRows) {
 		return machine.ResolvedConfig{}, machine.ErrNotFound
 	}
@@ -188,15 +175,13 @@ func (store *Store) ReadFile(
 	fieldKey string,
 	ifNoneMatch string,
 ) (machine.FileContent, error) {
-	transaction, err := store.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+	transaction, err := store.beginMachineSnapshot(ctx, fileEnvironmentQuery, vaultMetadataQuery, vaultFieldTypesQuery, vaultPayloadQuery)
 	if err != nil {
 		return machine.FileContent{}, fmt.Errorf("begin File snapshot: %w", err)
 	}
 	defer transaction.Rollback()
 	var environmentID []byte
-	err = transaction.QueryRowContext(ctx, `
-		SELECT id FROM environments WHERE resource_key = ? AND archived_at IS NULL
-	`, environmentKey).Scan(&environmentID)
+	err = transaction.QueryRowContext(ctx, machineQueries[fileEnvironmentQuery], environmentKey).Scan(&environmentID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return machine.FileContent{}, machine.ErrNotFound
 	}
@@ -264,17 +249,12 @@ func (identity vaultItemIdentity) revisionKey() string {
 
 func readReferences(
 	ctx context.Context,
-	transaction *sql.Tx,
+	transaction machineSnapshotReader,
 	configID []byte,
 	environmentID []byte,
 	revision uint64,
 ) (map[vaultItemIdentity][]string, error) {
-	rows, err := transaction.QueryContext(ctx, `
-			SELECT namespace_key, item_key, field_key
-		FROM config_revision_vault_refs
-		WHERE config_id = ? AND environment_id = ? AND revision = ?
-			ORDER BY namespace_key, item_key, field_key
-	`, configID, environmentID, revision)
+	rows, err := transaction.QueryContext(ctx, machineQueries[configReferencesQuery], configID, environmentID, revision)
 	if err != nil {
 		return nil, fmt.Errorf("read Config Vault References: %w", err)
 	}
@@ -296,7 +276,7 @@ func readReferences(
 
 func readVaultMetadata(
 	ctx context.Context,
-	transaction *sql.Tx,
+	transaction machineSnapshotReader,
 	environmentID []byte,
 	references map[vaultItemIdentity][]string,
 ) (map[vaultItemIdentity]vaultMetadata, error) {
@@ -313,22 +293,12 @@ func readVaultMetadata(
 
 func readOneVaultMetadata(
 	ctx context.Context,
-	transaction *sql.Tx,
+	transaction machineSnapshotReader,
 	environmentID []byte,
 	identity vaultItemIdentity,
 ) (vaultMetadata, error) {
 	var metadata vaultMetadata
-	err := transaction.QueryRowContext(ctx, `
-		SELECT item.id, item.current_revision, binding.variant_id
-		FROM vault_items AS item
-		JOIN vault_revision_variant_environments AS binding
-		  ON binding.item_id = item.id
-		 AND binding.revision = item.current_revision
-			WHERE item.namespace_key = ?
-			  AND item.resource_key = ?
-			  AND item.archived_at IS NULL
-			  AND binding.environment_id = ?
-		`, identity.namespaceKey, identity.itemKey, environmentID).Scan(&metadata.itemID, &metadata.revision, &metadata.variantID)
+	err := transaction.QueryRowContext(ctx, machineQueries[vaultMetadataQuery], identity.namespaceKey, identity.itemKey, environmentID).Scan(&metadata.itemID, &metadata.revision, &metadata.variantID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return vaultMetadata{}, machine.ErrUnresolved
 	}
@@ -343,7 +313,7 @@ func readOneVaultMetadata(
 
 func (store *Store) readVaultTextValues(
 	ctx context.Context,
-	transaction *sql.Tx,
+	transaction machineSnapshotReader,
 	metadata vaultMetadata,
 	fieldKeys []string,
 ) (map[string]string, error) {
@@ -375,15 +345,11 @@ func (store *Store) readVaultTextValues(
 
 func readFieldTypes(
 	ctx context.Context,
-	transaction *sql.Tx,
+	transaction machineSnapshotReader,
 	metadata vaultMetadata,
 	fieldKeys []string,
 ) (map[string]string, error) {
-	rows, err := transaction.QueryContext(ctx, `
-		SELECT resource_key, field_type
-		FROM vault_revision_fields
-		WHERE item_id = ? AND revision = ? AND archived = FALSE
-	`, metadata.itemID, metadata.revision)
+	rows, err := transaction.QueryContext(ctx, machineQueries[vaultFieldTypesQuery], metadata.itemID, metadata.revision)
 	if err != nil {
 		return nil, fmt.Errorf("read Vault Field metadata: %w", err)
 	}
@@ -404,15 +370,11 @@ func readFieldTypes(
 
 func (store *Store) decryptVaultPayload(
 	ctx context.Context,
-	transaction *sql.Tx,
+	transaction machineSnapshotReader,
 	metadata vaultMetadata,
 ) (vaultdoc.Payload, error) {
 	var encrypted vaultcrypto.EncryptedSnapshot
-	err := transaction.QueryRowContext(ctx, `
-		SELECT algorithm, key_version, nonce, ciphertext, encrypted_dek
-		FROM vault_item_revisions
-		WHERE item_id = ? AND revision = ?
-	`, metadata.itemID, metadata.revision).Scan(
+	err := transaction.QueryRowContext(ctx, machineQueries[vaultPayloadQuery], metadata.itemID, metadata.revision).Scan(
 		&encrypted.Algorithm,
 		&encrypted.KeyVersion,
 		&encrypted.Nonce,
