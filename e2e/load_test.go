@@ -662,13 +662,15 @@ func validateVegetaReport(t *testing.T, report vegetaReport, duration time.Durat
 }
 
 type loadSample struct {
-	ElapsedSeconds  float64 `json:"elapsed_seconds"`
-	CPUPercent      float64 `json:"cpu_percent"`
-	MemoryBytes     uint64  `json:"memory_bytes"`
-	PIDs            uint64  `json:"pids"`
-	MySQLConnected  uint64  `json:"mysql_connected"`
-	MySQLRunning    uint64  `json:"mysql_running"`
-	SamplingFailure string  `json:"sampling_failure,omitempty"`
+	ElapsedSeconds   float64 `json:"elapsed_seconds"`
+	CPUPercent       float64 `json:"cpu_percent"`
+	MemoryBytes      uint64  `json:"memory_bytes"`
+	PIDs             uint64  `json:"pids"`
+	MySQLConnected   uint64  `json:"mysql_connected"`
+	MySQLRunning     uint64  `json:"mysql_running"`
+	MySQLConnections uint64  `json:"mysql_connections_total"`
+	MySQLPrepares    uint64  `json:"mysql_prepares_total"`
+	SamplingFailure  string  `json:"sampling_failure,omitempty"`
 }
 
 func TestSampleLoadIgnoresCancellationAsSamplingFailure(t *testing.T) {
@@ -731,6 +733,12 @@ func oneLoadSample(ctx context.Context, container string, database *sql.DB, elap
 	}
 	if err := database.QueryRowContext(ctx, "SHOW GLOBAL STATUS LIKE 'Threads_running'").Scan(new(string), &sample.MySQLRunning); err != nil {
 		sample.SamplingFailure = "mysql_running"
+	}
+	if err := database.QueryRowContext(ctx, "SHOW GLOBAL STATUS LIKE 'Connections'").Scan(new(string), &sample.MySQLConnections); err != nil {
+		sample.SamplingFailure = "mysql_connections_total"
+	}
+	if err := database.QueryRowContext(ctx, "SHOW GLOBAL STATUS LIKE 'Com_stmt_prepare'").Scan(new(string), &sample.MySQLPrepares); err != nil {
+		sample.SamplingFailure = "mysql_prepares_total"
 	}
 	return sample
 }

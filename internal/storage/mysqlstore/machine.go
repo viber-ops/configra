@@ -32,17 +32,11 @@ func (store *Store) TokenForEnvironment(ctx context.Context, publicID, environme
 	)
 	// Check only the requested grant using the existing unique indexes. Keep
 	// archived grants: resource reads still return 404 until unarchived.
-	err := store.db.QueryRowContext(ctx, `
-		SELECT token.id, token.secret_digest, token.allow_without_mtls, token.expires_at, token.revoked_at,
-		       token.kind, token.config_keys, token.namespace_keys, token.deployment_certificate_fingerprint,COALESCE(token.parent_public_id,''),
-		       EXISTS (
-		           SELECT 1 FROM api_token_environments AS grant_record
-		           JOIN environments AS environment ON environment.id = grant_record.environment_id
-		           WHERE grant_record.token_id = token.id AND environment.resource_key = ?
-		       )
-		FROM api_tokens AS token
-		WHERE token.public_id = ?
-	`, environmentKey, publicID).Scan(&tokenID, &digest, &token.AllowWithoutMTLS, &expiresAt, &revokedAt,
+	statement, err := store.authenticationStatement(ctx, tokenAuthenticationQuery)
+	if err != nil {
+		return machine.Token{}, err
+	}
+	err = statement.QueryRowContext(ctx, environmentKey, publicID).Scan(&tokenID, &digest, &token.AllowWithoutMTLS, &expiresAt, &revokedAt,
 		&token.Kind, &configKeys, &namespaceKeys, &token.CertificateFingerprint, &token.ParentPublicID, &token.EnvironmentGranted)
 	if errors.Is(err, sql.ErrNoRows) {
 		return machine.Token{}, machine.ErrNotFound
@@ -68,19 +62,11 @@ func (store *Store) TokenForEnvironment(ctx context.Context, publicID, environme
 
 func (store *Store) IsCertificateActive(ctx context.Context, fingerprint [sha256.Size]byte) (bool, error) {
 	var active bool
-	err := store.db.QueryRowContext(ctx, `
-		SELECT EXISTS (
-			SELECT 1
-			FROM client_certificates AS certificate
-			LEFT JOIN certificate_authorities AS authority ON authority.id = certificate.authority_id
-			WHERE certificate.fingerprint_sha256 = ?
-			  AND certificate.revoked_at IS NULL
-			  AND certificate.not_before <= UTC_TIMESTAMP(6)
-			  AND certificate.not_after > UTC_TIMESTAMP(6)
-			  AND (certificate.authority_id IS NULL OR (authority.revoked_at IS NULL
-			       AND authority.not_before <= UTC_TIMESTAMP(6) AND authority.not_after > UTC_TIMESTAMP(6)))
-		)
-	`, fingerprint[:]).Scan(&active)
+	statement, err := store.authenticationStatement(ctx, certificateAuthenticationQuery)
+	if err != nil {
+		return false, err
+	}
+	err = statement.QueryRowContext(ctx, fingerprint[:]).Scan(&active)
 	if err != nil {
 		return false, fmt.Errorf("read Client Certificate status: %w", err)
 	}

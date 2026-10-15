@@ -449,3 +449,91 @@ func (publisher *integrationAccessPublisher) TryPublish(event machine.AccessEven
 	publisher.events <- event
 	return true
 }
+
+func TestMachineAuthenticationReusesStatementsWithoutCachingAuthorization(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	dsn := createIntegrationDatabase(t, ctx, "configra_auth_prepared")
+	provider, err := vaultcrypto.NewLocalKeyProvider([]byte("0123456789abcdef0123456789abcdef"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := OpenManagement(ctx, dsn, provider)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	store.db.SetMaxOpenConns(1)
+	store.db.SetMaxIdleConns(1)
+	certificateDER := []byte("registered-client-certificate")
+	seedMachineReadFixture(t, ctx, store.db, provider, []byte("fedcba9876543210fedcba9876543210"), certificateDER, []byte("private-file"))
+	fingerprint := sha256.Sum256(certificateDER)
+	preparations := func() uint64 {
+		var label string
+		var count uint64
+		if err := store.db.QueryRowContext(ctx, "SHOW SESSION STATUS LIKE 'Com_stmt_prepare'").Scan(&label, &count); err != nil {
+			t.Fatal(err)
+		}
+		return count
+	}
+	cancelled, stop := context.WithCancel(ctx)
+	stop()
+	if _, err := store.TokenForEnvironment(cancelled, "token1", "a"); err == nil {
+		t.Fatal("cancelled first prepare succeeded")
+	}
+	before := preparations()
+	for range 20 {
+		token, err := store.TokenForEnvironment(ctx, "token1", "a")
+		if err != nil || !token.EnvironmentGranted || token.Revoked {
+			t.Fatal("valid token not authorized", err)
+		}
+		active, err := store.IsCertificateActive(ctx, fingerprint)
+		if err != nil || !active {
+			t.Fatal("valid certificate not active", err)
+		}
+	}
+	if count := preparations() - before; count > 2 {
+		t.Errorf("40 authorization reads prepared %d statements; want at most 2 on one connection", count)
+	}
+	// Force pooled connections to be replaced. Statement plans must reconnect,
+	// while authorization data must still be read for every new request.
+	store.db.SetMaxIdleConns(0)
+	for range 3 {
+		if _, err := store.TokenForEnvironment(ctx, "token1", "a"); err != nil {
+			t.Fatal("statement did not recover on new connection", err)
+		}
+	}
+	store.db.SetMaxIdleConns(1)
+	var concurrent sync.WaitGroup
+	for range 20 {
+		concurrent.Add(1)
+		go func() {
+			defer concurrent.Done()
+			if _, err := store.TokenForEnvironment(ctx, "token1", "a"); err != nil {
+				t.Error("concurrent authentication", err)
+			}
+		}()
+	}
+	concurrent.Wait()
+	if _, err := store.db.ExecContext(ctx, "DELETE FROM api_token_environments"); err != nil {
+		t.Fatal(err)
+	}
+	token, err := store.TokenForEnvironment(ctx, "token1", "a")
+	if err != nil || token.EnvironmentGranted {
+		t.Fatal("prepared lookup cached the removed grant", err)
+	}
+	if _, err := store.db.ExecContext(ctx, "UPDATE api_tokens SET revoked_at = UTC_TIMESTAMP(6), expires_at = UTC_TIMESTAMP(6) - INTERVAL 1 SECOND"); err != nil {
+		t.Fatal(err)
+	}
+	token, err = store.TokenForEnvironment(ctx, "token1", "a")
+	if err != nil || !token.Revoked || !token.ExpiresAt.Before(time.Now()) {
+		t.Fatal("prepared lookup cached token lifecycle", err)
+	}
+	if _, err := store.db.ExecContext(ctx, "UPDATE client_certificates SET revoked_at = UTC_TIMESTAMP(6)"); err != nil {
+		t.Fatal(err)
+	}
+	active, err := store.IsCertificateActive(ctx, fingerprint)
+	if err != nil || active {
+		t.Fatal("prepared lookup cached certificate revocation", err)
+	}
+}
