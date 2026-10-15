@@ -633,13 +633,17 @@ func (server *server) transferConfig(response http.ResponseWriter, request *http
 		return
 	}
 	var body struct {
-		SourceEnvironment      string `json:"source_environment"`
-		SourceConfig           string `json:"source_config"`
-		SourceRevision         uint64 `json:"source_revision"`
-		TargetRevision         uint64 `json:"target_revision"`
-		ExpectedTargetRevision uint64 `json:"expected_target_revision"`
+		SourceEnvironment      string  `json:"source_environment"`
+		SourceConfig           string  `json:"source_config"`
+		SourceRevision         uint64  `json:"source_revision"`
+		TargetRevision         *uint64 `json:"target_revision"`
+		ExpectedTargetRevision *uint64 `json:"expected_target_revision"`
 	}
 	if !decodeJSON(response, request, &body) {
+		return
+	}
+	if body.TargetRevision == nil || body.ExpectedTargetRevision == nil {
+		writeMutationResult(response, nil, &mysqlstore.ConfigMutationError{Field: "target_revision", Reason: "target_revision_required"})
 		return
 	}
 	transfer := mysqlstore.ConfigTransfer{
@@ -650,8 +654,8 @@ func (server *server) transferConfig(response http.ResponseWriter, request *http
 		SourceRevision:         body.SourceRevision,
 		TargetEnvironmentKey:   request.PathValue("environment"),
 		TargetConfigKey:        request.PathValue("config"),
-		TargetRevision:         body.TargetRevision,
-		ExpectedTargetRevision: body.ExpectedTargetRevision,
+		TargetRevision:         *body.TargetRevision,
+		ExpectedTargetRevision: *body.ExpectedTargetRevision,
 	}
 	var result mysqlstore.ConfigCommitResult
 	var err error
@@ -695,6 +699,7 @@ func (server *server) cloneConfig(response http.ResponseWriter, request *http.Re
 		TargetEnvironment string `json:"target_environment"`
 		TargetConfig      string `json:"target_config"`
 		TargetName        string `json:"target_name"`
+		SourceRevision    uint64 `json:"source_revision"`
 	}
 	if !decodeJSON(response, request, &body) {
 		return
@@ -707,6 +712,7 @@ func (server *server) cloneConfig(response http.ResponseWriter, request *http.Re
 		TargetEnvironmentKey: body.TargetEnvironment,
 		TargetConfigKey:      body.TargetConfig,
 		TargetConfigName:     body.TargetName,
+		SourceRevision:       body.SourceRevision,
 	})
 	writeMutationResult(response, result, err)
 }
@@ -1312,6 +1318,15 @@ func writeMutationResult(response http.ResponseWriter, result any, err error) {
 			writeError(response, http.StatusUnprocessableEntity, "validation_failed", issue)
 			return
 		}
+		var configIssue *mysqlstore.ConfigMutationError
+		if errors.As(err, &configIssue) {
+			status, code := http.StatusUnprocessableEntity, "validation_failed"
+			if errors.Is(err, mysqlstore.ErrConflict) {
+				status, code = http.StatusConflict, "revision_conflict"
+			}
+			writeError(response, status, code, configIssue)
+			return
+		}
 		switch {
 		case errors.Is(err, machine.ErrForbidden):
 			writeError(response, http.StatusForbidden, "scope_forbidden")
@@ -1353,22 +1368,29 @@ func writeJSONResponse(response http.ResponseWriter, value any) bool {
 	return err == nil && written == len(payload)
 }
 
-func writeError(response http.ResponseWriter, status int, code string, validation ...*mysqlstore.TokenValidationError) {
+func writeError(response http.ResponseWriter, status int, code string, validation ...error) {
 	requestID := newErrorRequestID()
 	if writer, ok := response.(*auditResponseWriter); ok {
 		requestID, writer.errorCode = writer.requestID, code
 	}
 	body := struct {
 		Error struct {
-			Code                             string `json:"code"`
-			RequestID                        string `json:"request_id"`
-			*mysqlstore.TokenValidationError `json:",omitempty"`
+			Code       string `json:"code"`
+			RequestID  string `json:"request_id"`
+			Field      string `json:"field,omitempty"`
+			Reason     string `json:"reason,omitempty"`
+			MaxTTLDays int    `json:"max_ttl_days,omitempty"`
 		} `json:"error"`
 	}{}
 	body.Error.Code = code
 	body.Error.RequestID = requestID
 	if len(validation) > 0 {
-		body.Error.TokenValidationError = validation[0]
+		switch issue := validation[0].(type) {
+		case *mysqlstore.TokenValidationError:
+			body.Error.Field, body.Error.Reason, body.Error.MaxTTLDays = issue.Field, issue.Reason, issue.MaxTTLDays
+		case *mysqlstore.ConfigMutationError:
+			body.Error.Field, body.Error.Reason = issue.Field, issue.Reason
+		}
 	}
 	response.Header().Set("Cache-Control", "no-store")
 	response.Header().Set("Content-Type", "application/json")

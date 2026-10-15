@@ -487,6 +487,7 @@ test('Config editor protects dirty source and keeps it after an actionable Revis
 
 test('administrator compares, restores, and clones an immutable Config Revision', async ({ page }) => {
   await mockIdentity(page);
+  await page.route(/\/v1\/environments\?/, route => route.fulfill({ body: inventoryPage(route, [{ key: 'production', display_name: 'Production', revision: 3 }, { key: 'recovery', display_name: 'Recovery' }]) }));
   let current = { environment_key: 'production', config_key: 'payment', config_name: 'Payment service', format: 'yaml', content: 'port: 6380\n', revision: 3 };
   const revisions = [
     { revision: 3, format: 'yaml', actor_id: 'admin@example.com', created_at: '2026-08-27T03:00:00Z' },
@@ -549,11 +550,11 @@ test('administrator compares, restores, and clones an immutable Config Revision'
 
   await page.locator('summary[aria-label="More actions"]').click();
   await page.getByRole('button', { name: 'Clone', exact: true }).click();
-  await page.getByLabel('Target environment').fill('recovery');
+  await page.getByLabel('Target environment', { exact: true }).selectOption('recovery');
   await page.getByLabel('Target config').fill('payment_recovery');
   await page.getByLabel('Target name').fill('Recovery payment');
   await page.getByRole('button', { name: 'Clone config' }).click();
-  expect(clone.body).toEqual({ target_environment: 'recovery', target_config: 'payment_recovery', target_name: 'Recovery payment' });
+  expect(clone.body).toEqual({ target_environment: 'recovery', target_config: 'payment_recovery', target_name: 'Recovery payment', source_revision: 4 });
   expect(clone.operation).toMatch(/^[0-9a-f-]{36}$/);
 });
 

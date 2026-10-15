@@ -30,12 +30,12 @@ export async function request(path, options = {}) {
 }
 
 export function managementError(error, t, fallback) {
-  return { message: t[error?.code] || fallback, requestID: error?.requestID || '' };
+  return { message: t[error?.reason] || t[error?.code] || fallback, requestID: error?.requestID || '', operationID: error?.operationID || '' };
 }
 
 export function ActionError({ error, t }) {
   if (!error) return null;
-  return <span className="action-error" role="alert"><span>{error.message}</span>{error.requestID && <><span>{t.requestID}</span><CopyValue value={error.requestID} label={`${t.requestID} ${error.requestID}`} t={t} /></>}</span>;
+  return <span className="action-error" role="alert"><span>{error.message}</span>{error.requestID && <><span>{t.requestID}</span><CopyValue value={error.requestID} label={`${t.requestID} ${error.requestID}`} t={t} /></>}{error.operationID && <><span>{t.operation}</span><CopyValue value={error.operationID} label={`${t.operation} ${error.operationID}`} t={t} /></>}</span>;
 }
 
 export function useInventory(path, refresh = 0, initialPage = 1, body = null) {
@@ -85,7 +85,9 @@ export function useMutation(request) {
   const mutate = (path, body) => {
     const signature = JSON.stringify([path, body]);
     if (attempt.current?.signature !== signature) attempt.current = { signature, id: crypto.randomUUID() };
-    return request(path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': attempt.current.id }, ...(body ? { body: JSON.stringify(body) } : {}) });
+    const operationID = attempt.current.id;
+    return request(path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': operationID }, ...(body ? { body: JSON.stringify(body) } : {}) })
+      .catch(error => { error.operationID = operationID; throw error; });
   };
   return [mutate, () => { attempt.current = null; }];
 }

@@ -152,7 +152,15 @@ Target current Revision；如果提交时 current 已变化，必须返回 Confl
 
 -   Clone Config：把 Source 当前状态复制到指定 Environment 下的全新 Config
     Resource Key，新 Config 历史从 v1 开始并记录 Source Config、Environment 和
-    Revision。
+    Revision。管理端固定提交时显示的 Source Revision；API 未指定 `source_revision`
+    时保留复制当前版本的行为。键名在全局唯一，不能用 Clone 把同名 Config 复制到另一个环境。
+-   Copy to environment：把同一 Config 的指定不可变 Source Revision 复制到尚未有版本的
+    Target Environment。通过 Replace 提交 `target_revision=0`、
+    `expected_target_revision=0`，创建目标 v1 并记录来源。目标已有版本（包括并发创建）
+    必须返回 Conflict；已有目标需通过 Merge / Replace 预览差异后提交。
+
+这两种操作均只复制 Config 原文，Vault 引用在目标环境解析，不复制或解析源环境的密钥值。
+操作选择与故障排查见 [Config 复制指南](config-copy.md)。
 
 V1 不提供 Environment Clone 或 Vault Item Clone。前者会把多个 Config Revision、
 多个 Vault Item Revision 和 Environment 创建合并成一次跨资源 Operation；后者还需

@@ -64,6 +64,30 @@ const messages = {
     cancel: 'Cancel',
     clone: 'Clone',
     cloneComplete: 'Clone created.',
+    copyToEnvironment: 'Copy to environment',
+    copyFirstVersion: 'Create first version in {environment}',
+    copyComplete: 'Copied to {target} · v{revision}',
+    openTargetConfig: 'Open target config',
+    copyExplanation: 'Create v1 of this Config in an environment where it has no version yet. An existing target must be reviewed using Merge or Replace.',
+    cloneExplanation: 'Clone requires a new Config key across all environments. To keep the same key in another environment, use Copy to environment.',
+    copySavedRevision: 'Copies saved v{revision}. Unsaved edits and revision history are excluded. Vault references stay as references and resolve using the target environment.',
+    refreshTransferPreview: 'Refresh preview',
+    clone_target_exists: 'This Config key already exists in Configra. Choose a new key for Clone, or use Copy to environment to keep the same key.',
+    target_config_exists: 'The target environment already has this Config. Open it and use Merge or Replace to review the change before writing.',
+    target_revision_changed: 'The target changed since this operation was prepared. Refresh and review the latest version before submitting again.',
+    target_environment_unavailable: 'The target environment does not exist or is archived. Select an active environment, or restore it from Environments.',
+    source_revision_unavailable: 'The source revision is unavailable, or its Config or environment is archived. Refresh the source and select an available revision.',
+    target_revision_unavailable: 'The target revision is unavailable, or its Config or environment is archived. Refresh the target; use Copy to environment if it has no version yet.',
+    config_archived: 'This Config is archived. Restore it from Configs before writing a new version.',
+    config_format_mismatch: 'Merge requires the source and target to use the same format. Convert the format first, or review a Replace operation.',
+    config_document_invalid: 'The Config could not be processed. Check its YAML/JSON syntax, duplicate keys, Vault reference syntax and size limit (5 MiB).',
+    source_revision_required: 'Select a source revision before continuing.',
+    target_revision_required: 'Select a target revision. To create its first version, use Copy to environment.',
+    source_environment_invalid: 'Select a valid source environment.',
+    target_environment_invalid: 'Select a valid target environment.',
+    source_config_invalid: 'The source Config key is invalid. Use 1–63 lowercase letters, digits, underscores or hyphens, starting with a letter.',
+    target_config_invalid: 'The target Config key is invalid. Use 1–63 lowercase letters, digits, underscores or hyphens, starting with a letter.',
+    config_name_invalid: 'Enter a Config display name of at most 255 UTF-8 bytes.',
     cloneConfig: 'Clone config',
     compare: 'Compare',
     compareDragHint: 'Drag any two revisions into Source and Target. Use one Environment for history, or two for a cross-Environment comparison.',
@@ -415,6 +439,30 @@ const messages = {
     cancel: '取消',
     clone: '克隆',
     cloneComplete: '克隆已创建。',
+    copyToEnvironment: '复制到环境',
+    copyFirstVersion: '在 {environment} 创建首个版本',
+    copyComplete: '已复制到 {target} · v{revision}',
+    openTargetConfig: '打开目标 Config',
+    copyExplanation: '在尚未配置此 Config 的环境创建 v1。目标已有版本时，请通过合并或替换查看差异后再提交。',
+    cloneExplanation: '克隆需要一个在所有环境中都未使用过的新 Config 键名。如需保留同名配置，请使用“复制到环境”。',
+    copySavedRevision: '复制已保存的 v{revision}，不包含未保存的编辑和历史版本。Vault 引用保持不变，在目标环境解析为对应的值。',
+    refreshTransferPreview: '刷新预览',
+    clone_target_exists: '此 Config 键名已在 Configra 中存在。克隆请使用新键名；保留同名配置请使用“复制到环境”。',
+    target_config_exists: '目标环境已有此 Config。请打开目标，通过“合并”或“替换”查看差异后再写入。',
+    target_revision_changed: '目标配置在准备操作后已发生变化。请刷新并核对最新版本，再重新提交。',
+    target_environment_unavailable: '目标环境不存在或已归档。请选择有效环境，或先在环境页面恢复它。',
+    source_revision_unavailable: '源版本不存在，或源 Config、环境已归档。请刷新源配置并选择有效版本。',
+    target_revision_unavailable: '目标版本不存在，或目标 Config、环境已归档。请刷新目标；若还没有版本，请使用“复制到环境”。',
+    config_archived: '此 Config 已归档。请先在 Config 列表恢复，再写入新版本。',
+    config_format_mismatch: '合并要求源和目标使用相同格式。请先转换格式，或通过“替换”查看变更。',
+    config_document_invalid: '无法处理此 Config。请检查 YAML/JSON 语法、重复键、Vault 引用格式，以及是否超过 5 MiB。',
+    source_revision_required: '请先选择源版本。',
+    target_revision_required: '请选择目标版本；若要创建首个版本，请使用“复制到环境”。',
+    source_environment_invalid: '请选择有效的源环境。',
+    target_environment_invalid: '请选择有效的目标环境。',
+    source_config_invalid: '源 Config 键名无效：需以小写字母开头，由 1–63 位小写字母、数字、下划线或连字符组成。',
+    target_config_invalid: '目标 Config 键名无效：需以小写字母开头，由 1–63 位小写字母、数字、下划线或连字符组成。',
+    config_name_invalid: '请填写 Config 显示名，长度不能超过 255 个 UTF-8 字节。',
     cloneConfig: '克隆 Config',
     compare: '对比',
     compareDragHint: '把任意两个 Revision 拖入 Source 和 Target；同一 Environment 是历史对比，不同 Environment 是跨环境对比。',
@@ -2318,6 +2366,8 @@ function ConfigDetail({ principal, configKey, environmentKey, t }) {
   const [viewedRevision, setViewedRevision] = useState(0);
   const [inspection, setInspection] = useState({ status: 'idle' });
   const [restoring, setRestoring] = useState(0);
+  const [restoreBusy, setRestoreBusy] = useState(false);
+  const [restoreMutation] = useMutation(request);
   const path = `/v1/environments/${encodeURIComponent(environmentKey)}/configs/${encodeURIComponent(configKey)}`;
   const history = useRevisionHistory(`${path}/revisions`, refresh);
   const dirty = state.status === 'ready' && source !== state.config.content;
@@ -2404,20 +2454,22 @@ function ConfigDetail({ principal, configKey, environmentKey, t }) {
     setTab('transfer');
   };
   const restore = async revision => {
+    if (restoreBusy) return;
+    setRestoreBusy(true);
     setSaveError(null);
     try {
-      const result = await request(`${path}/restore`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify({ source_revision: revision, expected_revision: state.config.revision }),
-      });
+      const result = await restoreMutation(`${path}/restore`, { source_revision: revision, expected_revision: state.config.revision });
       setValidation({ status: 'saved', warnings: result.warnings || [] });
-      setState(current => ({ ...current, config: { ...current.config, revision: result.revision } }));
+      // A revision number alone is not a snapshot. Keep copy/transfer actions
+      // unavailable until the reload returns that revision's content and format.
+      setState({ status: 'loading' });
       setCompareSeed(null);
       setRestoring(0);
       setRefresh(value => value + 1);
     } catch (error) {
       setSaveError(managementError(error, t, t.operationFailed));
+    } finally {
+      setRestoreBusy(false);
     }
   };
 
@@ -2431,7 +2483,9 @@ function ConfigDetail({ principal, configKey, environmentKey, t }) {
     ? t.compareRevisions
     : tab === 'transfer'
       ? `${t[transferMode]} · ${t.source} → ${t.target}`
-      : tab === 'clone'
+      : tab === 'copy'
+        ? t.copyToEnvironment
+        : tab === 'clone'
         ? t.cloneConfig
         : '';
   return (
@@ -2449,6 +2503,7 @@ function ConfigDetail({ principal, configKey, environmentKey, t }) {
               {principal.role === 'admin' && <button type="button" aria-pressed={tab === 'transfer' && transferMode === 'merge'} onClick={() => openTransfer('merge')}>{t.merge}</button>}
               {principal.role === 'admin' && <button type="button" aria-pressed={tab === 'transfer' && transferMode === 'replace'} onClick={() => openTransfer('replace')}>{t.replace}</button>}
             </div>
+            {principal.role === 'admin' && <button type="button" aria-pressed={tab === 'copy'} onClick={() => setTab('copy')}>{t.copyToEnvironment}</button>}
             {principal.role === 'admin' && <button className="config-edit-action" type="button" aria-pressed={tab === 'raw' && viewingCurrent} onClick={() => showCurrent('raw')}>{t.editConfig}</button>}
             {principal.role === 'admin' && <details className="detail-more-actions"><summary aria-label={t.moreActions}>•••</summary><button type="button" onClick={event => { event.currentTarget.closest('details').removeAttribute('open'); setTab('clone'); }}>{t.clone}</button></details>}
           </div>
@@ -2487,8 +2542,8 @@ function ConfigDetail({ principal, configKey, environmentKey, t }) {
             <section className="history-view">
               <div className="table-frame history-table"><table><thead><tr><th>{t.revision}</th><th>{t.format}</th><th>{t.actor}</th><th>{t.created}</th><th>{t.action}</th></tr></thead>
                 <tbody>{history.items.map(revision => <tr className={revision.revision === viewedRevision ? 'selected-history-row' : ''} key={revision.revision}><td><button className="revision-link" type="button" aria-label={t.viewRevision.replace('{revision}', revision.revision)} onClick={() => inspectRevision(revision.revision)}>v{revision.revision}</button></td><td><code>{revision.format}</code></td><td><ActorIdentity actorID={revision.actor_id} principal={principal} /></td><td><time>{formatDate(revision.created_at, t.locale)}</time></td><td><div className="row-actions"><button type="button" aria-label={t.compareRevision.replace('{revision}', revision.revision)} onClick={() => compare(revision.revision)}>{t.compare}</button>{principal.role === 'admin' && revision.revision !== state.config.revision && (restoring === revision.revision
-                  ? <button className="danger-link" type="button" aria-label={t.confirmRestore.replace('{revision}', revision.revision)} onClick={() => restore(revision.revision)}>{t.confirmRestore.replace('{revision}', revision.revision)}</button>
-                  : <button type="button" aria-label={t.restoreRevision.replace('{revision}', revision.revision)} onClick={() => setRestoring(revision.revision)}>{t.restore}</button>)}</div></td></tr>)}</tbody>
+                  ? <button className="danger-link" type="button" disabled={restoreBusy} aria-label={t.confirmRestore.replace('{revision}', revision.revision)} onClick={() => restore(revision.revision)}>{t.confirmRestore.replace('{revision}', revision.revision)}</button>
+                  : <button type="button" disabled={restoreBusy} aria-label={t.restoreRevision.replace('{revision}', revision.revision)} onClick={() => setRestoring(revision.revision)}>{t.restore}</button>)}</div></td></tr>)}</tbody>
               </table></div>
               <RevisionPagination history={history} t={t} />
               <ActionError error={saveError} t={t} />
@@ -2517,7 +2572,7 @@ function ConfigDetail({ principal, configKey, environmentKey, t }) {
                 else window.location.hash = `/configs/${configKey}/${targetEnvironment}`;
               }} />
           ) : (
-            <ConfigClone path={path} t={t} />
+            <ConfigCopy key={`${path}/${tab}`} path={path} config={state.config} newConfig={tab === 'clone'} t={t} />
           )}
         </div>
         {!operationMode && <aside className="config-meta-panel">
@@ -2569,7 +2624,10 @@ function ConfigRevisionWorkbench({ mode, configKey, currentEnvironment, currentR
   const [source, setSource] = useState(initialSource || null);
   const [target, setTarget] = useState(null);
   const [comparison, setComparison] = useState({ status: 'idle' });
-  const [actionError, setActionError] = useState('');
+  const [actionError, setActionError] = useState(null);
+  const [previewEpoch, setPreviewEpoch] = useState(0);
+  const [mutate, resetMutation] = useMutation(request);
+  const selectionKey = JSON.stringify([source, target]);
   const environmentOptions = environments.length > 0 ? environments : [{ key: currentEnvironment }];
   const declaredCurrent = Object.fromEntries(environmentOptions.map(environment => [environment.key, environment.key === currentEnvironment ? currentRevision : environment.revision]));
 
@@ -2594,20 +2652,21 @@ function ConfigRevisionWorkbench({ mode, configKey, currentEnvironment, currentR
         read(target),
       ]).then(([preview, targetConfig]) => ({ target: targetConfig.content, result: preview.content, targetFormat: targetConfig.format, resultFormat: preview.format, expectedTargetRevision: preview.expected_target_revision }));
     operation
-      .then(result => live && setComparison({ status: 'ready', ...result }))
-      .catch(error => live && setComparison({ status: 'failed', code: error.code }));
+      .then(result => live && setComparison({ status: 'ready', selectionKey, ...result }))
+      .catch(error => live && setComparison({ status: 'failed', error }));
     return () => { live = false; };
-  }, [configKey, currentContent, currentEnvironment, currentFormat, currentRevision, mode, source, target]);
+  }, [configKey, currentContent, currentEnvironment, currentFormat, currentRevision, mode, source, target, selectionKey, previewEpoch]);
 
   const sameRevision = (left, right) => left && right && left.environment === right.environment && left.revision === right.revision;
   const choose = (slot, selection) => {
+    if (comparison.saving) return;
     if (!selection) {
       if (slot === 'source') setSource(null);
       else setTarget(null);
-      setActionError('');
+      setActionError(null);
       return;
     }
-    setActionError('');
+    setActionError(null);
     if (slot === 'source') {
       setSource(selection);
       if (sameRevision(selection, target)) setTarget(null);
@@ -2630,24 +2689,22 @@ function ConfigRevisionWorkbench({ mode, configKey, currentEnvironment, currentR
   const identity = selection => selection ? `${selection.environment}/${configKey}@v${selection.revision}` : '—';
   const selectedFormat = selection => selection?.format || (selection?.environment === currentEnvironment && selection.revision === currentRevision ? currentFormat : '');
   const commit = async () => {
-    setActionError('');
+    if (comparison.saving || comparison.status !== 'ready' || comparison.selectionKey !== selectionKey) return;
+    setActionError(null);
     setComparison(current => ({ ...current, saving: true }));
     try {
-      const result = await request(`/v1/environments/${encodeURIComponent(target.environment)}/configs/${encodeURIComponent(configKey)}/${mode}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify({ source_environment: source.environment, source_config: configKey, source_revision: source.revision, target_revision: target.revision, expected_target_revision: comparison.expectedTargetRevision }),
-      });
+      const result = await mutate(`/v1/environments/${encodeURIComponent(target.environment)}/configs/${encodeURIComponent(configKey)}/${mode}`,
+        { source_environment: source.environment, source_config: configKey, source_revision: source.revision, target_revision: target.revision, expected_target_revision: comparison.expectedTargetRevision });
       onCommitted(result, target.environment);
     } catch (error) {
       setComparison(current => ({ ...current, saving: false }));
-      setActionError(error.status === 409 ? t.saveConflict : t.saveFailed);
+      setActionError(managementError(error, t, t.saveFailed));
     }
   };
 
   return <section className="config-compare-workbench">
     <p className="compare-drag-hint">{mode === 'compare' ? t.compareDragHint : t.transferDragHint}</p>
-    <div className="compare-picker">
+    <fieldset className="compare-picker" disabled={comparison.saving}>
       <CompareRevisionLane side="left" configKey={configKey} environment={leftEnvironment} currentRevision={declaredCurrent[leftEnvironment]} source={source} target={target} onEnvironmentChange={setLeftEnvironment} onChoose={choose} t={t} />
       <div className="compare-drop-stack">
         {['source', 'target'].map(slot => {
@@ -2659,17 +2716,17 @@ function ConfigRevisionWorkbench({ mode, configKey, currentEnvironment, currentR
         })}
       </div>
       <CompareRevisionLane side="right" configKey={configKey} environment={rightEnvironment} currentRevision={declaredCurrent[rightEnvironment]} source={source} target={target} onEnvironmentChange={setRightEnvironment} onChoose={choose} t={t} />
-    </div>
-    {actionError && <p className="inline-error compare-action-error" role="alert">{actionError}</p>}
+    </fieldset>
+    <ActionError error={actionError} t={t} />
+    {source && target && mode !== 'compare' && <button type="button" disabled={comparison.saving || comparison.status === 'loading'} onClick={() => { setActionError(null); resetMutation(); setPreviewEpoch(value => value + 1); }}>{t.refreshTransferPreview}</button>}
     {comparison.status === 'loading' && <div className="collection-state compare-loading"><span className="loading-line" /></div>}
-    {comparison.status === 'ready' && (mode === 'compare' ? <ConfigDiffEditor source={comparison.source} target={comparison.target} sourceFormat={comparison.sourceFormat} targetFormat={comparison.targetFormat} sourceLabel={identity(source)} targetLabel={identity(target)} t={t} /> : <div className="transfer-result">
+    {comparison.status === 'ready' && comparison.selectionKey === selectionKey && (mode === 'compare' ? <ConfigDiffEditor source={comparison.source} target={comparison.target} sourceFormat={comparison.sourceFormat} targetFormat={comparison.targetFormat} sourceLabel={identity(source)} targetLabel={identity(target)} t={t} /> : <div className="transfer-result">
       <div className="transfer-direction"><code>{identity(source)}</code><span aria-hidden="true">→</span><code>{identity(target)}</code></div>
       <ConfigDiffEditor source={comparison.target} target={comparison.result} sourceFormat={comparison.targetFormat} targetFormat={comparison.resultFormat} sourceLabel={t.targetBefore} targetLabel={t.resultAfter} t={t} />
       <div className="editor-actions"><span className="transfer-conflict-hint">{t.targetConflictHint.replace('{revision}', comparison.expectedTargetRevision)}</span><button className="primary-action compact-action" type="button" disabled={comparison.saving} onClick={commit}>{(mode === 'merge' ? t.mergeInto : t.replaceInto).replace('{environment}', target.environment)}</button></div>
     </div>)}
-    {comparison.status === 'failed' && <p className="inline-error" role="alert">{comparison.code === 'format_mismatch'
-      ? t.mergeFormatMismatch.replace('{source}', selectedFormat(source).toUpperCase()).replace('{target}', selectedFormat(target).toUpperCase())
-      : t.operationFailed}</p>}
+    {comparison.status === 'failed' && <ActionError error={{ ...managementError(comparison.error, t, t.operationFailed),
+      ...(comparison.error?.code === 'format_mismatch' ? { message: t.mergeFormatMismatch.replace('{source}', selectedFormat(source).toUpperCase()).replace('{target}', selectedFormat(target).toUpperCase()) } : {}) }} t={t} />}
   </section>;
 }
 
@@ -2699,30 +2756,51 @@ function ResolvedPreview({ path, t }) {
   );
 }
 
-function ConfigClone({ path, t }) {
-  const [state, setState] = useState({ status: 'idle', error: '' });
-  const clone = async event => {
+function ConfigCopy({ path, config, newConfig, t }) {
+  const [environment, setEnvironment] = useState('');
+  const [state, setState] = useState({ status: 'idle' });
+  const [mutate, resetMutation] = useMutation(request);
+  const submit = async event => {
     event.preventDefault();
+    if (state.status === 'loading' || state.status === 'ready') return;
     const data = new FormData(event.currentTarget);
-    setState({ status: 'loading', error: '' });
+    const targetConfig = newConfig ? data.get('target_config') : config.config_key;
+    setState({ status: 'loading' });
     try {
-      const result = await request(`${path}/clone`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify({ target_environment: data.get('target_environment'), target_config: data.get('target_config'), target_name: data.get('target_name') }),
-      });
-      setState({ status: 'ready', error: '', warnings: result.warnings || [] });
-    } catch {
-      setState({ status: 'failed', error: t.operationFailed });
+      const result = await mutate(newConfig ? `${path}/clone` : `/v1/environments/${encodeURIComponent(environment)}/configs/${encodeURIComponent(targetConfig)}/replace`, newConfig
+        ? { target_environment: environment, target_config: targetConfig, target_name: data.get('target_name'), source_revision: config.revision }
+        : { source_environment: config.environment_key, source_config: config.config_key, source_revision: config.revision, target_revision: 0, expected_target_revision: 0 });
+      setState({ status: 'ready', result, environment, targetConfig });
+    } catch (error) {
+      setState({ status: 'failed', error: managementError(error, t, t.operationFailed), reason: error.reason, environment, targetConfig });
     }
   };
-  return <section className="transfer-panel"><form className="clone-form" onSubmit={clone}>
-    <label>{t.targetEnvironment}<input name="target_environment" required pattern="[a-z][a-z0-9_-]{0,62}" /></label>
-    <label>{t.targetConfig}<input name="target_config" required pattern="[a-z][a-z0-9_-]{0,62}" /></label>
-    <label>{t.targetName}<input name="target_name" required maxLength="255" /></label>
-    <div className="form-actions"><span className={state.status === 'ready' ? 'success-note' : 'inline-error'} role="status">{state.status === 'ready' ? t.cloneComplete : state.error}</span><button className="primary-action compact-action" type="submit" disabled={state.status === 'loading'}>{t.cloneConfig}</button></div>
-    {state.warnings?.length > 0 && <div className="config-warning-list" role="status"><ConfigWarningLines warnings={state.warnings} t={t} /></div>}
-  </form></section>;
+  const change = () => {
+    // A completed copy is a new intent after edits. Failed identical requests
+    // retain their operation ID so a lost response cannot create a second write.
+    if (state.status === 'ready') { resetMutation(); setState({ status: 'idle' }); }
+    else if (state.status === 'failed') setState({ status: 'idle' });
+  };
+  return <section className="transfer-panel config-copy-panel">
+    <p>{newConfig ? t.cloneExplanation : t.copyExplanation}</p>
+    <p><code>{`${config.environment_key}/${config.config_key}@v${config.revision}`}</code></p>
+    <p className="muted-note">{t.copySavedRevision.replace('{revision}', config.revision)}</p>
+    <form onSubmit={submit} onChange={change}>
+      <fieldset className="clone-form" disabled={state.status === 'loading'}>
+        <EnvironmentSelect label={t.targetEnvironment} name="target_environment" required value={environment} onChange={setEnvironment} t={t} />
+        {newConfig && <><label>{t.targetConfig}<input name="target_config" required pattern="[a-z][a-z0-9_-]{0,62}" /></label>
+          <label>{t.targetName}<input name="target_name" required maxLength="255" defaultValue={config.config_name} /></label></>}
+        <div className="form-actions">
+          <button className="primary-action compact-action" type="submit" disabled={!environment || state.status === 'loading' || state.status === 'ready'}>{newConfig ? t.cloneConfig : t.copyFirstVersion.replace('{environment}', environment || '…')}</button>
+        </div>
+      </fieldset>
+    </form>
+    <ActionError error={state.error} t={t} />
+    {state.status === 'ready' && <p className="success-note" role="status">{t.copyComplete.replace('{target}', `${state.environment}/${state.targetConfig}`).replace('{revision}', state.result.revision)}</p>}
+    {(state.status === 'ready' || state.reason === 'target_config_exists') && <p><a href={`#/configs/${encodeURIComponent(state.targetConfig)}/${encodeURIComponent(state.environment)}`}>{t.openTargetConfig}</a></p>}
+    {state.result?.warnings?.length > 0 && <div className="config-warning-list" role="status"><ConfigWarningLines warnings={state.result.warnings} t={t} /></div>}
+    <ConfigCodeEditor label={t.source} readOnly value={config.content} format={config.format} />
+  </section>;
 }
 
 function ConfigWarningLines({ warnings, t }) {

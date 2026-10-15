@@ -333,7 +333,7 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .config-pagination button:disabled { color: var(--disabled); cursor: default; }
 .environment-select { display: grid; align-content: start; gap: 5px; min-width: 0; }
 .environment-select label { display: grid; gap: 5px; }
-.environment-select input, .environment-select select { width: 100%; min-width: 0; min-height: 32px; }
+.environment-select input, .environment-select select { width: 100%; min-width: 0; min-height: 36px; border: 1px solid var(--line-strong); border-radius: 4px; padding: 6px 9px; background: var(--surface); color: var(--ink); }
 .environment-select .config-pagination, .resource-rail .config-pagination { flex-wrap: wrap; gap: 5px; padding: 5px 0; font-size: 10px; }
 .environment-select .config-pagination div, .resource-rail .config-pagination div { gap: 5px; }
 .vault-environment-picker > input[type="search"] { margin-bottom: 8px; }
@@ -472,7 +472,7 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .history-view .inline-error { margin-top: 12px; }
 .config-compare-workbench { margin-top: 14px; }
 .compare-drag-hint { margin: 0 0 12px; border-left: 3px solid var(--blue); padding: 5px 10px; color: var(--muted); font-size: 11px; }
-.compare-picker { display: grid; grid-template-columns: minmax(240px, 1fr) 240px minmax(240px, 1fr); align-items: stretch; gap: 22px; }
+.compare-picker { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; grid-template-columns: minmax(240px, 1fr) 240px minmax(240px, 1fr); align-items: stretch; gap: 22px; }
 .compare-revision-lane { min-width: 0; min-height: 390px; border: 1px solid var(--line); border-radius: 9px; padding: 14px; background: linear-gradient(var(--surface), var(--surface-subtle)); }
 .compare-revision-lane > label { display: grid; gap: 5px; }
 .compare-revision-lane > label span, .compare-revision-lane > small { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
@@ -961,3 +961,7 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
 
 .token-form > .token-create-fields { display: contents; }
 .token-create-fields > label:not(.check-line), .token-create-fields > fieldset { display: grid; gap: 6px; margin: 0; border: 0; padding: 0; font-size: 12px; font-weight: 700; }
+
+.config-copy-panel > p { overflow-wrap: anywhere; }
+.config-copy-panel .clone-form { min-width: 0; }
+.config-copy-panel .clone-form > label { align-self: start; }
