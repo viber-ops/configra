@@ -167,6 +167,8 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm --prefix web ci --ignore-scripts
+      - name: Check frontend dependency vulnerabilities
+        run: npm --prefix web audit --audit-level=high
       - run: npx --prefix web playwright install --with-deps chromium
       - run: npm --prefix web run test:licenses
       - run: npm --prefix web test
