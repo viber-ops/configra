@@ -48,7 +48,9 @@ Management exposes the effective limit as `write_token_max_ttl_days` in `/v1/me`
 Token-creation `422 validation_failed` responses may also include a safe `field`,
 `reason` and `max_ttl_days`; they never include submitted values. New failed
 Operations retain this metadata for identical retries. The UI names the field,
-shows the actual limit and retains the Request ID for audit lookup.
+shows the actual limit, selected days/hours and any overrun, and retains the Request
+ID for audit lookup. Lifetime presets respect a shorter server policy. Token IDs
+are copyable in the inventory, with explicit clipboard feedback.
 
 Omitted/null Config or Namespace allowlists allow all keys inside the granted
 Environments; explicit `[]` denies all in that dimension. The UI's blank allowlist

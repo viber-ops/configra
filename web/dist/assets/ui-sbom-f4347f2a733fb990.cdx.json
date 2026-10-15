@@ -14,7 +14,7 @@
     "properties": [
       {
         "name": "configra:bundle-files",
-        "value": "[{\"path\":\"assets/editors-CWxJtLDy.js\",\"sha256\":\"f97f312266af13f2905a78762484b743bb9c460ab4a581abb5c959985387cb18\"},{\"path\":\"assets/index-8Z3hkLXf.css\",\"sha256\":\"c9e6137cc22bddc063573aab149ffb3a264962d3e54ea888332dac80fd750b0b\"},{\"path\":\"assets/index-B7odY24Y.js\",\"sha256\":\"9ca43aa81ec89beb4ba432fcd9326a0e0163971ce8eff6b5b7c1d8eb2e33aeda\"}]"
+        "value": "[{\"path\":\"assets/editors-DWe5DODn.js\",\"sha256\":\"eb12f588abe2da5c9529c6fa5a52a5d8b8be7d8fb2c66ce1921b724ad1e45e76\"},{\"path\":\"assets/index-Bhkx7XxV.css\",\"sha256\":\"e4b6d6e3dbab5c825cd7fa8f5c37fd50ebc864ba3394ca6a8344d0f0ef17a33c\"},{\"path\":\"assets/index-bjerrUxL.js\",\"sha256\":\"285b60f50d068d7081315567e48c1f32798ae45392ec497c078f1964847da64e\"}]"
       },
       {
         "name": "configra:notices-sha256",

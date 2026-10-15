@@ -958,3 +958,6 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .token-form input[aria-invalid="true"] { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
 
 .token-form fieldset[aria-invalid="true"] { outline: 1px solid var(--danger); outline-offset: 4px; border-radius: 4px; }
+
+.token-form > .token-create-fields { display: contents; }
+.token-create-fields > label:not(.check-line), .token-create-fields > fieldset { display: grid; gap: 6px; margin: 0; border: 0; padding: 0; font-size: 12px; font-weight: 700; }

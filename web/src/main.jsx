@@ -2,8 +2,10 @@ import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'rea
 import { createRoot } from 'react-dom/client';
 import { AuthorityManagement, CertificateManagement, authorityLabel } from './security/Certificates.jsx';
 import { Sessions, sessionLabel } from './security/Sessions.jsx';
-import { request, managementError, ActionError, useInventory, InventoryPagination } from './management.jsx';
-import { validateTokenInput, tokenValidationMessage, localDateTime } from './token-validation.js';
+import { request, managementError, ActionError, useInventory, InventoryPagination, useMutation } from './management.jsx';
+import { validateTokenInput, tokenValidationMessage } from './token-validation.js';
+import { CopyValue } from './CopyValue.jsx';
+import { Expiration, ExpiryInput, useCurrentTime } from './security/Lifetime.jsx';
 import './styles.css';
 import './workspace.css';
 
@@ -256,7 +258,7 @@ const messages = {
     savedRevision: 'Saved as v{revision}.',
     unsavedChanges: 'You have unsaved changes. Discard them?',
     revision_conflict: 'This resource changed after you opened it. Review the latest Revision and try again.',
-    validation_failed: 'The input is invalid. Review the highlighted fields and try again.',
+    validation_failed: 'The server rejected these values. Check the input and use the Request ID to locate the failure.',
     request_too_large: 'The request exceeds the supported size limit.',
     service_unavailable: 'The service is temporarily unavailable. Try again shortly.',
     operation_id_reused: 'This operation identifier was already used for different content.',
@@ -607,7 +609,7 @@ const messages = {
     savedRevision: '已保存为 v{revision}。',
     unsavedChanges: '有尚未保存的更改，确定放弃吗？',
     revision_conflict: '打开后资源已发生变化，请查看最新 Revision 后重试。',
-    validation_failed: '输入不合法，请检查标记的字段后重试。',
+    validation_failed: '服务端拒绝了这些输入，请检查填写内容，并使用 Request ID 定位原因。',
     request_too_large: '请求超过系统支持的大小限制。',
     service_unavailable: '服务暂时不可用，请稍后重试。',
     operation_id_reused: '此操作标识已用于其他内容。',
@@ -2001,6 +2003,9 @@ function Administration({ t, principal }) {
 
 function TokensPanel({ t, principal }) {
   const [creating, setCreating] = useState(false);
+  const [creatingToken, setCreatingToken] = useState(false);
+  const [mutate, resetMutation] = useMutation(request);
+  const now = useCurrentTime();
   const [neverExpires, setNeverExpires] = useState(false);
   const [writeScoped, setWriteScoped] = useState(false);
   const [created, setCreated] = useState(null);
@@ -2009,7 +2014,6 @@ function TokensPanel({ t, principal }) {
   const [error, setError] = useState(null);
   const configuredDays = principal.write_token_max_ttl_days;
   const maxDays = Number.isInteger(configuredDays) && configuredDays >= 1 && configuredDays <= 90 ? configuredDays : 90;
-  const deadline = localDateTime(new Date(Date.now() + maxDays * 86400000));
   const inputFeedback = field => ({ 'aria-invalid': error?.field === field || undefined, 'aria-describedby': error?.field === field ? 'token-create-error' : undefined });
   const [refresh, setRefresh] = useState(0);
   const [search, setSearch] = useState('');
@@ -2020,6 +2024,7 @@ function TokensPanel({ t, principal }) {
   const state = useInventory(`/v1/api-tokens?include_revoked=true&q=${encodeURIComponent(search)}`, refresh);
   const create = async event => {
     event.preventDefault();
+    if (creatingToken) return;
     setError(null);
     const form = event.currentTarget;
     const data = new FormData(form);
@@ -2049,19 +2054,16 @@ function TokensPanel({ t, principal }) {
       return;
     }
     if (body.expires_at) body.expires_at = new Date(body.expires_at).toISOString();
+    setCreatingToken(true);
     try {
-      const result = await request('/v1/api-tokens', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify(body),
-      });
-      setCreated(result.token);
+      const result = await mutate('/v1/api-tokens', body);
+      setCreated(result);
       setCreating(false);
       setRefresh(value => value + 1);
     } catch (error) {
       setError(tokenValidationMessage(error, t, maxDays));
       form.elements.namedItem(error.field)?.focus();
-    }
+    } finally { setCreatingToken(false); }
   };
   const saveGrants = async event => {
     event.preventDefault();
@@ -2076,8 +2078,8 @@ function TokensPanel({ t, principal }) {
       setEditing('');
       setGrants({});
       setRefresh(value => value + 1);
-    } catch {
-      setError({ message: t.operationFailed });
+    } catch (failure) {
+      setError(managementError(failure, t, t.operationFailed));
     } finally {
       setSaving(false);
     }
@@ -2087,25 +2089,27 @@ function TokensPanel({ t, principal }) {
       await request(`/v1/api-tokens/${encodeURIComponent(publicID)}/revoke`, { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID() } });
       setConfirming('');
       setRefresh(value => value + 1);
-    } catch {
-      setError({ message: t.operationFailed });
+    } catch (failure) {
+      setError(managementError(failure, t, t.operationFailed));
     }
   };
   return (
     <section className="admin-panel tokens-panel">
-      <div className="panel-actions"><span>{t.tokenEnvironmentGrant}</span><button className="primary-action compact-action" type="button" onClick={() => { setCreating(value => !value); setEnvironmentKeys([]); setError(null); setCreated(null); }}>{t.newAPIToken}</button></div>
-      <label>{t.search}<input type="search" value={search} onChange={event => setSearch(event.target.value)} /></label>
-      {created && <div className="one-time-secret" role="alert"><strong>{t.tokenOnce}</strong><code>{created}</code><button type="button" onClick={() => navigator.clipboard.writeText(created).catch(() => {})}>{t.copy}</button></div>}
+      <div className="panel-actions"><span>{t.tokenEnvironmentGrant}</span><button className="primary-action compact-action" type="button" disabled={creatingToken} onClick={() => { resetMutation(); setCreating(value => !value); setEnvironmentKeys([]); setError(null); setCreated(null); }}>{t.newAPIToken}</button></div>
+      <label className="credential-search">{t.search}<input type="search" value={search} onChange={event => setSearch(event.target.value)} /></label>
+      {created && <div className="one-time-secret" role="alert"><strong>{created.token ? t.tokenOnce : (t.locale.startsWith('zh') ? '该操作已完成，令牌不会再次返回。如未保存，请按下方 Token ID 找到并吊销该令牌后重新签发。' : 'This operation already completed. The Token cannot be returned again. If it was not saved, find and revoke the Token ID below, then issue a replacement.')}</strong><CopyValue value={created.token || created.public_id} label={created.token ? 'API Token' : 'Token ID'} t={t} /></div>}
       {creating && (
         <form className="token-form" noValidate onSubmit={create} onInput={() => setError(null)}>
+          <fieldset className="token-create-fields" disabled={creatingToken}>
           <label>{t.tokenName}<input {...inputFeedback('display_name')} name="display_name" required maxLength="255" autoComplete="off" /></label>
           <EnvironmentChoices invalid={error?.field === 'environment_keys'} describedBy={error?.field === 'environment_keys' ? 'token-create-error' : undefined} label={t.allowedEnvironments} checked={environment => environmentKeys.includes(environment.key)} onChange={(key, checked) => setEnvironmentKeys(current => checked ? [...current, key] : current.filter(value => value !== key))} t={t} />
           <label className="check-line"><input type="checkbox" checked={writeScoped} onChange={event => { setWriteScoped(event.target.checked); setNeverExpires(false); setError(null); }} />{t.writeScoped}</label>
           {writeScoped && <><p className="scope-note">{t.writeTokenHint}</p><label>{t.configAllowlist}<input {...inputFeedback('config_keys')} name="config_keys" maxLength="16384" autoComplete="off" /><small>{t.scopeHint}</small></label><label>{t.namespaceAllowlist}<input {...inputFeedback('namespace_keys')} name="namespace_keys" maxLength="16384" autoComplete="off" /><small>{t.scopeHint}</small></label></>}
           {!writeScoped && <label className="check-line"><input type="checkbox" name="allow_without_mtls" />{t.allowWithoutMTLS}</label>}
           {!writeScoped && <label className="check-line"><input type="checkbox" checked={neverExpires} onChange={event => setNeverExpires(event.target.checked)} />{t.neverExpires}</label>}
-          {!neverExpires && <label><span>{t.expiresAt}</span><input {...inputFeedback('expires_at')} aria-label={t.expiresAt} type="datetime-local" name="expires_at" required={writeScoped} max={writeScoped ? deadline : undefined} />{writeScoped ? <small>{t.writeTokenDeadline.replace('{days}', maxDays).replace('{date}', deadline.replace('T', ' '))}</small> : <small>{t.locale.startsWith('zh') ? '留空使用默认的 90 天有效期。' : 'Leave empty for the default 90-day lifetime.'}</small>}</label>}
-          <div className="form-actions"><div id="token-create-error"><ActionError error={error} t={t} /></div><button className="primary-action compact-action" type="submit" >{t.createAPIToken}</button></div>
+          {!neverExpires && <ExpiryInput t={t} maxDays={writeScoped ? maxDays : undefined} feedback={inputFeedback('expires_at')} onEdit={() => setError(null)} />}
+          </fieldset>
+          <div className="form-actions"><div id="token-create-error"><ActionError error={error} t={t} /></div><button className="primary-action compact-action" type="submit" disabled={creatingToken}>{creatingToken ? (t.locale.startsWith('zh') ? '正在创建…' : 'Creating…') : t.createAPIToken}</button></div>
         </form>
       )}
       {editing && <form className="grant-form" onSubmit={saveGrants}><strong>{editing.display_name}</strong>
@@ -2116,7 +2120,7 @@ function TokensPanel({ t, principal }) {
       {!creating && error && <ActionError error={error} t={t} />}
       <CollectionState state={state} t={t}>
         <div className="table-frame"><table><thead><tr><th>{t.tokenName}</th><th>{t.prefix}</th><th>{t.environments}</th><th>mTLS</th><th>{t.expiresAt}</th><th>{t.status}</th><th /></tr></thead>
-          <tbody>{state.items.map(token => <tr key={token.public_id}><td><strong title={token.display_name}>{token.display_name}</strong><code className="row-subkey">{token.public_id}</code><small>{token.kind || 'read-only'}</small>{(token.kind === 'write-scoped' || token.parent_public_id) && <details><summary>{t.allowedEnvironments}</summary><p>{t.configAllowlist}: {token.config_keys == null ? '*' : token.config_keys.join(', ') || '∅'}</p><p>{t.namespaceAllowlist}: {token.namespace_keys == null ? '*' : token.namespace_keys.join(', ') || '∅'}</p></details>}</td><td><code title={token.display_prefix}>{token.display_prefix}</code></td><td><div className="environment-links">{token.environment_keys.map(environment => <code key={environment}>{environment}</code>)}{token.environment_count > token.environment_keys.length && <span>+{token.environment_count - token.environment_keys.length}</span>}</div></td><td>{token.allow_without_mtls ? t.tokenOnlyAllowed : t.mtlsRequired}</td><td><time>{token.expires_at ? formatDate(token.expires_at, t.locale) : t.neverExpires}</time></td><td><span className={token.revoked ? 'status archived' : 'status active'}>{token.revoked ? t.revoked : t.statusActive}</span></td><td>{!token.revoked && <div className="row-actions">{token.kind !== 'write-scoped' && !token.parent_public_id && <button type="button" disabled={saving} aria-label={`${t.editEnvironments} ${token.display_name}`} onClick={() => { if (confirmDiscard()) { setEditing(token); setGrants({}); } }}>{t.editEnvironments}</button>}{confirming === token.public_id ? <button className="danger-link" type="button" aria-label={`${t.confirmRevoke} ${token.display_name}`} onClick={() => revoke(token.public_id)}>{t.confirmRevoke}</button> : <button className="danger-link" type="button" aria-label={`${t.revoke} ${token.display_name}`} onClick={() => setConfirming(token.public_id)}>{t.revoke}</button>}</div>}</td></tr>)}</tbody>
+          <tbody>{state.items.map(token => <tr key={token.public_id}><td><strong title={token.display_name}>{token.display_name}</strong><CopyValue value={token.public_id} label="Token ID" t={t} /><small>{token.kind || 'read-only'}</small>{(token.kind === 'write-scoped' || token.parent_public_id) && <details><summary>{t.allowedEnvironments}</summary><p>{t.configAllowlist}: {token.config_keys == null ? '*' : token.config_keys.join(', ') || '∅'}</p><p>{t.namespaceAllowlist}: {token.namespace_keys == null ? '*' : token.namespace_keys.join(', ') || '∅'}</p></details>}</td><td><code title={token.display_prefix}>{token.display_prefix}</code></td><td><div className="environment-links">{token.environment_keys.map(environment => <code key={environment}>{environment}</code>)}{token.environment_count > token.environment_keys.length && <span>+{token.environment_count - token.environment_keys.length}</span>}</div></td><td>{token.allow_without_mtls ? t.tokenOnlyAllowed : t.mtlsRequired}</td><td><Expiration value={token.expires_at} now={now} revoked={token.revoked} t={t} /></td><td><span className={token.revoked || Date.parse(token.expires_at) <= now ? 'status archived' : 'status active'}>{token.revoked ? t.revoked : Date.parse(token.expires_at) <= now ? (t.locale.startsWith('zh') ? '已过期' : 'Expired') : t.statusActive}</span></td><td>{!token.revoked && <div className="row-actions">{token.kind !== 'write-scoped' && !token.parent_public_id && <button type="button" disabled={saving} aria-label={`${t.editEnvironments} ${token.display_name}`} onClick={() => { if (confirmDiscard()) { setEditing(token); setGrants({}); } }}>{t.editEnvironments}</button>}{confirming === token.public_id ? <button className="danger-link" type="button" aria-label={`${t.confirmRevoke} ${token.display_name}`} onClick={() => revoke(token.public_id)}>{t.confirmRevoke}</button> : <button className="danger-link" type="button" aria-label={`${t.revoke} ${token.display_name}`} onClick={() => setConfirming(token.public_id)}>{t.revoke}</button>}</div>}</td></tr>)}</tbody>
         </table></div>
       </CollectionState>
       <InventoryPagination collection={state} t={t} />
