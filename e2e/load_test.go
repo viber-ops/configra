@@ -264,7 +264,19 @@ logging:
 		warmDuration = 2 * time.Second
 	}
 	evidence.Stage = "warmup"
+	warmContext, stopWarmSampling := context.WithCancel(ctx)
+	warmSamplesDone := make(chan []loadSample, 1)
+	go func() { warmSamplesDone <- sampleLoad(warmContext, containerName, database.admin) }()
+	defer func() {
+		stopWarmSampling()
+		if warmSamplesDone != nil {
+			evidence.WarmupSamples = <-warmSamplesDone
+		}
+	}()
 	warmReport := runVegeta(t, ctx, required["vegeta"], warmDuration, targetFile, warmResult, tlsMaterial)
+	stopWarmSampling()
+	evidence.WarmupSamples = <-warmSamplesDone
+	warmSamplesDone = nil
 	evidence.Warmup = warmReport
 	validateVegetaReport(t, warmReport, warmDuration)
 
@@ -995,6 +1007,7 @@ type loadEvidence struct {
 	MySQLInterpolateParams bool                `json:"mysql_interpolate_params"`
 	ClickHouseVersion      string              `json:"clickhouse_version"`
 	Warmup                 vegetaReport        `json:"warmup"`
+	WarmupSamples          []loadSample        `json:"warmup_samples"`
 	Report                 vegetaReport        `json:"vegeta"`
 	Samples                []loadSample        `json:"samples"`
 	Resources              loadResourceSummary `json:"resources"`
@@ -1099,6 +1112,16 @@ func TestLoadEvidenceRejectsSecretsInReport(t *testing.T) {
 	evidence.Report.Errors = []string{base64.StdEncoding.EncodeToString(secret)}
 	if encoded, err := encodeLoadEvidence(evidence, sentinels); err == nil || len(encoded) != 0 {
 		t.Fatal("secret-bearing report must return an error without encoded content")
+	}
+	evidence.Report.Errors = nil
+	evidence.Stage = "warmup"
+	evidence.WarmupSamples = []loadSample{{CPUPercent: 150, MemoryBytes: 32 << 20, MySQLRunning: 3}}
+	if encoded, err := encodeLoadEvidence(evidence, sentinels); err != nil || !bytes.Contains(encoded, []byte(`"warmup_samples": [`)) {
+		t.Fatal("warmup diagnostics must survive before the measured stage")
+	}
+	evidence.WarmupSamples[0].SamplingFailure = string(secret)
+	if encoded, err := encodeLoadEvidence(evidence, sentinels); err == nil || len(encoded) != 0 {
+		t.Fatal("warmup diagnostics must reject protected material")
 	}
 }
 

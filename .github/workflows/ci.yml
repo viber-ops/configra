@@ -104,12 +104,12 @@ jobs:
           const report = JSON.parse(readFileSync('.cache/load/latest.json', 'utf8'));
           const { started_at, passed, stage, duration, requested_qps, host_os, host_arch, host_cpus, image,
             container_cpus, container_memory_bytes, mysql_version, mysql_interpolate_params,
-            resources, expected_access_events, persisted_access_events, captured_access_events,
+            resources, warmup_samples, expected_access_events, persisted_access_events, captured_access_events,
             nats_leak_scan_passed, leak_scan_passed } = report;
           const metrics = ({ latencies, requests, throughput, success, status_codes } = {}) => ({ latencies, requests, throughput, success, status_codes });
           console.log(JSON.stringify({ started_at, passed, stage, duration, requested_qps, host_os, host_arch, host_cpus, image,
             container_cpus, container_memory_bytes, mysql_version, mysql_interpolate_params,
-            resources, expected_access_events, persisted_access_events, captured_access_events,
+            resources, warmup_samples, expected_access_events, persisted_access_events, captured_access_events,
             nats_leak_scan_passed, leak_scan_passed, warmup: metrics(report.warmup), measured: metrics(report.vegeta) }, null, 2));
           JS
       - name: Remove disposable dependencies
