@@ -30,19 +30,19 @@ try {
     assert.deepEqual(readFileSync(join(temporary, file)), readFileSync(join(source, file)),
       `${binary}: image ${file} matches reviewed source`);
   }
-  const goEnv = { ...process.env, GOTOOLCHAIN: 'go1.26.7' };
+  const goEnv = { ...process.env, GOTOOLCHAIN: 'go1.26.9' };
   const goRoot = execFileSync('go', ['env', 'GOROOT'], { encoding: 'utf8', env: goEnv }).trim();
-  run(['cp', `${container}:/licenses/${binary}/go1.26.7`, join(temporary, 'go1.26.7')]);
+  run(['cp', `${container}:/licenses/${binary}/go1.26.9`, join(temporary, 'go1.26.9')]);
   for (const file of readFileSync(join(root, 'scripts/go-notices/files.txt'), 'utf8').trim().split('\n')) {
     const stored = /\.(?:go|s|h)$/.test(file) ? `${file}.txt` : file;
-    assert.deepEqual(readFileSync(join(temporary, 'go1.26.7', stored)), readFileSync(join(goRoot, file)),
+    assert.deepEqual(readFileSync(join(temporary, 'go1.26.9', stored)), readFileSync(join(goRoot, file)),
       `${binary}: image preserves original Go notice ${file}`);
   }
-  assert.deepEqual(readFileSync(join(temporary, 'go1.26.7/SOURCE.md')),
+  assert.deepEqual(readFileSync(join(temporary, 'go1.26.9/SOURCE.md')),
     readFileSync(join(root, 'scripts/go-notices/SOURCE.md')));
   run(['cp', `${container}:/${binary}`, join(temporary, binary)]);
   const info = JSON.parse(execFileSync('go', ['version', '-m', '-json', join(temporary, binary)], {
-    encoding: 'utf8', timeout: 30_000, env: { ...process.env, GOTOOLCHAIN: 'go1.26.7' },
+    encoding: 'utf8', timeout: 30_000, env: { ...process.env, GOTOOLCHAIN: 'go1.26.9' },
   }));
   const settings = Object.fromEntries(info.Settings.map(({ Key, Value }) => [Key, Value]));
   assert.equal(settings.GOOS, metadata.os);

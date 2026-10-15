@@ -148,7 +148,7 @@ let stage = 'startup';
 const sdkRead = () => {
   const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith('CONFIGRA_')));
   Object.assign(env, {
-    GOWORK: 'off', GOFLAGS: '-mod=readonly', GOTOOLCHAIN: 'go1.26.7',
+    GOWORK: 'off', GOFLAGS: '-mod=readonly', GOTOOLCHAIN: 'go1.26.9',
     CONFIGRA_URL: 'https://localhost:18089', CONFIGRA_TOKEN_FILE: join(artifacts, 'token'),
     CONFIGRA_CLIENT_CERT: join(artifacts, 'client.crt'), CONFIGRA_CLIENT_KEY: join(artifacts, 'client.key'),
     CONFIGRA_SERVER_CA: join(directory, 'tls.crt'),

@@ -258,7 +258,7 @@ func collect(ctx context.Context, binary, output string) error {
 			}
 			from := filepath.Join(download.Dir, filepath.FromSlash(file.Path))
 			if file.External {
-				if file.Source != "https://github.com/golang/go/blob/go1.26.7/LICENSE" {
+				if file.Source != "https://github.com/golang/go/blob/go1.26.9/LICENSE" {
 					return errors.New("unreviewed external notice source")
 				}
 				from = filepath.Join(goRoot, "LICENSE")

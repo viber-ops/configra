@@ -33,7 +33,11 @@ jobs:
       fail-fast: false
       matrix:
         module: ['.', kubernetes]
-        go: ['1.25.13', '1.26.7']
+        go: ['1.25.13', '1.26.9']
+        # The x/net security update requires Go 1.26 in the Kubernetes module.
+        exclude:
+          - module: kubernetes
+            go: '1.25.13'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -51,7 +55,7 @@ jobs:
           go vet ./...
           go mod verify
       - name: Check reachable vulnerabilities
-        if: matrix.go == '1.26.7'
+        if: matrix.go == '1.26.9'
         working-directory: ${{ matrix.module }}
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
 
@@ -74,7 +78,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.7'
+          go-version: '1.26.9'
           cache-dependency-path: |
             configra/go.sum
             configra/e2e/go.sum

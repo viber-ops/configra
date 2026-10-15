@@ -1,5 +1,8 @@
 # Kubernetes integration
 
+Source builds require Go **1.26.9** or newer. The published v1.2.1 bundles include
+the matching executable and remain compatible with configra-go v1.2.0.
+
 Configra itself runs as separate Management and API Deployments; see
 [service deployment](../deploy/kubernetes/README.md). This module adds two ways
 for application Pods to consume its configuration.

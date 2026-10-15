@@ -51,14 +51,14 @@ for (const platform of ['darwin', 'linux']) {
     assert.match(read('NOTICE'), /Copyright 2026 The Configra Authors/);
     assert.match(read('kubernetes/LICENSE'), /Apache License\s+Version 2\.0, January 2004/);
     assert.match(read('kubernetes/NOTICE'), /Copyright 2026 The Configra Authors/);
-    assert.match(read('licenses/go1.26.7/LICENSE'), /The Go Authors/);
+    assert.match(read('licenses/go1.26.9/LICENSE'), /The Go Authors/);
     for (const file of readFileSync(join(root, 'scripts/go-notices/files.txt'), 'utf8').trim().split('\n')) {
       const stored = /\.(?:go|s|h)$/.test(file) ? `${file}.txt` : file;
-      assert.ok(entries.includes(`${name}/licenses/go1.26.7/${stored}`), `${name}: missing Go notice ${file}`);
+      assert.ok(entries.includes(`${name}/licenses/go1.26.9/${stored}`), `${name}: missing Go notice ${file}`);
     }
-    assert.match(read('licenses/go1.26.7/src/runtime/memmove_amd64.s.txt'), /Lucent/);
-    assert.match(read('licenses/go1.26.7/src/crypto/internal/fips140/edwards25519/scalar.go.txt'), /fiat-crypto/);
-    assert.match(read('licenses/go1.26.7/SOURCE.md'), /0ed24eac755105085b89fe9cabc2742b91a0ad7b94b59d3ad364918ebc8956ad/);
+    assert.match(read('licenses/go1.26.9/src/runtime/memmove_amd64.s.txt'), /Lucent/);
+    assert.match(read('licenses/go1.26.9/src/crypto/internal/fips140/edwards25519/scalar.go.txt'), /fiat-crypto/);
+    assert.match(read('licenses/go1.26.9/SOURCE.md'), /9735d7dcdb65b35d3fa577f04064737c03b89cf1a2b71e6e69fe2f3c6f9fd4ca/);
     const uiNotices = read('licenses/ui/THIRD_PARTY_NOTICES.txt');
     const uiBOMText = read('licenses/ui/sbom.cdx.json');
     assert.match(uiNotices, /react@19\.2\.8/);
@@ -78,7 +78,7 @@ for (const platform of ['darwin', 'linux']) {
           maxBuffer: 200 * 1024 * 1024,
         }), { mode: 0o600 });
         const info = JSON.parse(execFileSync('go', ['version', '-m', '-json', path], {
-          encoding: 'utf8', env: { ...process.env, GOTOOLCHAIN: 'go1.26.7' },
+          encoding: 'utf8', env: { ...process.env, GOTOOLCHAIN: 'go1.26.9' },
         }));
         const settings = Object.fromEntries(info.Settings.map(({ Key, Value }) => [Key, Value]));
         assert.equal(settings.GOOS, platform, `${name}/${binary}: actual binary platform`);

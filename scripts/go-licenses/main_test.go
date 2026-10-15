@@ -16,7 +16,7 @@ func TestCollectorRejectsChangedPackageScopeAndPreservesExistingOutput(t *testin
 	defer cancel()
 	fixture := t.TempDir()
 	tool := filepath.Join(fixture, "collector")
-	overrides := map[string]string{"GOTOOLCHAIN": "go1.26.7", "GOWORK": "off", "GOFLAGS": "-mod=readonly", "CGO_ENABLED": "0",
+	overrides := map[string]string{"GOTOOLCHAIN": "go1.26.9", "GOWORK": "off", "GOFLAGS": "-mod=readonly", "CGO_ENABLED": "0",
 		"GOOS": runtime.GOOS, "GOARCH": runtime.GOARCH, "GOAMD64": "v1", "GOARM64": "v8.0", "GOEXPERIMENT": ""}
 	var env []string
 	for _, entry := range os.Environ() {

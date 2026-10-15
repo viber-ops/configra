@@ -38,7 +38,7 @@ if (existsSync(output))
   );
 const env = {
   ...process.env,
-  GOTOOLCHAIN: process.env.GOTOOLCHAIN || 'go1.26.7',
+  GOTOOLCHAIN: process.env.GOTOOLCHAIN || 'go1.26.9',
   GOWORK: 'off',
   GOFLAGS: '-mod=readonly',
   CGO_ENABLED: '0',
@@ -113,7 +113,7 @@ for (const platform of ['darwin', 'linux']) {
       cpSync(join(root, file), join(stage, file));
       cpSync(join(root, 'kubernetes', file), join(stage, 'kubernetes', file));
     }
-    run('sh', [join(root, 'scripts/go-notices/collect.sh'), join(stage, 'licenses/go1.26.7')], { env: buildEnv });
+    run('sh', [join(root, 'scripts/go-notices/collect.sh'), join(stage, 'licenses/go1.26.9')], { env: buildEnv });
     run(process.execPath, [join(root, 'web/scripts/export-licenses.mjs'), join(root, 'web/dist'), join(stage, 'licenses/ui')]);
     for (const binary of ['configra', 'configractl', 'configra-kubernetes']) {
       run(licenseTool, ['-binary', join(stage, binary), '-out', join(stage, 'licenses', `${binary}-modules`)], {

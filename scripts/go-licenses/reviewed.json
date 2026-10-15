@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "toolchain": "go1.26.7",
+  "toolchain": "go1.26.9",
   "package_profiles": [
     {
       "target": "configra/darwin/amd64",
@@ -1433,7 +1433,7 @@
         "BSD-3-Clause",
         "MIT"
       ],
-      "qualification": "Apache root/NOTICE; nested gddo BSD license; prometheus/internal/almost_equal.go embeds Björn Rabenstein's MIT notice.",
+      "qualification": "Apache root/NOTICE; nested gddo BSD license; prometheus/internal/almost_equal.go embeds Bj\u00f6rn Rabenstein's MIT notice.",
       "origin": {
         "kind": "vcs",
         "vcs": "git",
@@ -1684,7 +1684,7 @@
           "path": "Go-BSD-3-Clause.LICENSE",
           "kind": "supplemental_upstream_license",
           "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
-          "source": "https://github.com/golang/go/blob/go1.26.7/LICENSE",
+          "source": "https://github.com/golang/go/blob/go1.26.9/LICENSE",
           "verified": true,
           "qualification": "Full Go BSD-3-Clause terms supplement the original Go copyright headers retained by decimal-go.go and rounding.go; this toolchain version is not asserted to be their historical port origin.",
           "external_to_module": true
@@ -1958,20 +1958,19 @@
       "target_mask": 170
     },
     {
-      "module": "go.opentelemetry.io/otel/trace",
+      "module": "go.opentelemetry.io/otel",
       "version": "v1.44.0",
-      "module_sum": "h1:jxF5CsGYCe74MCRx2X4g7WsY/VBKRqqpNvXlX/6gtIk=",
+      "module_sum": "h1:JjwHmHpA4iZ3wBxluu2fbbE7j4kqlE8jXyAyPXH7HqU=",
       "primary_license_identifiers": [
         "Apache-2.0",
         "BSD-3-Clause"
       ],
-      "qualification": "Submodule license inherits the complete repository-root Apache plus Go BSD text.",
+      "qualification": "Root LICENSE includes Apache and appended Go BSD-3-Clause text; preserve the complete file.",
       "origin": {
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/open-telemetry/opentelemetry-go",
-        "hash": "b62d92831b2dd142f5a0cc89c828270274196877",
-        "subdir": "trace"
+        "hash": "b62d92831b2dd142f5a0cc89c828270274196877"
       },
       "files": [
         {
@@ -1986,19 +1985,20 @@
       "target_mask": 85
     },
     {
-      "module": "go.opentelemetry.io/otel",
+      "module": "go.opentelemetry.io/otel/trace",
       "version": "v1.44.0",
-      "module_sum": "h1:JjwHmHpA4iZ3wBxluu2fbbE7j4kqlE8jXyAyPXH7HqU=",
+      "module_sum": "h1:jxF5CsGYCe74MCRx2X4g7WsY/VBKRqqpNvXlX/6gtIk=",
       "primary_license_identifiers": [
         "Apache-2.0",
         "BSD-3-Clause"
       ],
-      "qualification": "Root LICENSE includes Apache and appended Go BSD-3-Clause text; preserve the complete file.",
+      "qualification": "Submodule license inherits the complete repository-root Apache plus Go BSD text.",
       "origin": {
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/open-telemetry/opentelemetry-go",
-        "hash": "b62d92831b2dd142f5a0cc89c828270274196877"
+        "hash": "b62d92831b2dd142f5a0cc89c828270274196877",
+        "subdir": "trace"
       },
       "files": [
         {
@@ -2269,8 +2269,8 @@
     },
     {
       "module": "golang.org/x/net",
-      "version": "v0.58.0",
-      "module_sum": "h1:ynWG7rqYi4ccpTEuPZ2QGWHktVEM9DMCj9yzDE0Q7To=",
+      "version": "v0.60.0",
+      "module_sum": "h1:79p50tfZlm0J9YfoDsSi639qSXNGVwEzOPLCxM2FsYU=",
       "primary_license_identifiers": [
         "BSD-3-Clause"
       ],
@@ -2279,21 +2279,21 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://go.googlesource.com/net",
-        "hash": "acc78e0d2b2c855c0c4fbdcfe5f42a9e3d0f9778"
+        "hash": "18ece0ce30bc35fa81fe72028bf309bb3ff3f4a5"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
-          "source": "https://go.googlesource.com/net/+/acc78e0d2b2c855c0c4fbdcfe5f42a9e3d0f9778/LICENSE",
+          "source": "https://go.googlesource.com/net/+/18ece0ce30bc35fa81fe72028bf309bb3ff3f4a5/LICENSE",
           "verified": true
         },
         {
           "path": "PATENTS",
           "kind": "patent_notice",
           "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
-          "source": "https://go.googlesource.com/net/+/acc78e0d2b2c855c0c4fbdcfe5f42a9e3d0f9778/PATENTS",
+          "source": "https://go.googlesource.com/net/+/18ece0ce30bc35fa81fe72028bf309bb3ff3f4a5/PATENTS",
           "verified": true
         }
       ],
@@ -2328,8 +2328,8 @@
     },
     {
       "module": "golang.org/x/sync",
-      "version": "v0.22.0",
-      "module_sum": "h1:SZjpbeLmrCk4xhRSZFNZW5gFUeCeFgjekvI/+gfScek=",
+      "version": "v0.23.0",
+      "module_sum": "h1:KameEIfc1IkluZyXWLn39Wd4tURc6GbCiISGiZm2bQk=",
       "primary_license_identifiers": [
         "BSD-3-Clause"
       ],
@@ -2338,21 +2338,21 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://go.googlesource.com/sync",
-        "hash": "1eb64d4bc0cde6da1bb8ebc7f178bb577508e5d0"
+        "hash": "f75267d8412fc1dfd12b343644a7ea46e4d9c85d"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
-          "source": "https://go.googlesource.com/sync/+/1eb64d4bc0cde6da1bb8ebc7f178bb577508e5d0/LICENSE",
+          "source": "https://go.googlesource.com/sync/+/f75267d8412fc1dfd12b343644a7ea46e4d9c85d/LICENSE",
           "verified": true
         },
         {
           "path": "PATENTS",
           "kind": "patent_notice",
           "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
-          "source": "https://go.googlesource.com/sync/+/1eb64d4bc0cde6da1bb8ebc7f178bb577508e5d0/PATENTS",
+          "source": "https://go.googlesource.com/sync/+/f75267d8412fc1dfd12b343644a7ea46e4d9c85d/PATENTS",
           "verified": true
         }
       ],
@@ -2460,12 +2460,115 @@
         }
       ],
       "excluded_discovered_legal_paths": [],
-      "target_mask": 4095
+      "target_mask": 3925
+    },
+    {
+      "module": "golang.org/x/sys",
+      "version": "v0.48.0",
+      "module_sum": "h1:bbX/i/6MgT9BVLM9RT1thmxL04yeTAhbEz4SyadbXoo=",
+      "primary_license_identifiers": [
+        "BSD-3-Clause"
+      ],
+      "qualification": "Root license for the selected package scopes.",
+      "origin": {
+        "kind": "vcs",
+        "vcs": "git",
+        "url": "https://go.googlesource.com/sys",
+        "hash": "613e2570718ecde85c04e69ebd5585c3881c442c"
+      },
+      "files": [
+        {
+          "path": "LICENSE",
+          "kind": "license",
+          "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
+          "source": "https://go.googlesource.com/sys/+/613e2570718ecde85c04e69ebd5585c3881c442c/LICENSE",
+          "verified": true
+        },
+        {
+          "path": "PATENTS",
+          "kind": "patent_notice",
+          "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+          "source": "https://go.googlesource.com/sys/+/613e2570718ecde85c04e69ebd5585c3881c442c/PATENTS",
+          "verified": true
+        },
+        {
+          "path": "cpu/asm_darwin_arm64_gc.s",
+          "kind": "assembly_review",
+          "sha256": "6f6f35fbf284f205f49db2410b6554bd72aa1fc8ccf35f30a619482277e31ccd",
+          "source": "https://go.googlesource.com/sys/+/613e2570718ecde85c04e69ebd5585c3881c442c/cpu/asm_darwin_arm64_gc.s",
+          "verified": true
+        },
+        {
+          "path": "cpu/asm_darwin_x86_gc.s",
+          "kind": "assembly_review",
+          "sha256": "21022bf7461861b3744775075f4a4ef960c036cc469914684f87a4da9fc8b3a8",
+          "source": "https://go.googlesource.com/sys/+/613e2570718ecde85c04e69ebd5585c3881c442c/cpu/asm_darwin_x86_gc.s",
+          "verified": true
+        },
+        {
+          "path": "cpu/cpu_arm64.s",
+          "kind": "assembly_review",
+          "sha256": "704264fabff92f961c0bc68f0cb3cc49a21f62141e44ba709caf0ee2eccb0e5d",
+          "source": "https://go.googlesource.com/sys/+/613e2570718ecde85c04e69ebd5585c3881c442c/cpu/cpu_arm64.s",
+          "verified": true
+        },
+        {
+          "path": "cpu/cpu_gc_x86.s",
+          "kind": "assembly_review",
+          "sha256": "74ac7fc7ef9c56c3306238cf031ea8ef7c0312a7116cb9fba6d07f0b1382df80",
+          "source": "https://go.googlesource.com/sys/+/613e2570718ecde85c04e69ebd5585c3881c442c/cpu/cpu_gc_x86.s",
+          "verified": true
+        },
+        {
+          "path": "unix/asm_bsd_amd64.s",
+          "kind": "assembly_review",
+          "sha256": "1fecd01932d872c0d4ec06178a1860ae12bfab8490056dcf0a9d7a16cd455531",
+          "source": "https://go.googlesource.com/sys/+/613e2570718ecde85c04e69ebd5585c3881c442c/unix/asm_bsd_amd64.s",
+          "verified": true
+        },
+        {
+          "path": "unix/asm_bsd_arm64.s",
+          "kind": "assembly_review",
+          "sha256": "f7740a9d925eccd280e54e7971a36508a7d2856d9ef996a394ad5cfd80bec8c3",
+          "source": "https://go.googlesource.com/sys/+/613e2570718ecde85c04e69ebd5585c3881c442c/unix/asm_bsd_arm64.s",
+          "verified": true
+        },
+        {
+          "path": "unix/asm_linux_amd64.s",
+          "kind": "assembly_review",
+          "sha256": "14c826e5d2db337e49c32e0b5a66317b58da198874a0eb950c33aac571e9573c",
+          "source": "https://go.googlesource.com/sys/+/613e2570718ecde85c04e69ebd5585c3881c442c/unix/asm_linux_amd64.s",
+          "verified": true
+        },
+        {
+          "path": "unix/asm_linux_arm64.s",
+          "kind": "assembly_review",
+          "sha256": "9d1514c08da093cd38b77f03ff5fe265c16500a42295b32c66509dc828a34045",
+          "source": "https://go.googlesource.com/sys/+/613e2570718ecde85c04e69ebd5585c3881c442c/unix/asm_linux_arm64.s",
+          "verified": true
+        },
+        {
+          "path": "unix/zsyscall_darwin_amd64.s",
+          "kind": "assembly_review",
+          "sha256": "08e931fd2055f452d04b450a839ce2d87423f28ebc2aa014e391a7a764612b13",
+          "source": "https://go.googlesource.com/sys/+/613e2570718ecde85c04e69ebd5585c3881c442c/unix/zsyscall_darwin_amd64.s",
+          "verified": true
+        },
+        {
+          "path": "unix/zsyscall_darwin_arm64.s",
+          "kind": "assembly_review",
+          "sha256": "5daa70eefd10942e6ba8da79d69152b330da1981874d6726d1d09cf8d8a0d30e",
+          "source": "https://go.googlesource.com/sys/+/613e2570718ecde85c04e69ebd5585c3881c442c/unix/zsyscall_darwin_arm64.s",
+          "verified": true
+        }
+      ],
+      "excluded_discovered_legal_paths": [],
+      "target_mask": 170
     },
     {
       "module": "golang.org/x/term",
-      "version": "v0.45.0",
-      "module_sum": "h1:NwWyBmoJCbfTHpxrWoZ9C6/VxOf7ic219I8xZZFdrf0=",
+      "version": "v0.46.0",
+      "module_sum": "h1:3+OXuTbaKDgwk8jTi3aSLHRlmWqHEUDUtxnbFigO4YE=",
       "primary_license_identifiers": [
         "BSD-3-Clause"
       ],
@@ -2474,21 +2577,21 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://go.googlesource.com/term",
-        "hash": "9f69229da31ca6a34b522f59dbe07cad5ea21587"
+        "hash": "6226200ed12cba417a9d9e799c2a7179d3fc0e27"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
-          "source": "https://go.googlesource.com/term/+/9f69229da31ca6a34b522f59dbe07cad5ea21587/LICENSE",
+          "source": "https://go.googlesource.com/term/+/6226200ed12cba417a9d9e799c2a7179d3fc0e27/LICENSE",
           "verified": true
         },
         {
           "path": "PATENTS",
           "kind": "patent_notice",
           "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
-          "source": "https://go.googlesource.com/term/+/9f69229da31ca6a34b522f59dbe07cad5ea21587/PATENTS",
+          "source": "https://go.googlesource.com/term/+/6226200ed12cba417a9d9e799c2a7179d3fc0e27/PATENTS",
           "verified": true
         }
       ],
@@ -2530,8 +2633,8 @@
     },
     {
       "module": "golang.org/x/text",
-      "version": "v0.41.0",
-      "module_sum": "h1:vz/seA0lnX87Othu2f/0L24RcgrXD9/YFTSuGjj3rH8=",
+      "version": "v0.42.0",
+      "module_sum": "h1:JbOZXgfeCPU9gacVtYliJqOhD+zhrEqK4LfdpmlUZqI=",
       "primary_license_identifiers": [
         "BSD-3-Clause"
       ],
@@ -2540,21 +2643,21 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://go.googlesource.com/text",
-        "hash": "acdba6655fd45cdb5ab73c9d6a8981333bd65a39"
+        "hash": "fafe4a06967e06550e69ee42787d9902845d2a3f"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
-          "source": "https://go.googlesource.com/text/+/acdba6655fd45cdb5ab73c9d6a8981333bd65a39/LICENSE",
+          "source": "https://go.googlesource.com/text/+/fafe4a06967e06550e69ee42787d9902845d2a3f/LICENSE",
           "verified": true
         },
         {
           "path": "PATENTS",
           "kind": "patent_notice",
           "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
-          "source": "https://go.googlesource.com/text/+/acdba6655fd45cdb5ab73c9d6a8981333bd65a39/PATENTS",
+          "source": "https://go.googlesource.com/text/+/fafe4a06967e06550e69ee42787d9902845d2a3f/PATENTS",
           "verified": true
         }
       ],
