@@ -37,7 +37,7 @@ not separate routes. The browser regression suite is in [web/tests/](../web/test
 | `#/environments/:environment` | Environment details and linked Config/Vault filters |
 | `#/configs` | Inventory and creation |
 | `#/configs/:config` | Environment contexts for one Config identity |
-| `#/configs/:config/:environment` | Current source, history, historical inspection, explicit resolved preview, comparison picker/diff, merge/replace preview, clone and not-found states |
+| `#/configs/:config/:environment` | Current source, history, historical inspection, explicit resolved preview, comparison picker/diff, merge/replace preview, copy to an empty environment, clone and not-found states |
 | `#/vault` | Item inventory and creation |
 | `#/vault/:namespace/:item` | Field metadata, explicit reveal, history, structured editing and archived states |
 | `#/notifications` | Destination inventory/creation and delivery history |
@@ -61,6 +61,20 @@ Config comparison and merge/replace use the same paging controls in each
 Environment column. Changing pages does not change your selected Source or
 Target. Check the Environment and version shown in those two slots before
 committing a transfer.
+
+Use **Copy to environment** to create the first version of the same Config in
+another active Environment. **Clone**, under More actions, creates a globally
+new Config key. Both pin the saved source revision shown in the form, retain
+Vault reference text, show warnings and link to the result. An existing target
+is rejected without overwriting it. See [Config copy](config-copy.md).
+
+Transfer failures retain specific guidance, a copyable Request ID and the
+Operation ID used to search Audit. Identical retries after a lost response keep
+their Operation ID. Use **Refresh preview** after a target conflict to review
+the new current revision before starting another transfer. Restore prevents
+duplicate clicks while pending and also preserves its retry identity.
+After a restore, the detail view waits for the complete saved snapshot before
+reenabling copy/transfer actions, so the displayed source matches its revision.
 
 进入 Config 或 Vault Item，打开“历史版本”。每页最多显示 50 个版本，点击“下一页”
 查看更早的版本，“上一页”返回。顶部的近期版本按钮不随翻页变化。加载失败时可以

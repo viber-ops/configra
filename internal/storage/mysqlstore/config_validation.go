@@ -23,11 +23,11 @@ type ConfigValidationResult struct {
 
 func (store *Store) ValidateConfig(ctx context.Context, request ConfigValidation) (ConfigValidationResult, error) {
 	if !validResourceKey(request.EnvironmentKey) {
-		return ConfigValidationResult{}, ErrValidation
+		return ConfigValidationResult{}, &ConfigMutationError{Field: "target_environment", Reason: "target_environment_invalid"}
 	}
 	document, err := configdoc.Canonicalize(request.Format, request.Content)
 	if err != nil {
-		return ConfigValidationResult{}, fmt.Errorf("%w: %v", ErrValidation, err)
+		return ConfigValidationResult{}, &ConfigMutationError{Field: "content", Reason: "config_document_invalid"}
 	}
 	transaction, err := store.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
@@ -39,7 +39,7 @@ func (store *Store) ValidateConfig(ctx context.Context, request ConfigValidation
 		SELECT id FROM environments WHERE resource_key = ? AND archived_at IS NULL
 	`, request.EnvironmentKey).Scan(&environmentID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return ConfigValidationResult{}, ErrValidation
+		return ConfigValidationResult{}, &ConfigMutationError{Field: "target_environment", Reason: "target_environment_unavailable"}
 	}
 	if err != nil {
 		return ConfigValidationResult{}, fmt.Errorf("read Config validation Environment: %w", err)

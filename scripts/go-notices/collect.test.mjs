@@ -7,7 +7,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const script = join(dirname(fileURLToPath(import.meta.url)), 'collect.sh');
-const env = { ...process.env, GOTOOLCHAIN: 'go1.26.7', GOWORK: 'off', GOFLAGS: '-mod=readonly',
+const env = { ...process.env, GOTOOLCHAIN: 'go1.26.9', GOWORK: 'off', GOFLAGS: '-mod=readonly',
   CGO_ENABLED: '0', GOEXPERIMENT: '', GOOS: 'linux', GOARCH: 'amd64' };
 
 test('collecting original Go notices does not add buildable packages to the checkout', () => {
@@ -15,7 +15,7 @@ test('collecting original Go notices does not add buildable packages to the chec
   try {
     writeFileSync(join(fixture, 'go.mod'), 'module example.test/release-check\n\ngo 1.25.13\n');
     writeFileSync(join(fixture, 'main.go'), 'package main\nfunc main() {}\n');
-    const output = join(fixture, 'dist/go1.26.7');
+    const output = join(fixture, 'dist/go1.26.9');
     execFileSync('sh', [script, output], { cwd: fixture, env });
     assert.equal(execFileSync('go', ['list', './...'], { cwd: fixture, env, encoding: 'utf8' }).trim(),
       'example.test/release-check');

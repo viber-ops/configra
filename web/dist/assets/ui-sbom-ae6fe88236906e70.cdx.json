@@ -8,13 +8,13 @@
       "type": "application",
       "bom-ref": "configra-management-ui",
       "name": "configra-management-ui",
-      "version": "1.2.0",
+      "version": "1.2.1",
       "description": "Browser bundle inputs only; excludes server Go code, container roots and unbundled build dependencies."
     },
     "properties": [
       {
         "name": "configra:bundle-files",
-        "value": "[{\"path\":\"assets/editors-dDerwkB2.js\",\"sha256\":\"f5de8d0b3146abb3a38f1e1d38d658efd8768e6e2205609816adc634ed0f341c\"},{\"path\":\"assets/index-BObxwZ78.js\",\"sha256\":\"34b4bc324eb165b5b2dfefa4e20071c6bc2cb0ceba8c0c3e6d28248c0481e182\"},{\"path\":\"assets/index-CjtaeuXI.css\",\"sha256\":\"4f45fc558f71671e37c42632b298a8b8a3dc39485dc1c7eb32058b0f55388ebc\"}]"
+        "value": "[{\"path\":\"assets/editors-DHAQ3fGA.js\",\"sha256\":\"9ce8adf3e1ccc9ba06cc642c0a5b01677baef27e6da1e7576cbbca1a6581787d\"},{\"path\":\"assets/index-5BGWGnml.js\",\"sha256\":\"8c30c84f3e7631a0520b990aff60abee158610be722a22ce2b753c0bca7b4df8\"},{\"path\":\"assets/index-BUxNUFrc.css\",\"sha256\":\"1862170e0164560c490f2b5a5adb674fa03521e932fc0c7f11dbdd39390c4847\"}]"
       },
       {
         "name": "configra:notices-sha256",

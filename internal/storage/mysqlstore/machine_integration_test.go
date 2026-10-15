@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -448,4 +449,175 @@ type integrationAccessPublisher struct {
 func (publisher *integrationAccessPublisher) TryPublish(event machine.AccessEvent) bool {
 	publisher.events <- event
 	return true
+}
+
+func TestMachineAuthenticationReusesStatementsWithoutCachingAuthorization(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	dsn := createIntegrationDatabase(t, ctx, "configra_auth_prepared")
+	provider, err := vaultcrypto.NewLocalKeyProvider([]byte("0123456789abcdef0123456789abcdef"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := OpenManagement(ctx, dsn, provider)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	store.db.SetMaxOpenConns(1)
+	store.db.SetMaxIdleConns(1)
+	certificateDER := []byte("registered-client-certificate")
+	seedMachineReadFixture(t, ctx, store.db, provider, []byte("fedcba9876543210fedcba9876543210"), certificateDER, []byte("private-file"))
+	fingerprint := sha256.Sum256(certificateDER)
+	preparations := func() uint64 {
+		var label string
+		var count uint64
+		if err := store.db.QueryRowContext(ctx, "SHOW SESSION STATUS LIKE 'Com_stmt_prepare'").Scan(&label, &count); err != nil {
+			t.Fatal(err)
+		}
+		return count
+	}
+	cancelled, stop := context.WithCancel(ctx)
+	stop()
+	if _, err := store.TokenForEnvironment(cancelled, "token1", "a"); err == nil {
+		t.Fatal("cancelled first prepare succeeded")
+	}
+	before := preparations()
+	for range 20 {
+		token, err := store.TokenForEnvironment(ctx, "token1", "a")
+		if err != nil || !token.EnvironmentGranted || token.Revoked {
+			t.Fatal("valid token not authorized", err)
+		}
+		active, err := store.IsCertificateActive(ctx, fingerprint)
+		if err != nil || !active {
+			t.Fatal("valid certificate not active", err)
+		}
+	}
+	if count := preparations() - before; count > 2 {
+		t.Errorf("40 authorization reads prepared %d statements; want at most 2 on one connection", count)
+	}
+	// Force pooled connections to be replaced. Statement plans must reconnect,
+	// while authorization data must still be read for every new request.
+	store.db.SetMaxIdleConns(0)
+	for range 3 {
+		if _, err := store.TokenForEnvironment(ctx, "token1", "a"); err != nil {
+			t.Fatal("statement did not recover on new connection", err)
+		}
+	}
+	store.db.SetMaxIdleConns(1)
+	var concurrent sync.WaitGroup
+	for range 20 {
+		concurrent.Add(1)
+		go func() {
+			defer concurrent.Done()
+			if _, err := store.TokenForEnvironment(ctx, "token1", "a"); err != nil {
+				t.Error("concurrent authentication", err)
+			}
+		}()
+	}
+	concurrent.Wait()
+	if _, err := store.db.ExecContext(ctx, "DELETE FROM api_token_environments"); err != nil {
+		t.Fatal(err)
+	}
+	token, err := store.TokenForEnvironment(ctx, "token1", "a")
+	if err != nil || token.EnvironmentGranted {
+		t.Fatal("prepared lookup cached the removed grant", err)
+	}
+	if _, err := store.db.ExecContext(ctx, "UPDATE api_tokens SET revoked_at = UTC_TIMESTAMP(6), expires_at = UTC_TIMESTAMP(6) - INTERVAL 1 SECOND"); err != nil {
+		t.Fatal(err)
+	}
+	token, err = store.TokenForEnvironment(ctx, "token1", "a")
+	if err != nil || !token.Revoked || !token.ExpiresAt.Before(time.Now()) {
+		t.Fatal("prepared lookup cached token lifecycle", err)
+	}
+	if _, err := store.db.ExecContext(ctx, "UPDATE client_certificates SET revoked_at = UTC_TIMESTAMP(6)"); err != nil {
+		t.Fatal(err)
+	}
+	active, err := store.IsCertificateActive(ctx, fingerprint)
+	if err != nil || active {
+		t.Fatal("prepared lookup cached certificate revocation", err)
+	}
+}
+
+func TestMachineSnapshotReusesStatementsWithoutCachingValues(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	dsn := createIntegrationDatabase(t, ctx, "configra_snapshot_prepared")
+	provider, err := vaultcrypto.NewLocalKeyProvider([]byte("0123456789abcdef0123456789abcdef"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := OpenManagement(ctx, dsn, provider)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	// Preparing via DB after reserving the only connection for a transaction
+	// would deadlock; exercise that case through the real read methods.
+	store.db.SetMaxOpenConns(1)
+	store.db.SetMaxIdleConns(1)
+	seedMachineReadFixture(t, ctx, store.db, provider,
+		[]byte("fedcba9876543210fedcba9876543210"), []byte("registered-client-certificate"), []byte("private-file"))
+	preparations := func() uint64 {
+		var label string
+		var count uint64
+		if err := store.db.QueryRowContext(ctx, "SHOW SESSION STATUS LIKE 'Com_stmt_prepare'").Scan(&label, &count); err != nil {
+			t.Fatal(err)
+		}
+		return count
+	}
+	cancelled, stop := context.WithCancel(ctx)
+	stop()
+	if _, err := store.ReadResolvedConfig(cancelled, "a", "payment", ""); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancelled initial read did not stop", err)
+	}
+	before := preparations()
+	var configETag, fileETag string
+	for range 20 {
+		config, err := store.ReadResolvedConfig(ctx, "a", "payment", "")
+		if err != nil || config.ConfigRevision != 1 || config.VaultRevisions["platform.redis"] != 1 || !strings.Contains(config.Content, "sentinel-secret") {
+			t.Fatal("Config snapshot did not resolve expected revisions and values", err)
+		}
+		file, err := store.ReadFile(ctx, "a", "platform", "redis", "tls_cert", "")
+		if err != nil || string(file.Bytes) != "private-file" {
+			t.Fatal("File snapshot did not return expected bytes", err)
+		}
+		configETag, fileETag = config.ETag, file.ETag
+	}
+	if count := preparations() - before; count > 6 {
+		t.Fatalf("40 snapshot reads prepared %d statements; want at most 6 on one connection", count)
+	}
+	// Normal versioned writes must be visible immediately after statement reuse.
+	snapshot := testVaultSnapshot("", []string{"a"}, "changed-user", "changed-secret")
+	snapshot.Variants[0].Values["tls_cert"].File.Bytes = []byte("changed-file")
+	if _, err := store.CommitVault(ctx, VaultCommit{OperationID: "prepared-vault-update",
+		Actor: Actor{Type: "user", ID: "prepared-reader"}, NamespaceKey: "platform", ItemKey: "redis",
+		ItemName: "Redis", ExpectedRevision: 1, Snapshot: snapshot}); err != nil {
+		t.Fatal(err)
+	}
+	config, err := store.ReadResolvedConfig(ctx, "a", "payment", configETag)
+	if err != nil || config.VaultRevisions["platform.redis"] != 2 || !strings.Contains(config.Content, "changed-secret") || config.ETag == configETag {
+		t.Fatal("statement reuse hid a changed Vault revision or ETag", err)
+	}
+	file, err := store.ReadFile(ctx, "a", "platform", "redis", "tls_cert", fileETag)
+	if err != nil || file.VaultRevision != 2 || string(file.Bytes) != "changed-file" || file.ETag == fileETag {
+		t.Fatal("statement reuse hid updated File bytes or ETag", err)
+	}
+	if _, err := store.ReadResolvedConfig(ctx, "a", "payment", config.ETag); !errors.Is(err, machine.ErrNotModified) {
+		t.Fatal("unchanged snapshot lost conditional read behavior", err)
+	}
+	store.db.SetMaxIdleConns(0)
+	if _, err := store.ReadResolvedConfig(ctx, "a", "payment", ""); err != nil {
+		t.Fatal("snapshot failed after pooled connections were replaced", err)
+	}
+	store.db.SetMaxIdleConns(1)
+	if _, err := store.db.ExecContext(ctx, "UPDATE vault_items SET archived_at = UTC_TIMESTAMP(6)"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ReadResolvedConfig(ctx, "a", "payment", ""); !errors.Is(err, machine.ErrUnresolved) {
+		t.Fatal("statement reuse hid Vault archival", err)
+	}
+	if _, err := store.ReadFile(ctx, "a", "platform", "redis", "tls_cert", ""); !errors.Is(err, machine.ErrNotFound) {
+		t.Fatal("statement reuse exposed an archived File", err)
+	}
 }

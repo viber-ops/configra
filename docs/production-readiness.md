@@ -2,20 +2,22 @@
 
 This document is the completion contract for Configra V1. A capability is complete only when its evidence below exists and passes from a clean checkout; implementation progress or a narrower test is not substitute evidence.
 
-## Current status — 2026-10-03
+## Current status — 2026-10-16
 
-The release target is **v1.2.0** for the server and Go SDK, adding the Cobra
+The current patch target is **Configra v1.2.1**, compatible with **configra-go v1.2.0**.
+See the [patch upgrade](releases/v1.2.1.md) and [verification record](verification/2026-10-16.md).
+The v1.2.0 baseline added the Cobra
 operator CLI, immutable release sets, pre-install validation, identity/session
 lifecycle, private metrics, write admission, metadata retention and production
 references. [Upgrade](releases/v1.2.0.md) includes MySQL schema 3→4 and separate
 migration/service roles. Scope and secret redaction remain part of acceptance.
 
-Current candidate root/SDK/Kubernetes race tests, scoped SDK/actual CLI real
+The v1.2.0 baseline root/SDK/Kubernetes race tests, scoped SDK/actual CLI real
 MySQL/NATS/ClickHouse E2E, 17-File activation/rollback, restricted MySQL role tests,
-provider/binding batch checks and mixed read/write burst acceptance pass.
-Prometheus rules and HA/backup manifests render/validate. Current actual-image
+provider/binding batch checks and mixed read/write burst acceptance passed.
+Prometheus rules and HA/backup manifests rendered/validated. Its actual-image
 recovery/rotation, unchanged ten-minute capacity, hosted three-node Kubernetes,
-server/SDK CI and twelve source executable/material checks pass; see the
+server/SDK CI and twelve source executable/material checks passed; see the
 [October 3 verification](verification/2026-10-03.md), including retained failures
 and deployment boundaries. Tagged downloads are checked independently before
 publication; prior-version passes do not substitute for this candidate.
@@ -107,12 +109,14 @@ The MySQL compatibility baseline is the production version `8.0.22`; container i
 6. A release image passes startup, migration, readiness, graceful-shutdown, backup-verification, and dependency-recovery drills.
 7. Load and leakage gates pass on a recorded machine and configuration.
 
-Both modules require Go `1.25.13` or newer, the first patched Go 1.25 release
-covering the reachable standard-library findings present in 1.25.8. The
-production image is built by the digest-pinned Go `1.26.7` builder. The current
-core, SDK and Kubernetes suites passed race checks on both supported toolchains.
-`govulncheck v1.7.0` found no reachable vulnerabilities after the gRPC update;
-unimported advisory-bearing modules in the core graph remain identified separately.
+Core/CLI and SDK modules retain Go `1.25.13` language compatibility. The Kubernetes
+module requires Go `1.26.9` after its x/net security update. Production images and release
+bundles use the digest-pinned/reviewed Go `1.26.9` builder; use the tagged build
+scripts for production builds. The older-toolchain CI lane checks compatibility,
+not the security status of binaries built with that old runtime. Release
+`govulncheck v1.7.0` runs with the production toolchain. Unimported advisory-bearing
+modules in the core graph remain identified separately. The v1.2.1 evidence and
+final CI/artifact receipts are linked from its [release record](verification/2026-10-16.md).
 
 Current image/deployment evidence is runnable with `make image-test` and
 `go test ./internal/app`. The former builds the actual scratch image and verifies

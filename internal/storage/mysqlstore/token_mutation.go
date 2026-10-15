@@ -32,16 +32,17 @@ type TokenCreate struct {
 }
 
 type TokenCreateResult struct {
-	Kind             string     `json:"kind"`
-	ConfigKeys       []string   `json:"config_keys"`
-	NamespaceKeys    []string   `json:"namespace_keys"`
-	Outcome          Outcome    `json:"outcome"`
-	PublicID         string     `json:"public_id"`
-	DisplayPrefix    string     `json:"display_prefix"`
-	Token            string     `json:"token,omitempty"`
-	EnvironmentKeys  []string   `json:"environment_keys"`
-	AllowWithoutMTLS bool       `json:"allow_without_mtls"`
-	ExpiresAt        *time.Time `json:"expires_at,omitempty"`
+	Validation       *TokenValidationError `json:"validation,omitempty"`
+	Kind             string                `json:"kind"`
+	ConfigKeys       []string              `json:"config_keys"`
+	NamespaceKeys    []string              `json:"namespace_keys"`
+	Outcome          Outcome               `json:"outcome"`
+	PublicID         string                `json:"public_id"`
+	DisplayPrefix    string                `json:"display_prefix"`
+	Token            string                `json:"token,omitempty"`
+	EnvironmentKeys  []string              `json:"environment_keys"`
+	AllowWithoutMTLS bool                  `json:"allow_without_mtls"`
+	ExpiresAt        *time.Time            `json:"expires_at,omitempty"`
 }
 
 type TokenEnvironmentChange struct {
@@ -95,6 +96,9 @@ func (store *Store) CreateToken(ctx context.Context, request TokenCreate) (Token
 		var previous TokenCreateResult
 		if err := json.Unmarshal(replay.Response, &previous); err != nil || previous.Outcome != replay.Outcome {
 			return TokenCreateResult{}, errors.New("existing Operation failed integrity validation")
+		}
+		if previous.Outcome == OutcomeValidationFailed && previous.Validation != nil {
+			return previous, withCommittedAudit(previous.Validation)
 		}
 		return previous, outcomeError(previous.Outcome)
 	}
@@ -305,34 +309,6 @@ func (store *Store) RevokeToken(ctx context.Context, request TokenRevoke) (Token
 	return result, nil
 }
 
-func (store *Store) validateTokenCreate(request TokenCreate) error {
-	if request.Kind != "" && request.Kind != machine.TokenReadOnly && request.Kind != machine.TokenWriteScoped {
-		return ErrValidation
-	}
-	if validateScopeKeys(request.ConfigKeys) != nil || validateScopeKeys(request.NamespaceKeys) != nil {
-		return ErrValidation
-	}
-	if request.Kind == machine.TokenWriteScoped {
-		maxTTL := store.WriteTokenMaxTTL
-		if maxTTL <= 0 || maxTTL > 90*24*time.Hour {
-			maxTTL = 90 * 24 * time.Hour
-		}
-		if request.Actor.Type != "user" || len(request.EnvironmentKeys) == 0 || request.AllowWithoutMTLS || request.NeverExpires || request.ExpiresAt.IsZero() || request.ExpiresAt.After(time.Now().Add(maxTTL)) {
-			return ErrValidation
-		}
-	}
-	if request.DisplayName == "" || len(request.DisplayName) > 255 {
-		return errors.New("API Token display name is required and must not exceed 255 bytes")
-	}
-	if request.NeverExpires && !request.ExpiresAt.IsZero() {
-		return errors.New("API Token cannot set both NeverExpires and ExpiresAt")
-	}
-	if !request.ExpiresAt.IsZero() && !time.Now().Before(request.ExpiresAt) {
-		return errors.New("API Token expiry must be in the future")
-	}
-	return nil
-}
-
 func activeEnvironmentIDs(ctx context.Context, transaction *sql.Tx, requested []string) ([]string, map[string][]byte, error) {
 	keys := slices.Clone(requested)
 	slices.Sort(keys)
@@ -385,6 +361,10 @@ func tokenEnvironmentKeys(ctx context.Context, transaction *sql.Tx, tokenID []by
 
 func (store *Store) finishTokenCreateFailure(ctx context.Context, transaction *sql.Tx, request TokenCreate, cause error) (TokenCreateResult, error) {
 	result := TokenCreateResult{Outcome: OutcomeValidationFailed}
+	var issue *TokenValidationError
+	if errors.As(cause, &issue) {
+		result.Validation = issue
+	}
 	if err := finishOperation(ctx, transaction, request.OperationID, request.Actor, result.Outcome, 0, result, mutationEvent{
 		Type: "token.validation_failed", Action: "token.create", ResourceType: "api_token",
 	}, false); err != nil {
@@ -393,7 +373,10 @@ func (store *Store) finishTokenCreateFailure(ctx context.Context, transaction *s
 	if err := transaction.Commit(); err != nil {
 		return TokenCreateResult{}, fmt.Errorf("commit API Token validation Audit: %w", err)
 	}
-	return result, withCommittedAudit(fmt.Errorf("%w: %v", ErrValidation, cause))
+	if issue != nil {
+		return result, withCommittedAudit(issue)
+	}
+	return result, withCommittedAudit(ErrValidation)
 }
 
 func finishTokenEnvironmentFailure(ctx context.Context, transaction *sql.Tx, request TokenEnvironmentChange, cause error) (TokenEnvironmentResult, error) {
@@ -458,6 +441,9 @@ func validTokenPublicID(value string) bool {
 
 func createTokenRecord(ctx context.Context, transaction *sql.Tx, request TokenCreate) (TokenCreateResult, error) {
 	environmentKeys, environmentIDs, err := activeEnvironmentIDs(ctx, transaction, request.EnvironmentKeys)
+	if errors.Is(err, ErrValidation) {
+		return TokenCreateResult{}, &TokenValidationError{Field: "environment_keys", Reason: "environment_unavailable"}
+	}
 	if err != nil {
 		return TokenCreateResult{}, err
 	}

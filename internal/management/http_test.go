@@ -37,7 +37,11 @@ func TestViewerReadsIdentityAndEnvironmentList(t *testing.T) {
 	meRequest = meRequest.WithContext(humanauth.WithPrincipal(meRequest.Context(), principal))
 	meResponse := httptest.NewRecorder()
 	handler.ServeHTTP(meResponse, meRequest)
-	if meResponse.Code != http.StatusOK || meResponse.Body.String() != "{\"issuer\":\"https://identity.example.com\",\"subject\":\"viewer-1\",\"email\":\"viewer@example.com\",\"role\":\"viewer\"}\n" {
+	var me struct {
+		Issuer, Subject, Email, Role string
+		WriteTokenMaxTTLDays         int `json:"write_token_max_ttl_days"`
+	}
+	if meResponse.Code != http.StatusOK || json.Unmarshal(meResponse.Body.Bytes(), &me) != nil || me.Issuer != "https://identity.example.com" || me.Subject != "viewer-1" || me.Email != "viewer@example.com" || me.Role != "viewer" || me.WriteTokenMaxTTLDays != 90 {
 		t.Fatalf("me response = %d %q", meResponse.Code, meResponse.Body.String())
 	}
 
@@ -1423,3 +1427,5 @@ func (writer *recordingConfigWriter) RecordRejectedMutation(_ context.Context, r
 	writer.rejectedMutations = append(writer.rejectedMutations, request)
 	return nil
 }
+
+func (writer *recordingConfigWriter) WriteTokenLifetime() time.Duration { return 90 * 24 * time.Hour }

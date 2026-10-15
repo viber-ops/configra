@@ -33,7 +33,11 @@ jobs:
       fail-fast: false
       matrix:
         module: ['.', kubernetes]
-        go: ['1.25.13', '1.26.7']
+        go: ['1.25.13', '1.26.9']
+        # The x/net security update requires Go 1.26 in the Kubernetes module.
+        exclude:
+          - module: kubernetes
+            go: '1.25.13'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -51,7 +55,7 @@ jobs:
           go vet ./...
           go mod verify
       - name: Check reachable vulnerabilities
-        if: matrix.go == '1.26.7'
+        if: matrix.go == '1.26.9'
         working-directory: ${{ matrix.module }}
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
 
@@ -74,7 +78,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.7'
+          go-version: '1.26.9'
           cache-dependency-path: |
             configra/go.sum
             configra/e2e/go.sum
@@ -100,12 +104,12 @@ jobs:
           const report = JSON.parse(readFileSync('.cache/load/latest.json', 'utf8'));
           const { started_at, passed, stage, duration, requested_qps, host_os, host_arch, host_cpus, image,
             container_cpus, container_memory_bytes, mysql_version, mysql_interpolate_params,
-            resources, expected_access_events, persisted_access_events, captured_access_events,
+            resources, warmup_samples, samples, expected_access_events, persisted_access_events, captured_access_events,
             nats_leak_scan_passed, leak_scan_passed } = report;
           const metrics = ({ latencies, requests, throughput, success, status_codes } = {}) => ({ latencies, requests, throughput, success, status_codes });
           console.log(JSON.stringify({ started_at, passed, stage, duration, requested_qps, host_os, host_arch, host_cpus, image,
             container_cpus, container_memory_bytes, mysql_version, mysql_interpolate_params,
-            resources, expected_access_events, persisted_access_events, captured_access_events,
+            resources, warmup_samples, samples, expected_access_events, persisted_access_events, captured_access_events,
             nats_leak_scan_passed, leak_scan_passed, warmup: metrics(report.warmup), measured: metrics(report.vegeta) }, null, 2));
           JS
       - name: Remove disposable dependencies
@@ -163,6 +167,8 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm --prefix web ci --ignore-scripts
+      - name: Check frontend dependency vulnerabilities
+        run: npm --prefix web audit --audit-level=high
       - run: npx --prefix web playwright install --with-deps chromium
       - run: npm --prefix web run test:licenses
       - run: npm --prefix web test

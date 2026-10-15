@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { request, managementError, ActionError, useInventory, InventoryPagination } from '../management.jsx';
+import { CopyValue } from '../CopyValue.jsx';
+import { Expiration, ValidityPreview, useCurrentTime } from './Lifetime.jsx';
+import { request, managementError, ActionError, useInventory, InventoryPagination, useMutation } from '../management.jsx';
 
 export function authorityLabel(t) { return t.locale.startsWith('zh') ? '证书颁发机构' : 'Certificate authorities'; }
 
@@ -61,27 +63,18 @@ function ExportDialog({ bundle, filename, onClose, t }) {
   </dialog>;
 }
 
-function useMutation(request) {
-  const attempt = useRef(null);
-  const mutate = (path, body) => {
-    const signature = JSON.stringify([path, body]);
-    if (attempt.current?.signature !== signature) attempt.current = { signature, id: crypto.randomUUID() };
-    return request(path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': attempt.current.id }, ...(body ? { body: JSON.stringify(body) } : {}) });
-  };
-  return [mutate, () => { attempt.current = null; }];
-}
-
-function Status({ record, t }) {
+function Status({ record, now, t }) {
   const s = copy(t);
-  const expired = Date.parse(record.not_after) <= Date.now();
-  const pending = Date.parse(record.not_before) > Date.now();
+  const expired = Date.parse(record.not_after) <= now;
+  const pending = Date.parse(record.not_before) > now;
   return <span className={`status ${record.revoked || expired ? 'archived' : pending ? 'pending-status' : 'active'}`}>{record.revoked ? t.revoked : expired ? s.expired : pending ? s.pending : t.statusActive}</span>;
 }
 
-function date(value, t) { return new Intl.DateTimeFormat(t.locale, { dateStyle: 'medium' }).format(new Date(value)); }
 
 export function AuthorityManagement({ t, onCertificates }) {
   const s = copy(t);
+  const now = useCurrentTime();
+  const [days, setDays] = useState(1825);
   const [search, setSearch] = useState('');
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -101,27 +94,28 @@ export function AuthorityManagement({ t, onCertificates }) {
       const result = await mutate('/v1/certificate-authorities', { display_name: data.get('display_name'), valid_days: Number(data.get('valid_days')) });
       setCreating(false); setRefresh(value => value + 1);
       if (result.export_bundle) setExported({ bundle: result.export_bundle, filename: `configra-ca-${result.authority.id.slice(0, 8)}.zip` });
-      else setError(s.replay);
-    } catch { setError(t.operationFailed); } finally { setBusy(false); }
+      else setError({ message: s.replay });
+    } catch (failure) { setError(managementError(failure, t, t.operationFailed)); } finally { setBusy(false); }
   };
   const revoke = async authority => {
     if (busy) return;
     setBusy(true); setError('');
     try { await mutate(`/v1/certificate-authorities/${authority.id}/revoke`); setConfirming(''); setRefresh(value => value + 1); }
-    catch { setError(t.operationFailed); } finally { setBusy(false); }
+    catch (failure) { setError(managementError(failure, t, t.operationFailed)); } finally { setBusy(false); }
   };
   return <section className="admin-panel authority-panel">
     <div className="security-panel-heading"><div><span className="section-kicker">{s.firstStep}</span><h2>{authorityLabel(t)}</h2><p>{s.caBody}</p></div><button className="primary-action compact-action" type="button" disabled={busy} onClick={() => { if (!creating) resetMutation(); setCreating(value => !value); setError(''); }}>{s.newCA}</button></div>
     {creating && <form className="credential-create-form" onSubmit={create}>
       <label>{s.caName}<input name="display_name" required maxLength="128" autoComplete="off" placeholder={t.locale.startsWith('zh') ? '例如：生产应用' : 'e.g. Production applications'} /></label>
-      <label>{s.days}<input name="valid_days" type="number" min="1" max="3650" defaultValue="1825" required /></label>
+      <label>{s.days}<input name="valid_days" type="number" min="1" max="3650" value={days} onChange={event => setDays(event.target.value)} required /></label>
+      <div className="full-width"><ValidityPreview days={days} now={now} t={t} /></div>
       <div className="form-actions"><button type="button" disabled={busy} onClick={() => setCreating(false)}>{t.cancel}</button><button className="primary-action compact-action" disabled={busy} type="submit">{busy ? s.creating : s.createCA}</button></div>
     </form>}
-    {error && <p className="inline-error" role="alert">{error}</p>}
+    <ActionError error={error} t={t} />
     <label className="credential-search"><span>{t.search}</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} /></label>
     {collection.status === 'loading' ? <div className="collection-state"><span className="loading-line" /></div> : collection.status === 'ready' && (items.length === 0 ? <div className="credential-empty"><h3>{search || collection.page > 1 ? s.noMatches : s.noAuthorities}</h3>{!search && collection.page === 1 && <p>{s.noAuthoritiesBody}</p>}</div> : <div className="authority-grid">{items.map(authority => <article className="authority-card" key={authority.id}>
-      <header><div className="resource-symbol" data-kind="authority" aria-hidden="true">CA</div><div><h3>{authority.display_name}</h3><Status record={authority} t={t} /></div></header>
-      <dl><div><dt>{t.validUntil}</dt><dd>{date(authority.not_after, t)}</dd></div><div><dt>{t.fingerprint}</dt><dd><code title={authority.fingerprint_sha256}>{authority.fingerprint_sha256.slice(0, 16)}…{authority.fingerprint_sha256.slice(-8)}</code></dd></div><div><dt>{t.clientCertificates}</dt><dd>{authority.client_certificate_count} {s.clients}</dd></div></dl>
+      <header><div className="resource-symbol" data-kind="authority" aria-hidden="true">CA</div><div><h3>{authority.display_name}</h3><Status record={authority} now={now} t={t} /></div></header>
+      <dl><div><dt>{t.validUntil}</dt><dd><Expiration value={authority.not_after} revoked={authority.revoked} now={now} t={t} /></dd></div><div className="credential-identifier"><dt>CA ID</dt><dd><CopyValue value={authority.id} label="CA ID" t={t} /></dd></div><div className="credential-identifier"><dt>{t.fingerprint}</dt><dd><CopyValue value={authority.fingerprint_sha256} label={t.fingerprint} t={t} /></dd></div><div><dt>{t.clientCertificates}</dt><dd>{authority.client_certificate_count} {authority.client_certificate_count === 1 && !t.locale.startsWith('zh') ? 'client certificate' : s.clients}</dd></div></dl>
       <div className="authority-actions"><button type="button" onClick={() => download(authority.certificate_pem, `configra-ca-${authority.id.slice(0, 8)}.crt`, 'application/x-pem-file')}>{s.publicDownload}</button>{!authority.revoked && <button className="danger-link" type="button" onClick={() => setConfirming(authority.id)}>{s.revokeCA}</button>}</div>
       {confirming === authority.id && <div className="credential-confirmation" role="alert"><p>{s.revokeWarning}</p><div><button type="button" disabled={busy} onClick={() => setConfirming('')}>{t.cancel}</button><button className="danger-action" type="button" disabled={busy} onClick={() => revoke(authority)}>{t.confirmRevoke}</button></div></div>}
     </article>)}</div>)}
@@ -133,6 +127,9 @@ export function AuthorityManagement({ t, onCertificates }) {
 
 export function CertificateManagement({ t, onAuthorities }) {
   const s = copy(t);
+  const now = useCurrentTime();
+  const [days, setDays] = useState(90);
+  const [authorityID, setAuthorityID] = useState('');
   const [form, setForm] = useState('');
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState('');
@@ -146,6 +143,7 @@ export function CertificateManagement({ t, onAuthorities }) {
   // not crowd usable issuers out of the first page.
   const authorities = useInventory('/v1/certificate-authorities?usable=true', refresh);
   const active = authorities.items;
+  const selectedAuthority = active.find(item => item.id === authorityID) || active[0];
   const { items } = collection;
   const submit = async event => {
     event.preventDefault(); if (busy) return;
@@ -158,27 +156,28 @@ export function CertificateManagement({ t, onAuthorities }) {
       setForm(''); setRefresh(value => value + 1);
       if (issued) {
         if (result.export_bundle) setExported({ bundle: result.export_bundle, filename: `configra-client-${result.certificate.fingerprint_sha256.slice(0, 8)}.zip` });
-        else setError(s.replay);
+        else setError({ message: s.replay });
       }
-    } catch { setError(t.operationFailed); } finally { setBusy(false); }
+    } catch (failure) { setError(managementError(failure, t, t.operationFailed)); } finally { setBusy(false); }
   };
   const revoke = async certificate => {
     if (busy) return; setBusy(true); setError('');
     try { await mutate(`/v1/client-certificates/${certificate.fingerprint_sha256}/revoke`); setConfirming(''); setRefresh(value => value + 1); }
-    catch { setError(t.operationFailed); } finally { setBusy(false); }
+    catch (failure) { setError(managementError(failure, t, t.operationFailed)); } finally { setBusy(false); }
   };
   return <section className="admin-panel certificates-panel">
     <div className="security-panel-heading"><div><span className="section-kicker">{s.secondStep}</span><h2>{t.clientCertificates}</h2><p>{t.caVerifiedCertificates}</p></div><div className="row-actions"><button className="secondary-action compact-action" type="button" disabled={busy} onClick={() => { resetMutation(); setForm(form === 'import' ? '' : 'import'); setError(''); }}>{t.importClientCertificate}</button><button className="primary-action compact-action" type="button" disabled={busy} onClick={() => { resetMutation(); setForm(form === 'issue' ? '' : 'issue'); setError(''); }}>{s.newClient}</button></div></div>
     {form === 'issue' && authorities.status !== 'ready' ? <div role="status">{authorities.status === 'loading' ? '…' : <><ActionError error={managementError(authorities.error, t, t.loadFailed)} t={t} /><button type="button" onClick={authorities.retry}>{t.retry}</button></>}</div> : form === 'issue' && active.length === 0 ? <div className="security-next-step"><p>{s.noCA}</p><button type="button" onClick={onAuthorities}>{s.newCA} →</button></div> : form && <form className="credential-create-form" onSubmit={submit}>
       {form === 'import' && <p>{t.publicCertificateOnly}</p>}
       <label>{t.certificateName}<input name="display_name" required maxLength={form === 'issue' ? 128 : 255} autoComplete="off" /></label>
-      {form === 'issue' ? <><label>{s.authority}<select name="authority_id" required defaultValue={active[0]?.id}>{active.map(authority => <option value={authority.id} key={authority.id}>{authority.display_name}</option>)}</select></label><label>{s.days}<input name="valid_days" type="number" min="1" max="365" defaultValue="90" required /></label></> : <label className="full-width">{t.publicCertificatePEM}<textarea name="certificate_pem" required rows="7" spellCheck="false" /></label>}
+      {form === 'issue' ? <><label>{s.authority}<select name="authority_id" required value={selectedAuthority?.id || ''} onChange={event => setAuthorityID(event.target.value)}>{active.map(authority => <option value={authority.id} key={authority.id}>{authority.display_name} · {authority.id}</option>)}</select></label><label>{s.days}<input name="valid_days" type="number" min="1" max="365" value={days} onChange={event => setDays(event.target.value)} required /></label></> : <label className="full-width">{t.publicCertificatePEM}<textarea name="certificate_pem" required rows="7" spellCheck="false" /></label>}
+      {form === 'issue' && selectedAuthority && <div className="issuer-preview full-width"><span>CA ID</span><CopyValue value={selectedAuthority.id} label="CA ID" t={t} /><ValidityPreview days={days} now={now} authority={selectedAuthority} t={t} /></div>}
       <div className="form-actions"><button type="button" disabled={busy} onClick={() => setForm('')}>{t.cancel}</button><button className="primary-action compact-action" disabled={busy} type="submit">{busy ? s.creating : form === 'issue' ? s.issue : t.registerCertificate}</button></div>
     </form>}
-    {error && <p className="inline-error" role="alert">{error}</p>}
+    <ActionError error={error} t={t} />
     <label className="credential-search"><span>{s.search}</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} /></label>
     {collection.status === 'loading' ? <div className="collection-state"><span className="loading-line" /></div> : collection.status === 'ready' && (items.length === 0 ? <div className="credential-empty"><h3>{search || collection.page > 1 ? s.noMatches : s.emptyClients}</h3>{!search && collection.page === 1 && <p>{s.emptyClientsBody}</p>}</div> : <div className="table-frame credential-table"><table><thead><tr><th>{t.certificateName}</th><th>{s.authority}</th><th>{t.fingerprint}</th><th>{t.validUntil}</th><th>{t.status}</th><th /></tr></thead><tbody>{items.map(certificate => <tr key={certificate.fingerprint_sha256}>
-      <td><strong>{certificate.display_name}</strong><small className="row-subkey">{certificate.subject}</small></td><td>{certificate.authority_id ? certificate.authority_name || certificate.authority_id : s.external}</td><td><code className="fingerprint" title={certificate.fingerprint_sha256}>{certificate.fingerprint_sha256.slice(0, 12)}…{certificate.fingerprint_sha256.slice(-8)}</code><small className="row-subkey">{t.serial} {certificate.serial_hex}</small></td><td><time>{date(certificate.not_after, t)}</time></td><td><Status record={certificate} t={t} /></td><td>{!certificate.revoked && <button className="danger-link" type="button" disabled={busy} aria-label={`${confirming === certificate.fingerprint_sha256 ? t.confirmRevoke : t.revoke} ${certificate.display_name}`} onClick={() => confirming === certificate.fingerprint_sha256 ? revoke(certificate) : setConfirming(certificate.fingerprint_sha256)}>{confirming === certificate.fingerprint_sha256 ? t.confirmRevoke : t.revoke}</button>}</td>
+      <td><strong>{certificate.display_name}</strong><small className="row-subkey">{certificate.subject}</small></td><td>{certificate.authority_id ? <><span>{certificate.authority_name || s.authority}</span><CopyValue value={certificate.authority_id} label="CA ID" t={t} /></> : s.external}</td><td><CopyValue value={certificate.fingerprint_sha256} label={t.fingerprint} t={t} /><small className="row-subkey">{t.serial} {certificate.serial_hex}</small></td><td><Expiration value={certificate.not_after} now={now} revoked={certificate.revoked} t={t} /></td><td><Status record={certificate} now={now} t={t} /></td><td>{!certificate.revoked && <button className="danger-link" type="button" disabled={busy} aria-label={`${confirming === certificate.fingerprint_sha256 ? t.confirmRevoke : t.revoke} ${certificate.display_name}`} onClick={() => confirming === certificate.fingerprint_sha256 ? revoke(certificate) : setConfirming(certificate.fingerprint_sha256)}>{confirming === certificate.fingerprint_sha256 ? t.confirmRevoke : t.revoke}</button>}</td>
     </tr>)}</tbody></table></div>)}
     <InventoryPagination collection={collection} t={t} />
     {exported && <ExportDialog {...exported} t={t} onClose={() => setExported(null)} />}

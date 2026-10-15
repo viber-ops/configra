@@ -54,6 +54,7 @@ test('API token creation uses the server expiry default unless explicitly overri
 });
 
 test('scoped writers require environments and expiry and show MFA failures', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-10-15T12:00:00Z'));
   let created;
   await page.route('**/v1/**', async route => {
     const path = new URL(route.request().url()).pathname;
@@ -70,13 +71,16 @@ test('scoped writers require environments and expiry and show MFA failures', asy
   await page.getByRole('checkbox', { name: 'Scoped write token' }).check();
   await expect(page.getByRole('checkbox', { name: 'Never expires' })).toHaveCount(0);
   await expect(page.getByRole('checkbox', { name: 'Allow this token without mTLS' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Create API token' })).toBeDisabled();
+  await page.getByLabel('Token name').fill('Operator');
+  await page.getByRole('button', { name: 'Create API token' }).click();
+  await expect(page.getByRole('alert')).toContainText('Select at least one environment');
+  expect(created).toBeUndefined();
   await page.getByRole('checkbox', { name: 'Allowed environments Testing testing' }).check();
   await page.getByLabel('Token name').fill('Operator');
   await page.getByLabel('Config key allowlist').fill('server');
   await page.getByLabel('Vault namespace allowlist').fill('deployment');
   await expect(page.locator('input[name="expires_at"]')).toHaveAttribute('required', '');
-  await page.locator('input[name="expires_at"]').fill('2030-01-01T12:00');
+  await page.locator('input[name="expires_at"]').fill('2026-10-20T12:00');
   await page.getByRole('button', { name: 'Create API token' }).click();
   await expect.poll(() => created).toBeTruthy();
   expect(created.kind).toBe('write-scoped');

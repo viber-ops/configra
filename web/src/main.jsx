@@ -2,7 +2,10 @@ import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'rea
 import { createRoot } from 'react-dom/client';
 import { AuthorityManagement, CertificateManagement, authorityLabel } from './security/Certificates.jsx';
 import { Sessions, sessionLabel } from './security/Sessions.jsx';
-import { request, managementError, ActionError, useInventory, InventoryPagination } from './management.jsx';
+import { request, managementError, ActionError, useInventory, InventoryPagination, useMutation } from './management.jsx';
+import { validateTokenInput, tokenValidationMessage } from './token-validation.js';
+import { CopyValue } from './CopyValue.jsx';
+import { Expiration, ExpiryInput, useCurrentTime } from './security/Lifetime.jsx';
 import './styles.css';
 import './workspace.css';
 
@@ -26,7 +29,24 @@ const messages = {
     configAllowlist: 'Config key allowlist',
     namespaceAllowlist: 'Vault namespace allowlist',
     scopeHint: 'Comma-separated resource keys; leave empty to allow all in the selected environments.',
-    writeTokenHint: 'Requires verified OIDC MFA, mTLS and an explicit expiry (maximum 90 days, or the shorter server policy). Scopes are immutable; rotate to change them.',
+    writeTokenHint: 'Requires verified OIDC MFA, mTLS and an explicit expiry. Scopes are immutable; rotate to change them.',
+    tokenValidationFallback: 'Check the token name, selected environments, expiry and key allowlists. The server did not identify a field.',
+    writeTokenDeadline: 'Maximum {days} days. Latest expiry: {date} (your local time).',
+    tokenValidation_write_token_expiry_limit: 'Must be within {days} days of issuance. Choose an earlier date.',
+    tokenValidation_expiry_required: 'Choose an expiry for this write token.',
+    tokenValidation_expiry_in_past: 'Choose a future date and time.',
+    tokenValidation_expiry_invalid: 'Enter a valid date and time.',
+    tokenValidation_scope_key_invalid: 'Use 1–63 ASCII characters: start with a–z, then use a–z, 0–9, underscore (_) or hyphen (-). Separate keys with commas.',
+    tokenValidation_scope_keys_duplicate: 'Remove duplicate keys.',
+    tokenValidation_scope_keys_too_many: 'Use at most 256 keys.',
+    tokenValidation_environment_required: 'Select at least one environment.',
+    tokenValidation_environment_keys_invalid: 'Select valid, distinct environment keys.',
+    tokenValidation_environment_unavailable: 'An environment is unavailable or archived. Refresh the list and select again.',
+    tokenValidation_token_name_invalid: 'Enter a token name of 1–255 UTF-8 bytes.',
+    tokenValidation_token_kind_invalid: 'Select a supported token type.',
+    tokenValidation_write_token_requires_user: 'A signed-in administrator must issue write tokens.',
+    tokenValidation_write_token_requires_mtls: 'Write tokens require mTLS.',
+    tokenValidation_expiry_conflicts_with_never: 'Clear the expiry or turn off Never expires.',
     mfa_required: 'MFA evidence is required. Sign in again after enabling MFA at your identity provider.',
     allowedEnvironments: 'Allowed environments',
     apiTokens: 'API tokens',
@@ -44,6 +64,30 @@ const messages = {
     cancel: 'Cancel',
     clone: 'Clone',
     cloneComplete: 'Clone created.',
+    copyToEnvironment: 'Copy to environment',
+    copyFirstVersion: 'Create first version in {environment}',
+    copyComplete: 'Copied to {target} · v{revision}',
+    openTargetConfig: 'Open target config',
+    copyExplanation: 'Create v1 of this Config in an environment where it has no version yet. An existing target must be reviewed using Merge or Replace.',
+    cloneExplanation: 'Clone requires a new Config key across all environments. To keep the same key in another environment, use Copy to environment.',
+    copySavedRevision: 'Copies saved v{revision}. Unsaved edits and revision history are excluded. Vault references stay as references and resolve using the target environment.',
+    refreshTransferPreview: 'Refresh preview',
+    clone_target_exists: 'This Config key already exists in Configra. Choose a new key for Clone, or use Copy to environment to keep the same key.',
+    target_config_exists: 'The target environment already has this Config. Open it and use Merge or Replace to review the change before writing.',
+    target_revision_changed: 'The target changed since this operation was prepared. Refresh and review the latest version before submitting again.',
+    target_environment_unavailable: 'The target environment does not exist or is archived. Select an active environment, or restore it from Environments.',
+    source_revision_unavailable: 'The source revision is unavailable, or its Config or environment is archived. Refresh the source and select an available revision.',
+    target_revision_unavailable: 'The target revision is unavailable, or its Config or environment is archived. Refresh the target; use Copy to environment if it has no version yet.',
+    config_archived: 'This Config is archived. Restore it from Configs before writing a new version.',
+    config_format_mismatch: 'Merge requires the source and target to use the same format. Convert the format first, or review a Replace operation.',
+    config_document_invalid: 'The Config could not be processed. Check its YAML/JSON syntax, duplicate keys, Vault reference syntax and size limit (5 MiB).',
+    source_revision_required: 'Select a source revision before continuing.',
+    target_revision_required: 'Select a target revision. To create its first version, use Copy to environment.',
+    source_environment_invalid: 'Select a valid source environment.',
+    target_environment_invalid: 'Select a valid target environment.',
+    source_config_invalid: 'The source Config key is invalid. Use 1–63 lowercase letters, digits, underscores or hyphens, starting with a letter.',
+    target_config_invalid: 'The target Config key is invalid. Use 1–63 lowercase letters, digits, underscores or hyphens, starting with a letter.',
+    config_name_invalid: 'Enter a Config display name of at most 255 UTF-8 bytes.',
     cloneConfig: 'Clone config',
     compare: 'Compare',
     compareDragHint: 'Drag any two revisions into Source and Target. Use one Environment for history, or two for a cross-Environment comparison.',
@@ -238,7 +282,7 @@ const messages = {
     savedRevision: 'Saved as v{revision}.',
     unsavedChanges: 'You have unsaved changes. Discard them?',
     revision_conflict: 'This resource changed after you opened it. Review the latest Revision and try again.',
-    validation_failed: 'The input is invalid. Review the highlighted fields and try again.',
+    validation_failed: 'The server rejected these values. Check the input and use the Request ID to locate the failure.',
     request_too_large: 'The request exceeds the supported size limit.',
     service_unavailable: 'The service is temporarily unavailable. Try again shortly.',
     operation_id_reused: 'This operation identifier was already used for different content.',
@@ -360,7 +404,24 @@ const messages = {
     configAllowlist: 'Config 资源键白名单',
     namespaceAllowlist: 'Vault namespace 白名单',
     scopeHint: '用逗号分隔资源键；留空允许所选环境内的全部资源。',
-    writeTokenHint: '需要 OIDC MFA 证明、mTLS 和明确过期时间（最长 90 天，或服务端设置的更短期限）。范围不可修改；变更时请轮换令牌。',
+    writeTokenHint: '需要 OIDC MFA 证明、mTLS 和明确过期时间。范围不可修改；变更时请轮换令牌。',
+    tokenValidationFallback: '请检查 Token 名称、所选环境、过期时间和 key 白名单。服务端未提供具体字段。',
+    writeTokenDeadline: '最长 {days} 天。最晚可选：{date}（你的本地时间）。',
+    tokenValidation_write_token_expiry_limit: '不得超过签发后 {days} 天，请选择更早的日期。',
+    tokenValidation_expiry_required: '写令牌必须设置过期时间。',
+    tokenValidation_expiry_in_past: '请选择未来的日期和时间。',
+    tokenValidation_expiry_invalid: '请输入有效的日期和时间。',
+    tokenValidation_scope_key_invalid: '每个 key 为 1–63 个 ASCII 字符，以小写 a–z 开头，其后仅允许 a–z、0–9、下划线 (_) 和半角连字符 (-)。多个 key 用半角逗号分隔。',
+    tokenValidation_scope_keys_duplicate: '请移除重复的 key。',
+    tokenValidation_scope_keys_too_many: '最多允许 256 个 key。',
+    tokenValidation_environment_required: '请至少选择一个环境。',
+    tokenValidation_environment_keys_invalid: '请选择有效且不重复的环境 key。',
+    tokenValidation_environment_unavailable: '某个环境不存在或已归档，请刷新列表并重新选择。',
+    tokenValidation_token_name_invalid: '请输入名称，UTF-8 编码长度需为 1–255 字节。',
+    tokenValidation_token_kind_invalid: '请选择支持的令牌类型。',
+    tokenValidation_write_token_requires_user: '写令牌必须由已登录的管理员签发。',
+    tokenValidation_write_token_requires_mtls: '写令牌必须使用 mTLS。',
+    tokenValidation_expiry_conflicts_with_never: '请清空过期时间，或关闭“永不过期”。',
     mfa_required: '需要 MFA 证明。请在身份提供方启用 MFA 后重新登录。',
     allowedEnvironments: '允许访问的 Environment',
     apiTokens: 'API Token',
@@ -378,6 +439,30 @@ const messages = {
     cancel: '取消',
     clone: '克隆',
     cloneComplete: '克隆已创建。',
+    copyToEnvironment: '复制到环境',
+    copyFirstVersion: '在 {environment} 创建首个版本',
+    copyComplete: '已复制到 {target} · v{revision}',
+    openTargetConfig: '打开目标 Config',
+    copyExplanation: '在尚未配置此 Config 的环境创建 v1。目标已有版本时，请通过合并或替换查看差异后再提交。',
+    cloneExplanation: '克隆需要一个在所有环境中都未使用过的新 Config 键名。如需保留同名配置，请使用“复制到环境”。',
+    copySavedRevision: '复制已保存的 v{revision}，不包含未保存的编辑和历史版本。Vault 引用保持不变，在目标环境解析为对应的值。',
+    refreshTransferPreview: '刷新预览',
+    clone_target_exists: '此 Config 键名已在 Configra 中存在。克隆请使用新键名；保留同名配置请使用“复制到环境”。',
+    target_config_exists: '目标环境已有此 Config。请打开目标，通过“合并”或“替换”查看差异后再写入。',
+    target_revision_changed: '目标配置在准备操作后已发生变化。请刷新并核对最新版本，再重新提交。',
+    target_environment_unavailable: '目标环境不存在或已归档。请选择有效环境，或先在环境页面恢复它。',
+    source_revision_unavailable: '源版本不存在，或源 Config、环境已归档。请刷新源配置并选择有效版本。',
+    target_revision_unavailable: '目标版本不存在，或目标 Config、环境已归档。请刷新目标；若还没有版本，请使用“复制到环境”。',
+    config_archived: '此 Config 已归档。请先在 Config 列表恢复，再写入新版本。',
+    config_format_mismatch: '合并要求源和目标使用相同格式。请先转换格式，或通过“替换”查看变更。',
+    config_document_invalid: '无法处理此 Config。请检查 YAML/JSON 语法、重复键、Vault 引用格式，以及是否超过 5 MiB。',
+    source_revision_required: '请先选择源版本。',
+    target_revision_required: '请选择目标版本；若要创建首个版本，请使用“复制到环境”。',
+    source_environment_invalid: '请选择有效的源环境。',
+    target_environment_invalid: '请选择有效的目标环境。',
+    source_config_invalid: '源 Config 键名无效：需以小写字母开头，由 1–63 位小写字母、数字、下划线或连字符组成。',
+    target_config_invalid: '目标 Config 键名无效：需以小写字母开头，由 1–63 位小写字母、数字、下划线或连字符组成。',
+    config_name_invalid: '请填写 Config 显示名，长度不能超过 255 个 UTF-8 字节。',
     cloneConfig: '克隆 Config',
     compare: '对比',
     compareDragHint: '把任意两个 Revision 拖入 Source 和 Target；同一 Environment 是历史对比，不同 Environment 是跨环境对比。',
@@ -572,7 +657,7 @@ const messages = {
     savedRevision: '已保存为 v{revision}。',
     unsavedChanges: '有尚未保存的更改，确定放弃吗？',
     revision_conflict: '打开后资源已发生变化，请查看最新 Revision 后重试。',
-    validation_failed: '输入不合法，请检查标记的字段后重试。',
+    validation_failed: '服务端拒绝了这些输入，请检查填写内容，并使用 Request ID 定位原因。',
     request_too_large: '请求超过系统支持的大小限制。',
     service_unavailable: '服务暂时不可用，请稍后重试。',
     operation_id_reused: '此操作标识已用于其他内容。',
@@ -769,10 +854,10 @@ function EnvironmentSelect({ label, value, onChange, name, required = false, sco
   </div>;
 }
 
-function EnvironmentChoices({ label, scope = '', checked, onChange, t }) {
+function EnvironmentChoices({ label, scope = '', checked, onChange, t, invalid = false, describedBy }) {
   const [search, setSearch] = useState('');
   const collection = useInventory(`/v1/environments?include_archived=true&q=${encodeURIComponent(search)}${scope}`);
-  return <fieldset className="vault-environment-picker"><legend>{label}</legend>
+  return <fieldset className="vault-environment-picker" aria-invalid={invalid || undefined} aria-describedby={describedBy}><legend>{label}</legend>
     <input type="search" aria-label={`${label} · ${t.search}`} placeholder={t.search} value={search} onChange={event => setSearch(event.target.value)} />
     <div className="choice-grid">{collection.items.map(environment => <label className={environment.archived ? 'choice-disabled' : ''} key={environment.key}>
       <input type="checkbox" checked={checked(environment)} disabled={environment.archived && !checked(environment)} aria-label={`${label} ${environment.display_name} ${environment.key}`} onChange={event => onChange(environment.key, event.target.checked)} />
@@ -1959,19 +2044,25 @@ function Administration({ t, principal }) {
         <button type="button" role="tab" aria-selected={tab === 'notifications'} onClick={() => setTab('notifications')}>{t.notifications}</button>
         <button type="button" role="tab" aria-selected={tab === 'deployment'} onClick={() => setTab('deployment')}>{t.deploymentStatus}</button>
       </div>
-      {tab === 'tokens' ? <TokensPanel t={t} /> : tab === 'certificates' ? <CertificateManagement t={t} onAuthorities={() => setTab('authorities')} /> : tab === 'authorities' ? <AuthorityManagement t={t} onCertificates={() => setTab('certificates')} /> : tab === 'sessions' ? <Sessions t={t} principal={principal} /> : tab === 'notifications' ? <Notifications t={t} embedded /> : <DeploymentPanel t={t} />}
+      {tab === 'tokens' ? <TokensPanel t={t} principal={principal} /> : tab === 'certificates' ? <CertificateManagement t={t} onAuthorities={() => setTab('authorities')} /> : tab === 'authorities' ? <AuthorityManagement t={t} onCertificates={() => setTab('certificates')} /> : tab === 'sessions' ? <Sessions t={t} principal={principal} /> : tab === 'notifications' ? <Notifications t={t} embedded /> : <DeploymentPanel t={t} />}
     </div>
   );
 }
 
-function TokensPanel({ t }) {
+function TokensPanel({ t, principal }) {
   const [creating, setCreating] = useState(false);
+  const [creatingToken, setCreatingToken] = useState(false);
+  const [mutate, resetMutation] = useMutation(request);
+  const now = useCurrentTime();
   const [neverExpires, setNeverExpires] = useState(false);
   const [writeScoped, setWriteScoped] = useState(false);
   const [created, setCreated] = useState(null);
   const [editing, setEditing] = useState('');
   const [confirming, setConfirming] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState(null);
+  const configuredDays = principal.write_token_max_ttl_days;
+  const maxDays = Number.isInteger(configuredDays) && configuredDays >= 1 && configuredDays <= 90 ? configuredDays : 90;
+  const inputFeedback = field => ({ 'aria-invalid': error?.field === field || undefined, 'aria-describedby': error?.field === field ? 'token-create-error' : undefined });
   const [refresh, setRefresh] = useState(0);
   const [search, setSearch] = useState('');
   const [environmentKeys, setEnvironmentKeys] = useState([]);
@@ -1981,8 +2072,16 @@ function TokensPanel({ t }) {
   const state = useInventory(`/v1/api-tokens?include_revoked=true&q=${encodeURIComponent(search)}`, refresh);
   const create = async event => {
     event.preventDefault();
-    setError('');
-    const data = new FormData(event.currentTarget);
+    if (creatingToken) return;
+    setError(null);
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const expiryInput = form.elements.namedItem('expires_at');
+    if (expiryInput?.validity.badInput) {
+      setError(tokenValidationMessage({ field: 'expires_at', reason: 'expiry_invalid' }, t, maxDays));
+      expiryInput.focus();
+      return;
+    }
     const body = {
       display_name: data.get('display_name'),
       environment_keys: environmentKeys,
@@ -1995,19 +2094,24 @@ function TokensPanel({ t }) {
         if (data.get(key)?.trim()) body[key] = data.get(key).split(',').map(value => value.trim());
       }
     }
-    if ((!neverExpires || writeScoped) && data.get('expires_at')) body.expires_at = new Date(data.get('expires_at')).toISOString();
+    if ((!neverExpires || writeScoped) && data.get('expires_at')) body.expires_at = data.get('expires_at');
+    const invalid = validateTokenInput(body, maxDays);
+    if (invalid) {
+      setError(tokenValidationMessage(invalid, t, maxDays));
+      form.elements.namedItem(invalid.field)?.focus();
+      return;
+    }
+    if (body.expires_at) body.expires_at = new Date(body.expires_at).toISOString();
+    setCreatingToken(true);
     try {
-      const result = await request('/v1/api-tokens', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify(body),
-      });
-      setCreated(result.token);
+      const result = await mutate('/v1/api-tokens', body);
+      setCreated(result);
       setCreating(false);
       setRefresh(value => value + 1);
     } catch (error) {
-      setError(t[error.code] || t.operationFailed);
-    }
+      setError(tokenValidationMessage(error, t, maxDays));
+      form.elements.namedItem(error.field)?.focus();
+    } finally { setCreatingToken(false); }
   };
   const saveGrants = async event => {
     event.preventDefault();
@@ -2022,8 +2126,8 @@ function TokensPanel({ t }) {
       setEditing('');
       setGrants({});
       setRefresh(value => value + 1);
-    } catch {
-      setError(t.operationFailed);
+    } catch (failure) {
+      setError(managementError(failure, t, t.operationFailed));
     } finally {
       setSaving(false);
     }
@@ -2033,25 +2137,27 @@ function TokensPanel({ t }) {
       await request(`/v1/api-tokens/${encodeURIComponent(publicID)}/revoke`, { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID() } });
       setConfirming('');
       setRefresh(value => value + 1);
-    } catch {
-      setError(t.operationFailed);
+    } catch (failure) {
+      setError(managementError(failure, t, t.operationFailed));
     }
   };
   return (
     <section className="admin-panel tokens-panel">
-      <div className="panel-actions"><span>{t.tokenEnvironmentGrant}</span><button className="primary-action compact-action" type="button" onClick={() => { setCreating(value => !value); setEnvironmentKeys([]); }}>{t.newAPIToken}</button></div>
-      <label>{t.search}<input type="search" value={search} onChange={event => setSearch(event.target.value)} /></label>
-      {created && <div className="one-time-secret" role="alert"><strong>{t.tokenOnce}</strong><code>{created}</code><button type="button" onClick={() => navigator.clipboard.writeText(created).catch(() => {})}>{t.copy}</button></div>}
+      <div className="panel-actions"><span>{t.tokenEnvironmentGrant}</span><button className="primary-action compact-action" type="button" disabled={creatingToken} onClick={() => { resetMutation(); setCreating(value => !value); setEnvironmentKeys([]); setError(null); setCreated(null); }}>{t.newAPIToken}</button></div>
+      <label className="credential-search">{t.search}<input type="search" value={search} onChange={event => setSearch(event.target.value)} /></label>
+      {created && <div className="one-time-secret" role="alert"><strong>{created.token ? t.tokenOnce : (t.locale.startsWith('zh') ? '该操作已完成，令牌不会再次返回。如未保存，请按下方 Token ID 找到并吊销该令牌后重新签发。' : 'This operation already completed. The Token cannot be returned again. If it was not saved, find and revoke the Token ID below, then issue a replacement.')}</strong><CopyValue value={created.token || created.public_id} label={created.token ? 'API Token' : 'Token ID'} t={t} /></div>}
       {creating && (
-        <form className="token-form" onSubmit={create}>
-          <label>{t.tokenName}<input name="display_name" required maxLength="255" autoComplete="off" /></label>
-          <EnvironmentChoices label={t.allowedEnvironments} checked={environment => environmentKeys.includes(environment.key)} onChange={(key, checked) => setEnvironmentKeys(current => checked ? [...current, key] : current.filter(value => value !== key))} t={t} />
-          <label className="check-line"><input type="checkbox" checked={writeScoped} onChange={event => { setWriteScoped(event.target.checked); setNeverExpires(false); }} />{t.writeScoped}</label>
-          {writeScoped && <><p className="scope-note">{t.writeTokenHint}</p><label>{t.configAllowlist}<input name="config_keys" maxLength="16384" autoComplete="off" /><small>{t.scopeHint}</small></label><label>{t.namespaceAllowlist}<input name="namespace_keys" maxLength="16384" autoComplete="off" /><small>{t.scopeHint}</small></label></>}
+        <form className="token-form" noValidate onSubmit={create} onInput={() => setError(null)}>
+          <fieldset className="token-create-fields" disabled={creatingToken}>
+          <label>{t.tokenName}<input {...inputFeedback('display_name')} name="display_name" required maxLength="255" autoComplete="off" /></label>
+          <EnvironmentChoices invalid={error?.field === 'environment_keys'} describedBy={error?.field === 'environment_keys' ? 'token-create-error' : undefined} label={t.allowedEnvironments} checked={environment => environmentKeys.includes(environment.key)} onChange={(key, checked) => setEnvironmentKeys(current => checked ? [...current, key] : current.filter(value => value !== key))} t={t} />
+          <label className="check-line"><input type="checkbox" checked={writeScoped} onChange={event => { setWriteScoped(event.target.checked); setNeverExpires(false); setError(null); }} />{t.writeScoped}</label>
+          {writeScoped && <><p className="scope-note">{t.writeTokenHint}</p><label>{t.configAllowlist}<input {...inputFeedback('config_keys')} name="config_keys" maxLength="16384" autoComplete="off" /><small>{t.scopeHint}</small></label><label>{t.namespaceAllowlist}<input {...inputFeedback('namespace_keys')} name="namespace_keys" maxLength="16384" autoComplete="off" /><small>{t.scopeHint}</small></label></>}
           {!writeScoped && <label className="check-line"><input type="checkbox" name="allow_without_mtls" />{t.allowWithoutMTLS}</label>}
           {!writeScoped && <label className="check-line"><input type="checkbox" checked={neverExpires} onChange={event => setNeverExpires(event.target.checked)} />{t.neverExpires}</label>}
-          {!neverExpires && <label>{t.expiresAt}<input type="datetime-local" name="expires_at" required={writeScoped} />{!writeScoped && <small>{t.locale.startsWith('zh') ? '留空使用默认的 90 天有效期。' : 'Leave empty for the default 90-day lifetime.'}</small>}</label>}
-          <div className="form-actions"><span className="inline-error" role="alert">{error}</span><button className="primary-action compact-action" type="submit" disabled={writeScoped && environmentKeys.length === 0}>{t.createAPIToken}</button></div>
+          {!neverExpires && <ExpiryInput t={t} maxDays={writeScoped ? maxDays : undefined} feedback={inputFeedback('expires_at')} onEdit={() => setError(null)} />}
+          </fieldset>
+          <div className="form-actions"><div id="token-create-error"><ActionError error={error} t={t} /></div><button className="primary-action compact-action" type="submit" disabled={creatingToken}>{creatingToken ? (t.locale.startsWith('zh') ? '正在创建…' : 'Creating…') : t.createAPIToken}</button></div>
         </form>
       )}
       {editing && <form className="grant-form" onSubmit={saveGrants}><strong>{editing.display_name}</strong>
@@ -2059,10 +2165,10 @@ function TokensPanel({ t }) {
         <button className="primary-action compact-action" type="submit" disabled={saving || !Object.keys(grants).length}>{t.saveEnvironmentGrants}</button>
         <button type="button" disabled={saving} onClick={() => { if (confirmDiscard()) { setEditing(''); setGrants({}); } }}>{t.cancel}</button>
       </form>}
-      {!creating && error && <p className="inline-error" role="alert">{error}</p>}
+      {!creating && error && <ActionError error={error} t={t} />}
       <CollectionState state={state} t={t}>
         <div className="table-frame"><table><thead><tr><th>{t.tokenName}</th><th>{t.prefix}</th><th>{t.environments}</th><th>mTLS</th><th>{t.expiresAt}</th><th>{t.status}</th><th /></tr></thead>
-          <tbody>{state.items.map(token => <tr key={token.public_id}><td><strong title={token.display_name}>{token.display_name}</strong><code className="row-subkey">{token.public_id}</code><small>{token.kind || 'read-only'}</small>{(token.kind === 'write-scoped' || token.parent_public_id) && <details><summary>{t.allowedEnvironments}</summary><p>{t.configAllowlist}: {token.config_keys == null ? '*' : token.config_keys.join(', ') || '∅'}</p><p>{t.namespaceAllowlist}: {token.namespace_keys == null ? '*' : token.namespace_keys.join(', ') || '∅'}</p></details>}</td><td><code title={token.display_prefix}>{token.display_prefix}</code></td><td><div className="environment-links">{token.environment_keys.map(environment => <code key={environment}>{environment}</code>)}{token.environment_count > token.environment_keys.length && <span>+{token.environment_count - token.environment_keys.length}</span>}</div></td><td>{token.allow_without_mtls ? t.tokenOnlyAllowed : t.mtlsRequired}</td><td><time>{token.expires_at ? formatDate(token.expires_at, t.locale) : t.neverExpires}</time></td><td><span className={token.revoked ? 'status archived' : 'status active'}>{token.revoked ? t.revoked : t.statusActive}</span></td><td>{!token.revoked && <div className="row-actions">{token.kind !== 'write-scoped' && !token.parent_public_id && <button type="button" disabled={saving} aria-label={`${t.editEnvironments} ${token.display_name}`} onClick={() => { if (confirmDiscard()) { setEditing(token); setGrants({}); } }}>{t.editEnvironments}</button>}{confirming === token.public_id ? <button className="danger-link" type="button" aria-label={`${t.confirmRevoke} ${token.display_name}`} onClick={() => revoke(token.public_id)}>{t.confirmRevoke}</button> : <button className="danger-link" type="button" aria-label={`${t.revoke} ${token.display_name}`} onClick={() => setConfirming(token.public_id)}>{t.revoke}</button>}</div>}</td></tr>)}</tbody>
+          <tbody>{state.items.map(token => <tr key={token.public_id}><td><strong title={token.display_name}>{token.display_name}</strong><CopyValue value={token.public_id} label="Token ID" t={t} /><small>{token.kind || 'read-only'}</small>{(token.kind === 'write-scoped' || token.parent_public_id) && <details><summary>{t.allowedEnvironments}</summary><p>{t.configAllowlist}: {token.config_keys == null ? '*' : token.config_keys.join(', ') || '∅'}</p><p>{t.namespaceAllowlist}: {token.namespace_keys == null ? '*' : token.namespace_keys.join(', ') || '∅'}</p></details>}</td><td><code title={token.display_prefix}>{token.display_prefix}</code></td><td><div className="environment-links">{token.environment_keys.map(environment => <code key={environment}>{environment}</code>)}{token.environment_count > token.environment_keys.length && <span>+{token.environment_count - token.environment_keys.length}</span>}</div></td><td>{token.allow_without_mtls ? t.tokenOnlyAllowed : t.mtlsRequired}</td><td><Expiration value={token.expires_at} now={now} revoked={token.revoked} t={t} /></td><td><span className={token.revoked || Date.parse(token.expires_at) <= now ? 'status archived' : 'status active'}>{token.revoked ? t.revoked : Date.parse(token.expires_at) <= now ? (t.locale.startsWith('zh') ? '已过期' : 'Expired') : t.statusActive}</span></td><td>{!token.revoked && <div className="row-actions">{token.kind !== 'write-scoped' && !token.parent_public_id && <button type="button" disabled={saving} aria-label={`${t.editEnvironments} ${token.display_name}`} onClick={() => { if (confirmDiscard()) { setEditing(token); setGrants({}); } }}>{t.editEnvironments}</button>}{confirming === token.public_id ? <button className="danger-link" type="button" aria-label={`${t.confirmRevoke} ${token.display_name}`} onClick={() => revoke(token.public_id)}>{t.confirmRevoke}</button> : <button className="danger-link" type="button" aria-label={`${t.revoke} ${token.display_name}`} onClick={() => setConfirming(token.public_id)}>{t.revoke}</button>}</div>}</td></tr>)}</tbody>
         </table></div>
       </CollectionState>
       <InventoryPagination collection={state} t={t} />
@@ -2260,6 +2366,8 @@ function ConfigDetail({ principal, configKey, environmentKey, t }) {
   const [viewedRevision, setViewedRevision] = useState(0);
   const [inspection, setInspection] = useState({ status: 'idle' });
   const [restoring, setRestoring] = useState(0);
+  const [restoreBusy, setRestoreBusy] = useState(false);
+  const [restoreMutation] = useMutation(request);
   const path = `/v1/environments/${encodeURIComponent(environmentKey)}/configs/${encodeURIComponent(configKey)}`;
   const history = useRevisionHistory(`${path}/revisions`, refresh);
   const dirty = state.status === 'ready' && source !== state.config.content;
@@ -2346,20 +2454,22 @@ function ConfigDetail({ principal, configKey, environmentKey, t }) {
     setTab('transfer');
   };
   const restore = async revision => {
+    if (restoreBusy) return;
+    setRestoreBusy(true);
     setSaveError(null);
     try {
-      const result = await request(`${path}/restore`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify({ source_revision: revision, expected_revision: state.config.revision }),
-      });
+      const result = await restoreMutation(`${path}/restore`, { source_revision: revision, expected_revision: state.config.revision });
       setValidation({ status: 'saved', warnings: result.warnings || [] });
-      setState(current => ({ ...current, config: { ...current.config, revision: result.revision } }));
+      // A revision number alone is not a snapshot. Keep copy/transfer actions
+      // unavailable until the reload returns that revision's content and format.
+      setState({ status: 'loading' });
       setCompareSeed(null);
       setRestoring(0);
       setRefresh(value => value + 1);
     } catch (error) {
       setSaveError(managementError(error, t, t.operationFailed));
+    } finally {
+      setRestoreBusy(false);
     }
   };
 
@@ -2373,7 +2483,9 @@ function ConfigDetail({ principal, configKey, environmentKey, t }) {
     ? t.compareRevisions
     : tab === 'transfer'
       ? `${t[transferMode]} · ${t.source} → ${t.target}`
-      : tab === 'clone'
+      : tab === 'copy'
+        ? t.copyToEnvironment
+        : tab === 'clone'
         ? t.cloneConfig
         : '';
   return (
@@ -2391,6 +2503,7 @@ function ConfigDetail({ principal, configKey, environmentKey, t }) {
               {principal.role === 'admin' && <button type="button" aria-pressed={tab === 'transfer' && transferMode === 'merge'} onClick={() => openTransfer('merge')}>{t.merge}</button>}
               {principal.role === 'admin' && <button type="button" aria-pressed={tab === 'transfer' && transferMode === 'replace'} onClick={() => openTransfer('replace')}>{t.replace}</button>}
             </div>
+            {principal.role === 'admin' && <button type="button" aria-pressed={tab === 'copy'} onClick={() => setTab('copy')}>{t.copyToEnvironment}</button>}
             {principal.role === 'admin' && <button className="config-edit-action" type="button" aria-pressed={tab === 'raw' && viewingCurrent} onClick={() => showCurrent('raw')}>{t.editConfig}</button>}
             {principal.role === 'admin' && <details className="detail-more-actions"><summary aria-label={t.moreActions}>•••</summary><button type="button" onClick={event => { event.currentTarget.closest('details').removeAttribute('open'); setTab('clone'); }}>{t.clone}</button></details>}
           </div>
@@ -2429,8 +2542,8 @@ function ConfigDetail({ principal, configKey, environmentKey, t }) {
             <section className="history-view">
               <div className="table-frame history-table"><table><thead><tr><th>{t.revision}</th><th>{t.format}</th><th>{t.actor}</th><th>{t.created}</th><th>{t.action}</th></tr></thead>
                 <tbody>{history.items.map(revision => <tr className={revision.revision === viewedRevision ? 'selected-history-row' : ''} key={revision.revision}><td><button className="revision-link" type="button" aria-label={t.viewRevision.replace('{revision}', revision.revision)} onClick={() => inspectRevision(revision.revision)}>v{revision.revision}</button></td><td><code>{revision.format}</code></td><td><ActorIdentity actorID={revision.actor_id} principal={principal} /></td><td><time>{formatDate(revision.created_at, t.locale)}</time></td><td><div className="row-actions"><button type="button" aria-label={t.compareRevision.replace('{revision}', revision.revision)} onClick={() => compare(revision.revision)}>{t.compare}</button>{principal.role === 'admin' && revision.revision !== state.config.revision && (restoring === revision.revision
-                  ? <button className="danger-link" type="button" aria-label={t.confirmRestore.replace('{revision}', revision.revision)} onClick={() => restore(revision.revision)}>{t.confirmRestore.replace('{revision}', revision.revision)}</button>
-                  : <button type="button" aria-label={t.restoreRevision.replace('{revision}', revision.revision)} onClick={() => setRestoring(revision.revision)}>{t.restore}</button>)}</div></td></tr>)}</tbody>
+                  ? <button className="danger-link" type="button" disabled={restoreBusy} aria-label={t.confirmRestore.replace('{revision}', revision.revision)} onClick={() => restore(revision.revision)}>{t.confirmRestore.replace('{revision}', revision.revision)}</button>
+                  : <button type="button" disabled={restoreBusy} aria-label={t.restoreRevision.replace('{revision}', revision.revision)} onClick={() => setRestoring(revision.revision)}>{t.restore}</button>)}</div></td></tr>)}</tbody>
               </table></div>
               <RevisionPagination history={history} t={t} />
               <ActionError error={saveError} t={t} />
@@ -2459,7 +2572,7 @@ function ConfigDetail({ principal, configKey, environmentKey, t }) {
                 else window.location.hash = `/configs/${configKey}/${targetEnvironment}`;
               }} />
           ) : (
-            <ConfigClone path={path} t={t} />
+            <ConfigCopy key={`${path}/${tab}`} path={path} config={state.config} newConfig={tab === 'clone'} t={t} />
           )}
         </div>
         {!operationMode && <aside className="config-meta-panel">
@@ -2511,7 +2624,10 @@ function ConfigRevisionWorkbench({ mode, configKey, currentEnvironment, currentR
   const [source, setSource] = useState(initialSource || null);
   const [target, setTarget] = useState(null);
   const [comparison, setComparison] = useState({ status: 'idle' });
-  const [actionError, setActionError] = useState('');
+  const [actionError, setActionError] = useState(null);
+  const [previewEpoch, setPreviewEpoch] = useState(0);
+  const [mutate, resetMutation] = useMutation(request);
+  const selectionKey = JSON.stringify([source, target]);
   const environmentOptions = environments.length > 0 ? environments : [{ key: currentEnvironment }];
   const declaredCurrent = Object.fromEntries(environmentOptions.map(environment => [environment.key, environment.key === currentEnvironment ? currentRevision : environment.revision]));
 
@@ -2536,20 +2652,21 @@ function ConfigRevisionWorkbench({ mode, configKey, currentEnvironment, currentR
         read(target),
       ]).then(([preview, targetConfig]) => ({ target: targetConfig.content, result: preview.content, targetFormat: targetConfig.format, resultFormat: preview.format, expectedTargetRevision: preview.expected_target_revision }));
     operation
-      .then(result => live && setComparison({ status: 'ready', ...result }))
-      .catch(error => live && setComparison({ status: 'failed', code: error.code }));
+      .then(result => live && setComparison({ status: 'ready', selectionKey, ...result }))
+      .catch(error => live && setComparison({ status: 'failed', error }));
     return () => { live = false; };
-  }, [configKey, currentContent, currentEnvironment, currentFormat, currentRevision, mode, source, target]);
+  }, [configKey, currentContent, currentEnvironment, currentFormat, currentRevision, mode, source, target, selectionKey, previewEpoch]);
 
   const sameRevision = (left, right) => left && right && left.environment === right.environment && left.revision === right.revision;
   const choose = (slot, selection) => {
+    if (comparison.saving) return;
     if (!selection) {
       if (slot === 'source') setSource(null);
       else setTarget(null);
-      setActionError('');
+      setActionError(null);
       return;
     }
-    setActionError('');
+    setActionError(null);
     if (slot === 'source') {
       setSource(selection);
       if (sameRevision(selection, target)) setTarget(null);
@@ -2572,24 +2689,22 @@ function ConfigRevisionWorkbench({ mode, configKey, currentEnvironment, currentR
   const identity = selection => selection ? `${selection.environment}/${configKey}@v${selection.revision}` : '—';
   const selectedFormat = selection => selection?.format || (selection?.environment === currentEnvironment && selection.revision === currentRevision ? currentFormat : '');
   const commit = async () => {
-    setActionError('');
+    if (comparison.saving || comparison.status !== 'ready' || comparison.selectionKey !== selectionKey) return;
+    setActionError(null);
     setComparison(current => ({ ...current, saving: true }));
     try {
-      const result = await request(`/v1/environments/${encodeURIComponent(target.environment)}/configs/${encodeURIComponent(configKey)}/${mode}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify({ source_environment: source.environment, source_config: configKey, source_revision: source.revision, target_revision: target.revision, expected_target_revision: comparison.expectedTargetRevision }),
-      });
+      const result = await mutate(`/v1/environments/${encodeURIComponent(target.environment)}/configs/${encodeURIComponent(configKey)}/${mode}`,
+        { source_environment: source.environment, source_config: configKey, source_revision: source.revision, target_revision: target.revision, expected_target_revision: comparison.expectedTargetRevision });
       onCommitted(result, target.environment);
     } catch (error) {
       setComparison(current => ({ ...current, saving: false }));
-      setActionError(error.status === 409 ? t.saveConflict : t.saveFailed);
+      setActionError(managementError(error, t, t.saveFailed));
     }
   };
 
   return <section className="config-compare-workbench">
     <p className="compare-drag-hint">{mode === 'compare' ? t.compareDragHint : t.transferDragHint}</p>
-    <div className="compare-picker">
+    <fieldset className="compare-picker" disabled={comparison.saving}>
       <CompareRevisionLane side="left" configKey={configKey} environment={leftEnvironment} currentRevision={declaredCurrent[leftEnvironment]} source={source} target={target} onEnvironmentChange={setLeftEnvironment} onChoose={choose} t={t} />
       <div className="compare-drop-stack">
         {['source', 'target'].map(slot => {
@@ -2601,17 +2716,17 @@ function ConfigRevisionWorkbench({ mode, configKey, currentEnvironment, currentR
         })}
       </div>
       <CompareRevisionLane side="right" configKey={configKey} environment={rightEnvironment} currentRevision={declaredCurrent[rightEnvironment]} source={source} target={target} onEnvironmentChange={setRightEnvironment} onChoose={choose} t={t} />
-    </div>
-    {actionError && <p className="inline-error compare-action-error" role="alert">{actionError}</p>}
+    </fieldset>
+    <ActionError error={actionError} t={t} />
+    {source && target && mode !== 'compare' && <button type="button" disabled={comparison.saving || comparison.status === 'loading'} onClick={() => { setActionError(null); resetMutation(); setPreviewEpoch(value => value + 1); }}>{t.refreshTransferPreview}</button>}
     {comparison.status === 'loading' && <div className="collection-state compare-loading"><span className="loading-line" /></div>}
-    {comparison.status === 'ready' && (mode === 'compare' ? <ConfigDiffEditor source={comparison.source} target={comparison.target} sourceFormat={comparison.sourceFormat} targetFormat={comparison.targetFormat} sourceLabel={identity(source)} targetLabel={identity(target)} t={t} /> : <div className="transfer-result">
+    {comparison.status === 'ready' && comparison.selectionKey === selectionKey && (mode === 'compare' ? <ConfigDiffEditor source={comparison.source} target={comparison.target} sourceFormat={comparison.sourceFormat} targetFormat={comparison.targetFormat} sourceLabel={identity(source)} targetLabel={identity(target)} t={t} /> : <div className="transfer-result">
       <div className="transfer-direction"><code>{identity(source)}</code><span aria-hidden="true">→</span><code>{identity(target)}</code></div>
       <ConfigDiffEditor source={comparison.target} target={comparison.result} sourceFormat={comparison.targetFormat} targetFormat={comparison.resultFormat} sourceLabel={t.targetBefore} targetLabel={t.resultAfter} t={t} />
       <div className="editor-actions"><span className="transfer-conflict-hint">{t.targetConflictHint.replace('{revision}', comparison.expectedTargetRevision)}</span><button className="primary-action compact-action" type="button" disabled={comparison.saving} onClick={commit}>{(mode === 'merge' ? t.mergeInto : t.replaceInto).replace('{environment}', target.environment)}</button></div>
     </div>)}
-    {comparison.status === 'failed' && <p className="inline-error" role="alert">{comparison.code === 'format_mismatch'
-      ? t.mergeFormatMismatch.replace('{source}', selectedFormat(source).toUpperCase()).replace('{target}', selectedFormat(target).toUpperCase())
-      : t.operationFailed}</p>}
+    {comparison.status === 'failed' && <ActionError error={{ ...managementError(comparison.error, t, t.operationFailed),
+      ...(comparison.error?.code === 'format_mismatch' ? { message: t.mergeFormatMismatch.replace('{source}', selectedFormat(source).toUpperCase()).replace('{target}', selectedFormat(target).toUpperCase()) } : {}) }} t={t} />}
   </section>;
 }
 
@@ -2641,30 +2756,51 @@ function ResolvedPreview({ path, t }) {
   );
 }
 
-function ConfigClone({ path, t }) {
-  const [state, setState] = useState({ status: 'idle', error: '' });
-  const clone = async event => {
+function ConfigCopy({ path, config, newConfig, t }) {
+  const [environment, setEnvironment] = useState('');
+  const [state, setState] = useState({ status: 'idle' });
+  const [mutate, resetMutation] = useMutation(request);
+  const submit = async event => {
     event.preventDefault();
+    if (state.status === 'loading' || state.status === 'ready') return;
     const data = new FormData(event.currentTarget);
-    setState({ status: 'loading', error: '' });
+    const targetConfig = newConfig ? data.get('target_config') : config.config_key;
+    setState({ status: 'loading' });
     try {
-      const result = await request(`${path}/clone`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify({ target_environment: data.get('target_environment'), target_config: data.get('target_config'), target_name: data.get('target_name') }),
-      });
-      setState({ status: 'ready', error: '', warnings: result.warnings || [] });
-    } catch {
-      setState({ status: 'failed', error: t.operationFailed });
+      const result = await mutate(newConfig ? `${path}/clone` : `/v1/environments/${encodeURIComponent(environment)}/configs/${encodeURIComponent(targetConfig)}/replace`, newConfig
+        ? { target_environment: environment, target_config: targetConfig, target_name: data.get('target_name'), source_revision: config.revision }
+        : { source_environment: config.environment_key, source_config: config.config_key, source_revision: config.revision, target_revision: 0, expected_target_revision: 0 });
+      setState({ status: 'ready', result, environment, targetConfig });
+    } catch (error) {
+      setState({ status: 'failed', error: managementError(error, t, t.operationFailed), reason: error.reason, environment, targetConfig });
     }
   };
-  return <section className="transfer-panel"><form className="clone-form" onSubmit={clone}>
-    <label>{t.targetEnvironment}<input name="target_environment" required pattern="[a-z][a-z0-9_-]{0,62}" /></label>
-    <label>{t.targetConfig}<input name="target_config" required pattern="[a-z][a-z0-9_-]{0,62}" /></label>
-    <label>{t.targetName}<input name="target_name" required maxLength="255" /></label>
-    <div className="form-actions"><span className={state.status === 'ready' ? 'success-note' : 'inline-error'} role="status">{state.status === 'ready' ? t.cloneComplete : state.error}</span><button className="primary-action compact-action" type="submit" disabled={state.status === 'loading'}>{t.cloneConfig}</button></div>
-    {state.warnings?.length > 0 && <div className="config-warning-list" role="status"><ConfigWarningLines warnings={state.warnings} t={t} /></div>}
-  </form></section>;
+  const change = () => {
+    // A completed copy is a new intent after edits. Failed identical requests
+    // retain their operation ID so a lost response cannot create a second write.
+    if (state.status === 'ready') { resetMutation(); setState({ status: 'idle' }); }
+    else if (state.status === 'failed') setState({ status: 'idle' });
+  };
+  return <section className="transfer-panel config-copy-panel">
+    <p>{newConfig ? t.cloneExplanation : t.copyExplanation}</p>
+    <p><code>{`${config.environment_key}/${config.config_key}@v${config.revision}`}</code></p>
+    <p className="muted-note">{t.copySavedRevision.replace('{revision}', config.revision)}</p>
+    <form onSubmit={submit} onChange={change}>
+      <fieldset className="clone-form" disabled={state.status === 'loading'}>
+        <EnvironmentSelect label={t.targetEnvironment} name="target_environment" required value={environment} onChange={setEnvironment} t={t} />
+        {newConfig && <><label>{t.targetConfig}<input name="target_config" required pattern="[a-z][a-z0-9_-]{0,62}" /></label>
+          <label>{t.targetName}<input name="target_name" required maxLength="255" defaultValue={config.config_name} /></label></>}
+        <div className="form-actions">
+          <button className="primary-action compact-action" type="submit" disabled={!environment || state.status === 'loading' || state.status === 'ready'}>{newConfig ? t.cloneConfig : t.copyFirstVersion.replace('{environment}', environment || '…')}</button>
+        </div>
+      </fieldset>
+    </form>
+    <ActionError error={state.error} t={t} />
+    {state.status === 'ready' && <p className="success-note" role="status">{t.copyComplete.replace('{target}', `${state.environment}/${state.targetConfig}`).replace('{revision}', state.result.revision)}</p>}
+    {(state.status === 'ready' || state.reason === 'target_config_exists') && <p><a href={`#/configs/${encodeURIComponent(state.targetConfig)}/${encodeURIComponent(state.environment)}`}>{t.openTargetConfig}</a></p>}
+    {state.result?.warnings?.length > 0 && <div className="config-warning-list" role="status"><ConfigWarningLines warnings={state.result.warnings} t={t} /></div>}
+    <ConfigCodeEditor label={t.source} readOnly value={config.content} format={config.format} />
+  </section>;
 }
 
 function ConfigWarningLines({ warnings, t }) {

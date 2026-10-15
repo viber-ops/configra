@@ -37,6 +37,13 @@ write_tokens:
   max_ttl_days: 14 # 1..90，默认 90
 ```
 
+期限按签发时刻起每 24 小时一天计算，不是三个自然月。管理端 `/v1/me` 返回实际
+`write_token_max_ttl_days`；签发失败的 `422 validation_failed` 可携带安全的 `field`、
+`reason` 和 `max_ttl_days`，不回显输入值。新失败 Operation 会保留这些元数据，
+相同请求重放仍可定位字段。选择日期后立即显示有效天数/小时和超限量，快捷有效期
+遵循服务端设置的更短上限。Token 列表支持复制 ID，并显示复制结果；过期状态与
+剩余时间直接可见。出错时保留用于审计检索的 Request ID。
+
 未填写或 `null` 的 Config/namespace 白名单表示允许已授权环境内全部对应资源；明确
 传入 `[]` 则拒绝该维度全部资源。UI 留空表示未填写。每个白名单最多 256 个不重复
 资源键。写令牌禁止 `never_expires` 和 `allow_without_mtls`，每次请求都同时检查
@@ -47,7 +54,7 @@ Token、TLS、证书注册、过期及 CA/证书吊销状态。
 每个写请求必须提供 `Idempotency-Key`（8–128 个 ASCII 字母、数字、`_` 或 `-`）。
 同一 key 只用于相同请求的重试。Config/Vault 使用 `expected_revision`：创建为 `0`，
 更新为当前版本；旧版本返回 `409 revision_conflict`。成功/无变化返回 `outcome` 与
-`revision`，有变化追加不可变历史。错误只返回安全错误码与 Request ID，不含值。
+`revision`，有变化追加不可变历史。错误只返回安全错误码、Request ID 及上述令牌校验元数据，不含输入值。
 
 item 已存在于其他环境时，`expected_revision: 0` 也可创建所选环境尚不存在的 Variant。
 请用 `PUT /vault-items/{namespace}/{item}` 提供全部字段值；已存在的 Variant 更新仍

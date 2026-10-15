@@ -1,7 +1,7 @@
-# Go 1.26.7 runtime and standard-library notices
+# Go 1.26.9 runtime and standard-library notices
 
 This directory retains original license texts, patent grants and source-embedded
-notices from the Go 1.26.7 toolchain used to build Configra. Source files are kept
+notices from the Go 1.26.9 toolchain used to build Configra. Source files are kept
 whole so their copyright and permission blocks are not shortened or rewritten.
 Source filenames ending in `.go`, `.s`, or `.h` have an additional `.txt` suffix
 to keep Go tooling from treating the notice collection as buildable packages.
@@ -16,12 +16,12 @@ and other source-embedded notices. Inclusion does not assert that every named
 implementation survives linking or that BoringSSL is used by these binaries.
 Re-review this collection when the toolchain, targets, cgo or experiments change.
 
-Upstream source: https://go.dev/dl/go1.26.7.src.tar.gz
+Upstream source: https://go.dev/dl/go1.26.9.src.tar.gz
 
 Archive SHA-256:
-`0ed24eac755105085b89fe9cabc2742b91a0ad7b94b59d3ad364918ebc8956ad`
+`9735d7dcdb65b35d3fa577f04064737c03b89cf1a2b71e6e69fe2f3c6f9fd4ca`
 
-Tree: https://github.com/golang/go/tree/go1.26.7
+Tree: https://github.com/golang/go/tree/go1.26.9
 
 Paths retain their location relative to the archive's `go/` root. This collection
 does not replace license materials for Configra's Go modules, bundled web UI,

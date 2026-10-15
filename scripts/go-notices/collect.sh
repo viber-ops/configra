@@ -15,8 +15,8 @@ if [ -e "$notice_output" ] || [ -L "$notice_output" ]; then
   exit 1
 fi
 notice_version=$(go env GOVERSION)
-if [ "$notice_version" != 'go1.26.7' ]; then
-  printf '%s\n' 'Go notices have been reviewed only for go1.26.7; review the new toolchain before packaging it.' >&2
+if [ "$notice_version" != 'go1.26.9' ]; then
+  printf '%s\n' 'Go notices have been reviewed only for go1.26.9; review the new toolchain before packaging it.' >&2
   exit 1
 fi
 if [ -n "$(go env GOEXPERIMENT)" ]; then
@@ -52,4 +52,4 @@ while IFS= read -r notice_file; do
   cp "$notice_goroot/$notice_file" "$notice_output/$notice_destination"
 done < "$notice_script_dir/files.txt"
 cp "$notice_script_dir/SOURCE.md" "$notice_output/SOURCE.md"
-printf '%s\n' 'Collected reviewed Go 1.26.7 runtime notices.'
+printf '%s\n' 'Collected reviewed Go 1.26.9 runtime notices.'

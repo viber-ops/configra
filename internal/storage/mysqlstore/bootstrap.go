@@ -18,8 +18,9 @@ const (
 )
 
 type Store struct {
-	db       *sql.DB
-	provider *vaultcrypto.LocalKeyProvider
+	machineReads machineStatements
+	db           *sql.DB
+	provider     *vaultcrypto.LocalKeyProvider
 	// Set once at startup; zero uses the 90-day policy.
 	WriteTokenMaxTTL time.Duration
 }
@@ -65,7 +66,7 @@ func open(ctx context.Context, dsn string, provider *vaultcrypto.LocalKeyProvide
 }
 
 func (store *Store) Close() error {
-	return store.db.Close()
+	return errors.Join(store.machineReads.close(), store.db.Close())
 }
 
 func (store *Store) Ping(ctx context.Context) error {

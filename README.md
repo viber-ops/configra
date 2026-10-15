@@ -4,14 +4,14 @@
 
 [Website](https://viber-ops.github.io/en/configra/) ·
 [Documentation](https://viber-ops.github.io/en/docs/configra/) ·
-[Downloads](https://github.com/viber-ops/configra/releases/tag/v1.2.0) ·
+[Downloads](https://github.com/viber-ops/configra/releases/tag/v1.2.1) ·
 [Go SDK](https://github.com/viber-ops/configra-go) · [中文](README.zh-CN.md)
 
 Configra stores versioned YAML/JSON and shared Vault values for each environment.
 Applications read resolved configuration through the Go SDK, CSI file mounts,
 or native Kubernetes Secret/ConfigMap synchronization.
 
-> **Stable release: v1.2.0.** Use the tag for these guides.
+> **Stable release: v1.2.1.** Use the tag for these guides.
 > Validate ingress, capacity and recovery in your own deployment before rollout.
 > [Read the limits](https://viber-ops.github.io/en/docs/configra/security/).
 
@@ -52,10 +52,10 @@ consistent Config+File batch, or the existing individual read endpoints.
 
 ## Try the workspace
 
-With Docker Compose, Go 1.25.13+, Node.js 24, npm, Make and OpenSSL installed:
+With Docker Compose, Go 1.26.9, Node.js 24, npm, Make and OpenSSL installed:
 
 ```sh
-git clone --branch v1.2.0 https://github.com/viber-ops/configra.git
+git clone --branch v1.2.1 https://github.com/viber-ops/configra.git
 git clone --branch v1.2.0 https://github.com/viber-ops/configra-go.git
 cd configra
 make local-run
@@ -103,12 +103,12 @@ Production ingress and independent-host failure checks remain deployment-specifi
 Check the [current production status](docs/production-readiness.md)
 before a rollout.
 
-For v1.2.0, follow the [upgrade and schema 3 → 4 migration instructions](docs/releases/v1.2.0.md). Administrators need verified OIDC MFA to issue write Tokens; operators use mTLS and need no human identity.
+For v1.2.1, see the [patch upgrade and fixes](docs/releases/v1.2.1.md) (no schema change from v1.2.0). When upgrading from an older version, follow the [upgrade and schema 3 → 4 migration instructions](docs/releases/v1.2.0.md). Administrators need verified OIDC MFA to issue write Tokens; operators use mTLS and need no human identity.
 
 ## Develop and verify
 
 Clone the SDK next to this repository for integration tests. The release builder
-uses Go 1.26.7 and embeds the production web build.
+uses Go 1.26.9 and embeds the production web build.
 
 ```sh
 go test -race ./...

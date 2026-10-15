@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { CopyValue } from './CopyValue.jsx';
 
 export async function request(path, options = {}) {
   const response = await fetch(path, {
@@ -12,6 +13,9 @@ export async function request(path, options = {}) {
       const failure = (await response.json()).error;
       error.code = failure?.code;
       error.requestID = failure?.request_id;
+      error.field = failure?.field;
+      error.reason = failure?.reason;
+      error.maxTTLDays = failure?.max_ttl_days;
     } catch {
       // The HTTP status remains enough for non-JSON failures.
     }
@@ -26,12 +30,12 @@ export async function request(path, options = {}) {
 }
 
 export function managementError(error, t, fallback) {
-  return { message: t[error?.code] || fallback, requestID: error?.requestID || '' };
+  return { message: t[error?.reason] || t[error?.code] || fallback, requestID: error?.requestID || '', operationID: error?.operationID || '' };
 }
 
 export function ActionError({ error, t }) {
   if (!error) return null;
-  return <span className="action-error" role="alert"><span>{error.message}</span>{error.requestID && <button type="button" aria-label={`${t.copyRequestID} ${error.requestID}`} onClick={() => navigator.clipboard.writeText(error.requestID).catch(() => {})}><span>{t.requestID}</span><code>{error.requestID}</code></button>}</span>;
+  return <span className="action-error" role="alert"><span>{error.message}</span>{error.requestID && <><span>{t.requestID}</span><CopyValue value={error.requestID} label={`${t.requestID} ${error.requestID}`} t={t} /></>}{error.operationID && <><span>{t.operation}</span><CopyValue value={error.operationID} label={`${t.operation} ${error.operationID}`} t={t} /></>}</span>;
 }
 
 export function useInventory(path, refresh = 0, initialPage = 1, body = null) {
@@ -74,4 +78,16 @@ export function InventoryPagination({ collection, t, onPageChange, hideSinglePag
       <div><button type="button" disabled={collection.page === 1 || collection.status === 'loading'} onClick={() => change(collection.page - 1)}>{t.previous}</button><code>{t.pageNumber.replace('{page}', collection.page)}</code><button type="button" disabled={collection.status !== 'ready' || collection.page * 50 >= collection.total} onClick={() => change(collection.page + 1)}>{t.next}</button></div>
     </nav>}
   </>;
+}
+
+export function useMutation(request) {
+  const attempt = useRef(null);
+  const mutate = (path, body) => {
+    const signature = JSON.stringify([path, body]);
+    if (attempt.current?.signature !== signature) attempt.current = { signature, id: crypto.randomUUID() };
+    const operationID = attempt.current.id;
+    return request(path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': operationID }, ...(body ? { body: JSON.stringify(body) } : {}) })
+      .catch(error => { error.operationID = operationID; throw error; });
+  };
+  return [mutate, () => { attempt.current = null; }];
 }

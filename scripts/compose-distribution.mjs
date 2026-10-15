@@ -98,12 +98,12 @@ for (const command of commands) {
   rootDependencies.add(ref);
 }
 assert.equal(platforms.size, 1, 'A delivered root must not mix binary targets');
-assert.deepEqual([...goVersions], ['go1.26.7'], 'Runtime evidence requires review for a changed toolchain');
-const runtimeRoot = `${licenseRoot}/go1.26.7`;
+assert.deepEqual([...goVersions], ['go1.26.9'], 'Runtime evidence requires review for a changed toolchain');
+const runtimeRoot = `${licenseRoot}/go1.26.9`;
 assert.equal(hash(read(`${runtimeRoot}/LICENSE`)), '911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad');
 read(`${runtimeRoot}/SOURCE.md`);
 const runtimeRef = addComponent({
-  type: 'platform', 'bom-ref': 'pkg:golang/stdlib@go1.26.7', name: 'stdlib', version: 'go1.26.7', purl: 'pkg:golang/stdlib@go1.26.7',
+  type: 'platform', 'bom-ref': 'pkg:golang/stdlib@go1.26.9', name: 'stdlib', version: 'go1.26.9', purl: 'pkg:golang/stdlib@go1.26.9',
   description: 'Go runtime and standard library compiled into these binaries. The notice collection retains file-specific terms and a conservative source superset.',
   properties: [{ name: 'configra:notice-directory', value: runtimeRoot }],
 }, `${runtimeRoot}/SOURCE.md`);

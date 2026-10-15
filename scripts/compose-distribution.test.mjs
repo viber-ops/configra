@@ -15,9 +15,9 @@ const encode = (value) => JSON.stringify(value);
 
 function fixture(root, conflicting = false) {
   const put = (path, bytes) => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), bytes); };
-  const goRoot = execFileSync('go', ['env', 'GOROOT'], { encoding: 'utf8', env: { ...process.env, GOTOOLCHAIN: 'go1.26.7' } }).trim();
-  put('licenses/go1.26.7/LICENSE', readFileSync(join(goRoot, 'LICENSE')));
-  put('licenses/go1.26.7/SOURCE.md', 'Runtime notice fixture');
+  const goRoot = execFileSync('go', ['env', 'GOROOT'], { encoding: 'utf8', env: { ...process.env, GOTOOLCHAIN: 'go1.26.9' } }).trim();
+  put('licenses/go1.26.9/LICENSE', readFileSync(join(goRoot, 'LICENSE')));
+  put('licenses/go1.26.9/SOURCE.md', 'Runtime notice fixture');
   put('BUILD.json', encode({ version: 'v0.1.0-test', commit: 'a'.repeat(40), platform: 'linux', arch: 'amd64' }));
   const notice = 'Browser notice fixture';
   const ui = { bomFormat: 'CycloneDX', specVersion: '1.6', metadata: { component: {
@@ -32,7 +32,7 @@ function fixture(root, conflicting = false) {
     put(`${moduleRoot}/files/shared/LICENSE`, 'Dependency notice');
     const part = { bomFormat: 'CycloneDX', specVersion: '1.6', metadata: { component: {
       type: 'application', 'bom-ref': name, name, hashes: [{ alg: 'SHA-256', content: hash(binary) }],
-    }, properties: [{ name: 'configra:target', value: `${name}/linux/amd64` }, { name: 'configra:go:version', value: 'go1.26.7' }] },
+    }, properties: [{ name: 'configra:target', value: `${name}/linux/amd64` }, { name: 'configra:go:version', value: 'go1.26.9' }] },
     components: [{ type: 'library', 'bom-ref': 'pkg:golang/shared@v1.0.0', name: 'shared', version: 'v1.0.0', properties: [
       { name: 'configra:go:module-sum', value: conflicting && name === 'configra-kubernetes' ? 'h1:changed' : 'h1:original' },
       { name: 'configra:license-files', value: encode([{ path: 'files/shared/LICENSE', sha256: hash('Dependency notice') }]) },
