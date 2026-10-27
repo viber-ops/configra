@@ -12,7 +12,7 @@ COPY web/src ./src
 RUN npm run build
 RUN node scripts/export-licenses.mjs /src/web/dist /out/ui-licenses
 
-FROM --platform=$BUILDPLATFORM golang:1.26.7-bookworm@sha256:e8c859f5632dcfde7b32d2012b4351728f6437930887c2f6a91ea242459e5514 AS build
+FROM --platform=$BUILDPLATFORM golang:1.27.3-bookworm@sha256:972b4110ba0f47539a975c31e52c64765e1ff19f2d74469ae4a595c6676e80a5 AS build
 
 ARG TARGETOS
 ARG TARGETARCH
