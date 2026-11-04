@@ -1148,6 +1148,8 @@ type recordingConfigWriter struct {
 	tokenCreateResult              mysqlstore.TokenCreateResult
 	tokenEnvironmentChanges        []mysqlstore.TokenEnvironmentChange
 	tokenEnvironmentResult         mysqlstore.TokenEnvironmentResult
+	tokenRenews                    []mysqlstore.TokenRenew
+	tokenRenewResult               mysqlstore.TokenRenewResult
 	tokenRevokes                   []mysqlstore.TokenRevoke
 	tokenRevokeResult              mysqlstore.TokenRevokeResult
 	certificates                   []mysqlstore.ClientCertificate
@@ -1315,6 +1317,11 @@ func (writer *recordingConfigWriter) SetTokenEnvironments(_ context.Context, req
 	return writer.tokenEnvironmentResult, nil
 }
 
+func (writer *recordingConfigWriter) RenewToken(_ context.Context, request mysqlstore.TokenRenew) (mysqlstore.TokenRenewResult, error) {
+	writer.tokenRenews = append(writer.tokenRenews, request)
+	return writer.tokenRenewResult, nil
+}
+
 func (writer *recordingConfigWriter) RevokeToken(_ context.Context, request mysqlstore.TokenRevoke) (mysqlstore.TokenRevokeResult, error) {
 	writer.tokenRevokes = append(writer.tokenRevokes, request)
 	return writer.tokenRevokeResult, nil
@@ -1421,6 +1428,16 @@ func (writer *recordingConfigWriter) ChangeSessions(context.Context, mysqlstore.
 }
 func (writer *recordingConfigWriter) ListSessionPolicies(context.Context, mysqlstore.InventoryQuery) (mysqlstore.InventoryPage[mysqlstore.SessionPolicySummary], error) {
 	return mysqlstore.InventoryPage[mysqlstore.SessionPolicySummary]{Items: []mysqlstore.SessionPolicySummary{}}, nil
+}
+func (writer *recordingConfigWriter) ReadSessionSettings(context.Context) (humanauth.SessionSettings, error) {
+	return humanauth.DefaultSessionSettings(), nil
+}
+func (writer *recordingConfigWriter) UpdateSessionSettings(_ context.Context, request mysqlstore.SessionSettingsChange) (mysqlstore.SessionSettingsResult, error) {
+	normalized, ok := humanauth.NormalizeSessionSettings(humanauth.SessionSettings{IdleTimeout: request.IdleTimeout, Lifetime: request.Lifetime})
+	if !ok {
+		return mysqlstore.SessionSettingsResult{Outcome: mysqlstore.OutcomeValidationFailed}, mysqlstore.ErrValidation
+	}
+	return mysqlstore.SessionSettingsResult{Outcome: mysqlstore.OutcomeSuccess, IdleTimeout: normalized.IdleTimeout, Lifetime: normalized.Lifetime}, nil
 }
 
 func (writer *recordingConfigWriter) RecordRejectedMutation(_ context.Context, request mysqlstore.RejectedMutation) error {

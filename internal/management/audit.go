@@ -18,6 +18,7 @@ type mutationAuditRoute struct{ action, resourceType, resourceParameter string }
 
 var mutationAuditRoutes = map[string]mutationAuditRoute{
 	"POST /v1/session-policies":                                                        {"identity.change", "identity", ""},
+	"PUT /v1/session-settings":                                                         {"session.settings", "session_settings", ""},
 	"POST /v1/environments":                                                            {"environment.create", "environment", "environment"},
 	"PATCH /v1/environments/{environment}":                                             {"environment.rename", "environment", "environment"},
 	"POST /v1/environments/{environment}/archive":                                      {"environment.archive", "environment", "environment"},
@@ -36,6 +37,7 @@ var mutationAuditRoutes = map[string]mutationAuditRoute{
 	"POST /v1/api-tokens":                                                              {"token.create", "api_token", "public_id"},
 	"PUT /v1/api-tokens/{public_id}/environments":                                      {"token.set_environments", "api_token", "public_id"},
 	"PATCH /v1/api-tokens/{public_id}/environments":                                    {"token.patch_environments", "api_token", "public_id"},
+	"PATCH /v1/api-tokens/{public_id}/expiry":                                          {"token.renew", "api_token", "public_id"},
 	"POST /v1/api-tokens/{public_id}/revoke":                                           {"token.revoke", "api_token", "public_id"},
 	"POST /v1/client-certificates":                                                     {"client_certificate.register", "client_certificate", "fingerprint"},
 	"POST /v1/client-certificates/issue":                                               {"client_certificate.issue", "client_certificate", "fingerprint"},

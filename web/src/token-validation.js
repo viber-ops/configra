@@ -32,6 +32,17 @@ export function tokenValidationMessage(error, t, maxDays) {
   };
 }
 
+export function validateTokenExpiryInput(body, now = Date.now()) {
+  if (body.never_expires && body.expires_at) return { field: 'expires_at', reason: 'expiry_conflicts_with_never' };
+  if (!body.never_expires && !body.expires_at) return { field: 'expires_at', reason: 'expiry_required' };
+  if (body.expires_at) {
+    const expiry = new Date(body.expires_at).getTime();
+    if (!Number.isFinite(expiry)) return { field: 'expires_at', reason: 'expiry_invalid' };
+    if (expiry <= now) return { field: 'expires_at', reason: 'expiry_in_past' };
+  }
+  return null;
+}
+
 export function localDateTime(date) {
   const pad = value => String(value).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;

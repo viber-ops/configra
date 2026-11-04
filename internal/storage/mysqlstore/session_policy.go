@@ -159,3 +159,109 @@ func (store *Store) ListSessionPolicies(ctx context.Context, query InventoryQuer
 	}
 	return page, nil
 }
+
+type SessionSettingsChange struct {
+	OperationID string
+	Actor       Actor
+	IdleTimeout string `json:"idle_timeout"`
+	Lifetime    string `json:"lifetime"`
+}
+
+type SessionSettingsResult struct {
+	Outcome     Outcome `json:"outcome"`
+	IdleTimeout string  `json:"idle_timeout"`
+	Lifetime    string  `json:"lifetime"`
+}
+
+const sessionSettingsIssuer = "__configra_session_settings__"
+
+func (store *Store) ReadSessionSettings(ctx context.Context) (humanauth.SessionSettings, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	id := sessionIdentity("sid", sessionSettingsIssuer, "global")
+	var raw string
+	err := store.db.QueryRowContext(ctx, `SELECT target FROM management_session_policies WHERE identity_id=?`, id[:]).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return humanauth.DefaultSessionSettings(), nil
+	}
+	if err != nil {
+		return humanauth.SessionSettings{}, errors.New("read session settings")
+	}
+	var settings humanauth.SessionSettings
+	if json.Unmarshal([]byte(raw), &settings) != nil {
+		return humanauth.DefaultSessionSettings(), nil
+	}
+	normalized, ok := humanauth.NormalizeSessionSettings(settings)
+	if !ok {
+		return humanauth.DefaultSessionSettings(), nil
+	}
+	return normalized, nil
+}
+
+func (store *Store) UpdateSessionSettings(ctx context.Context, request SessionSettingsChange) (SessionSettingsResult, error) {
+	if !validOperationID(request.OperationID) || !validActor(request.Actor) {
+		return SessionSettingsResult{}, ErrValidation
+	}
+	normalized, ok := humanauth.NormalizeSessionSettings(humanauth.SessionSettings{
+		IdleTimeout: request.IdleTimeout,
+		Lifetime:    request.Lifetime,
+	})
+	tx, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		return SessionSettingsResult{}, errors.New("begin session settings change")
+	}
+	defer tx.Rollback()
+	if err := store.lockMasterKey(ctx, tx, false); err != nil {
+		return SessionSettingsResult{}, err
+	}
+	replayed, replay, err := beginOperation(ctx, tx, request.OperationID, tokenRequestDigest(request), request.Actor)
+	if err != nil {
+		return SessionSettingsResult{}, err
+	}
+	if replayed {
+		var previous SessionSettingsResult
+		if json.Unmarshal(replay.Response, &previous) != nil {
+			return previous, errors.New("invalid session settings replay")
+		}
+		if previous.Outcome == OutcomeSuccess && store.OnSessionSettings != nil {
+			store.OnSessionSettings(humanauth.SessionSettings{IdleTimeout: previous.IdleTimeout, Lifetime: previous.Lifetime})
+		}
+		return previous, outcomeError(previous.Outcome)
+	}
+	if !ok {
+		result := SessionSettingsResult{Outcome: OutcomeValidationFailed}
+		if err := finishOperation(ctx, tx, request.OperationID, request.Actor, result.Outcome, 0, result, mutationEvent{
+			Type: "session_settings.validation_failed", Action: "session.settings", ResourceType: "session_settings", ResourceKey: "global",
+		}, false); err != nil {
+			return SessionSettingsResult{}, err
+		}
+		if tx.Commit() != nil {
+			return SessionSettingsResult{}, errors.New("commit session settings validation audit")
+		}
+		return result, withCommittedAudit(ErrValidation)
+	}
+	id := sessionIdentity("sid", sessionSettingsIssuer, "global")
+	encoded, _ := json.Marshal(normalized)
+	if _, err := tx.ExecContext(ctx, `INSERT INTO management_session_policies(identity_id,issuer,target_kind,target,generation,blocked,revoked_at) VALUES(?,?,?,?,1,FALSE,UTC_TIMESTAMP(6))
+		ON DUPLICATE KEY UPDATE target=VALUES(target),generation=generation+1,revoked_at=UTC_TIMESTAMP(6)`, id[:], sessionSettingsIssuer, "sid", string(encoded)); err != nil {
+		return SessionSettingsResult{}, errors.New("update session settings")
+	}
+	result := SessionSettingsResult{
+		Outcome:     OutcomeSuccess,
+		IdleTimeout: normalized.IdleTimeout,
+		Lifetime:    normalized.Lifetime,
+	}
+	if err := finishOperation(ctx, tx, request.OperationID, request.Actor, result.Outcome, 0, result, mutationEvent{
+		Type: "session_settings.updated", Action: "session.settings", ResourceType: "session_settings", ResourceKey: "global",
+	}, false); err != nil {
+		return result, err
+	}
+	if tx.Commit() != nil {
+		return SessionSettingsResult{}, errors.New("commit session settings change")
+	}
+	if store.OnSessionSettings != nil {
+		store.OnSessionSettings(normalized)
+	}
+	return result, nil
+}
+

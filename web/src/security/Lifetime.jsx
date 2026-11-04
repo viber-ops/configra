@@ -36,7 +36,7 @@ export function Expiration({ value, now, t, revoked = false }) {
   </span>;
 }
 
-export function ExpiryInput({ t, maxDays, feedback, onEdit }) {
+export function ExpiryInput({ t, maxDays, required = false, feedback, onEdit }) {
   const now = Date.now();
   const id = useId();
   const input = useRef(null);
@@ -53,20 +53,20 @@ export function ExpiryInput({ t, maxDays, feedback, onEdit }) {
     input.current.value = selected;
     setValue(selected); setIncomplete(false); onEdit();
   };
-  const presets = [7, 30].filter(days => maxDays == null || days < maxDays);
+  const presets = (maxDays == null && required ? [7, 30, 90, 365] : [7, 30]).filter(days => maxDays == null || days < maxDays);
   let summary = '';
   if (incomplete) summary = zh ? '请补全日期和时间以计算有效期。' : 'Complete the date and time to calculate the lifetime.';
   else if (Number.isFinite(remaining)) summary = remaining <= 0 ? (zh ? '所选时间已过去，请选择未来时间。' : 'This time has passed. Choose a future expiry.') : `${zh ? '所选有效期：' : 'Selected lifetime: '}${duration(remaining, zh)}`;
   return <div className="expiry-field">
     <label htmlFor={id}>{t.expiresAt}</label>
-    <input ref={input} id={id} name="expires_at" type="datetime-local" required={maxDays != null} max={deadline} aria-label={t.expiresAt} onInput={edited}
+    <input ref={input} id={id} name="expires_at" type="datetime-local" required={required || maxDays != null} max={deadline} aria-label={t.expiresAt} onInput={edited}
       aria-invalid={feedback?.['aria-invalid'] || invalid || undefined} aria-describedby={[`${id}-hint`, summary && `${id}-summary`, feedback?.['aria-describedby']].filter(Boolean).join(' ')} />
     <div className="expiry-presets" role="group" aria-label={zh ? '选择有效天数' : 'Choose lifetime'}>
       {presets.map(days => <button key={days} type="button" onClick={() => choose(days)}>{zh ? `${days} 天` : `${days} days`}</button>)}
       {maxDays != null && <button type="button" onClick={() => choose(maxDays)}>{zh ? `使用最长有效期（${maxDays} 天）` : `Use maximum (${maxDays} days)`}</button>}
     </div>
     {summary && <div id={`${id}-summary`} role="status" className={`expiry-summary ${invalid ? 'expiry-invalid' : ''}`}><span>{summary}</span>{tooLong && <span>{zh ? `超过 ${maxDays} 天上限 ${duration(remaining - maxDays * day, zh)}。` : `Exceeds the ${maxDays}-day limit by ${duration(remaining - maxDays * day, zh)}.`}</span>}</div>}
-    <small id={`${id}-hint`}>{maxDays != null ? t.writeTokenDeadline.replace('{days}', maxDays).replace('{date}', deadline.replace('T', ' ')) : (zh ? '留空使用默认的 90 天有效期。' : 'Leave empty for the default 90-day lifetime.')}</small>
+    <small id={`${id}-hint`}>{maxDays != null ? t.writeTokenDeadline.replace('{days}', maxDays).replace('{date}', deadline.replace('T', ' ')) : required ? (zh ? '选择新的未来过期时间，或勾选永不过期改为长效。' : 'Choose a future expiry date, or check Never expires.') : (zh ? '留空使用默认的 90 天有效期。' : 'Leave empty for the default 90-day lifetime.')}</small>
   </div>;
 }
 

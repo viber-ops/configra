@@ -175,3 +175,34 @@ test('restore waits for the complete snapshot before allowing a copy of its new 
   await expect(page.getByLabel('Source', { exact: true })).toContainText('restored: true');
   await expect(page.getByLabel('Source', { exact: true })).not.toContainText('old: true');
 });
+
+test('config detail copies source content and allows editing template before copying to another environment', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await sourcePage(page);
+  await page.getByRole('button', { name: 'Copy Config content', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("port: 6380\npassword: '{vault.app.db.password}'\n");
+
+  let committed;
+  await page.route('**/v1/environments/production/configs/server', async route => {
+    if (route.request().method() === 'PUT') {
+      committed = route.request().postDataJSON();
+      return route.fulfill({ json: { outcome: 'success', revision: 1 } });
+    }
+    return route.fallback();
+  });
+  await page.getByRole('button', { name: 'Copy to environment', exact: true }).click();
+  await page.getByLabel('Target environment', { exact: true }).selectOption('production');
+  const editor = page.getByLabel('Source', { exact: true });
+  await editor.click();
+  await page.keyboard.press('Meta+A');
+  await page.keyboard.type('port: 7380\n');
+  await page.getByRole('button', { name: 'Create first version in production' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Copied to production/server · v1' })).toBeVisible();
+  expect(committed).toEqual({
+    name: 'Server',
+    expected_revision: 0,
+    format: 'yaml',
+    content: 'port: 7380\n',
+  });
+});
+

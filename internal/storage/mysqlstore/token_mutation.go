@@ -74,6 +74,22 @@ type TokenRevokeResult struct {
 	Revoked  bool    `json:"revoked"`
 }
 
+type TokenRenew struct {
+	OperationID  string
+	Actor        Actor
+	PublicID     string
+	ExpiresAt    time.Time
+	NeverExpires bool
+}
+
+type TokenRenewResult struct {
+	Validation   *TokenValidationError `json:"validation,omitempty"`
+	Outcome      Outcome               `json:"outcome"`
+	PublicID     string                `json:"public_id"`
+	ExpiresAt    *time.Time            `json:"expires_at,omitempty"`
+	NeverExpires bool                  `json:"never_expires"`
+}
+
 func (store *Store) CreateToken(ctx context.Context, request TokenCreate) (TokenCreateResult, error) {
 	if request.Actor.Type == "token" {
 		return TokenCreateResult{}, machine.ErrForbidden
@@ -307,6 +323,103 @@ func (store *Store) RevokeToken(ctx context.Context, request TokenRevoke) (Token
 		return TokenRevokeResult{}, fmt.Errorf("commit API Token revocation: %w", err)
 	}
 	return result, nil
+}
+
+func (store *Store) RenewToken(ctx context.Context, request TokenRenew) (TokenRenewResult, error) {
+	if request.Actor.Type == "token" {
+		return TokenRenewResult{}, machine.ErrForbidden
+	}
+	if !validOperationID(request.OperationID) || !validActor(request.Actor) {
+		return TokenRenewResult{}, ErrValidation
+	}
+	digest := tokenRequestDigest(request)
+	validationErr := validateTokenRenew(request)
+	transaction, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		return TokenRenewResult{}, fmt.Errorf("begin API Token renewal: %w", err)
+	}
+	defer transaction.Rollback()
+	replayed, replay, err := beginOperation(ctx, transaction, request.OperationID, digest, request.Actor)
+	if err != nil {
+		return TokenRenewResult{}, err
+	}
+	if replayed {
+		var previous TokenRenewResult
+		if err := json.Unmarshal(replay.Response, &previous); err != nil || previous.Outcome != replay.Outcome {
+			return TokenRenewResult{}, errors.New("existing Operation failed integrity validation")
+		}
+		if previous.Outcome == OutcomeValidationFailed && previous.Validation != nil {
+			return previous, withCommittedAudit(previous.Validation)
+		}
+		return previous, outcomeError(previous.Outcome)
+	}
+	if validationErr != nil {
+		return finishTokenRenewFailure(ctx, transaction, request, validationErr)
+	}
+	var tokenID []byte
+	var revokedAt sql.NullTime
+	var currentExpiry sql.NullTime
+	err = transaction.QueryRowContext(ctx, `
+		SELECT id, revoked_at, expires_at FROM api_tokens WHERE public_id = ? FOR UPDATE
+	`, request.PublicID).Scan(&tokenID, &revokedAt, &currentExpiry)
+	if errors.Is(err, sql.ErrNoRows) || revokedAt.Valid {
+		return finishTokenRenewFailure(ctx, transaction, request, errors.New("API Token is missing or revoked"))
+	}
+	if err != nil {
+		return TokenRenewResult{}, fmt.Errorf("lock API Token: %w", err)
+	}
+	result := TokenRenewResult{
+		Outcome:      OutcomeNoChange,
+		PublicID:     request.PublicID,
+		NeverExpires: request.NeverExpires,
+	}
+	var databaseExpiry any
+	if !request.NeverExpires {
+		expiry := request.ExpiresAt.UTC().Truncate(time.Microsecond)
+		databaseExpiry = expiry
+		result.ExpiresAt = &expiry
+		if !currentExpiry.Valid || !currentExpiry.Time.UTC().Truncate(time.Microsecond).Equal(expiry) {
+			result.Outcome = OutcomeSuccess
+		}
+	} else if currentExpiry.Valid {
+		result.Outcome = OutcomeSuccess
+	}
+	if result.Outcome == OutcomeSuccess {
+		if _, err := transaction.ExecContext(ctx, `
+			UPDATE api_tokens SET expires_at = ? WHERE id = ?
+		`, databaseExpiry, tokenID); err != nil {
+			return TokenRenewResult{}, fmt.Errorf("update API Token expiry: %w", err)
+		}
+	}
+	if err := finishOperation(ctx, transaction, request.OperationID, request.Actor, result.Outcome, 0, result, mutationEvent{
+		Type: "token.renewed", Action: "token.renew", ResourceType: "api_token", ResourceKey: request.PublicID,
+	}, result.Outcome == OutcomeSuccess); err != nil {
+		return TokenRenewResult{}, err
+	}
+	if err := transaction.Commit(); err != nil {
+		return TokenRenewResult{}, fmt.Errorf("commit API Token renewal: %w", err)
+	}
+	return result, nil
+}
+
+func finishTokenRenewFailure(ctx context.Context, transaction *sql.Tx, request TokenRenew, cause error) (TokenRenewResult, error) {
+	result := TokenRenewResult{Outcome: OutcomeValidationFailed, PublicID: request.PublicID}
+	var issue *TokenValidationError
+	if errors.As(cause, &issue) {
+		result.Validation = issue
+	}
+	if err := finishOperation(ctx, transaction, request.OperationID, request.Actor, result.Outcome, 0, result, mutationEvent{
+		Type: "token.validation_failed", Action: "token.renew", ResourceType: "api_token", ResourceKey: request.PublicID,
+	}, false); err != nil {
+		return TokenRenewResult{}, err
+	}
+	if err := transaction.Commit(); err != nil {
+		return TokenRenewResult{}, fmt.Errorf("commit API Token renewal validation Audit: %w", err)
+	}
+	if issue != nil {
+		return result, withCommittedAudit(issue)
+	}
+	return result, withCommittedAudit(fmt.Errorf("%w: %v", ErrValidation, cause))
 }
 
 func activeEnvironmentIDs(ctx context.Context, transaction *sql.Tx, requested []string) ([]string, map[string][]byte, error) {

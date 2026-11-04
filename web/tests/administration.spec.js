@@ -383,3 +383,46 @@ test('deployment status distinguishes observed readiness from configured archite
   await expect(page.getByText('API scales independently', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: /edit|save|change/i })).toHaveCount(0);
 });
+
+test('administrator renews an API Token to never expire and updates session lifetime settings', async ({ page }) => {
+  await mockAdmin(page);
+  const token = {
+    public_id: '0123456789abcdef', display_name: 'Datacenter A', display_prefix: 'cfg_0123456789abcdef',
+    environment_keys: ['production'], allow_without_mtls: false, expires_at: '2026-10-01T00:00:00Z', revoked: false,
+  };
+  let renewBody;
+  let sessionSettingsBody;
+  await page.route('**/v1/environments*', route => route.fulfill({ json: { items: [], total: 0 } }));
+  await page.route('**/v1/api-tokens**', async route => {
+    const pathname = new URL(route.request().url()).pathname;
+    if (pathname.endsWith('/expiry')) {
+      renewBody = route.request().postDataJSON();
+      token.expires_at = renewBody.never_expires ? null : renewBody.expires_at;
+      return route.fulfill({ json: { outcome: 'success', public_id: token.public_id, never_expires: Boolean(renewBody.never_expires), expires_at: token.expires_at } });
+    }
+    return route.fulfill({ contentType: 'application/json', body: inventoryPage(route, [token]) });
+  });
+  await page.route('**/v1/session-policies*', route => route.fulfill({ json: { items: [], total: 0 } }));
+  await page.route('**/v1/session-settings', async route => {
+    if (route.request().method() === 'PUT') {
+      sessionSettingsBody = route.request().postDataJSON();
+      return route.fulfill({ json: { outcome: 'success', ...sessionSettingsBody } });
+    }
+    return route.fulfill({ json: { idle_timeout: '30m', lifetime: '8h' } });
+  });
+
+  await page.goto('/ui/#/administration');
+  await page.getByRole('button', { name: 'Renew Datacenter A' }).click();
+  await page.getByRole('checkbox', { name: 'Never expires' }).check();
+  await page.getByRole('button', { name: 'Save expiry' }).click();
+  expect(renewBody).toEqual({ never_expires: true });
+  await expect(page.getByText('Never expires', { exact: true })).toBeVisible();
+
+  await page.getByRole('tab', { name: 'Administrator sessions' }).click();
+  await page.getByLabel('Idle timeout (IdleTimeout)').selectOption('24h');
+  await page.getByLabel('Maximum lifetime (Lifetime)').selectOption('30d');
+  await page.getByRole('button', { name: 'Save session settings' }).click();
+  expect(sessionSettingsBody).toEqual({ idle_timeout: '24h', lifetime: '30d' });
+  await expect(page.getByText('Session lifetime settings updated.')).toBeVisible();
+});
+

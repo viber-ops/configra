@@ -32,6 +32,7 @@ const (
 	sessionIdentityMFA     = "oidc.identity.mfa"
 	sessionIdentityPolicy  = "oidc.identity.policy"
 	sessionIdentitySID     = "oidc.identity.sid"
+	sessionIdentityAuthAt  = "oidc.identity.auth_at"
 )
 
 type RoleSource string
@@ -258,6 +259,7 @@ func (authentication *OIDC) callback(response http.ResponseWriter, request *http
 	authentication.sessions.Put(ctx, sessionIdentityMFA, principal.MFAVerified)
 	authentication.sessions.Put(ctx, sessionIdentityPolicy, policy.stamp())
 	authentication.sessions.Put(ctx, sessionIdentitySID, sid)
+	authentication.sessions.Put(ctx, sessionIdentityAuthAt, now.Unix())
 	response.Header().Set("Cache-Control", "no-store")
 	http.Redirect(response, request, safeReturnTo(returnTo), http.StatusSeeOther)
 }
@@ -286,6 +288,12 @@ func (authentication *OIDC) attachPrincipal(next http.Handler) http.Handler {
 					}
 					writeOIDCError(response, http.StatusUnauthorized, "session_revoked")
 					return
+				}
+			}
+			if authAt := authentication.sessions.GetInt64(request.Context(), sessionIdentityAuthAt); authAt > 0 && authentication.sessions.Lifetime > 0 {
+				expectedDeadline := time.Unix(authAt, 0).UTC().Add(authentication.sessions.Lifetime)
+				if !expectedDeadline.Equal(authentication.sessions.Deadline(request.Context())) && expectedDeadline.After(authentication.now().UTC()) {
+					authentication.sessions.SetDeadline(request.Context(), expectedDeadline)
 				}
 			}
 			request = request.WithContext(WithPrincipal(request.Context(), principal))

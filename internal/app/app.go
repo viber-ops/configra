@@ -111,6 +111,12 @@ func run(ctx context.Context, mode bootstrap.Mode, configPath string) error {
 		sessionStore := store.NewManagementSessionStore(5 * time.Minute)
 		defer sessionStore.StopCleanup()
 		sessions := humanauth.NewSessionManager(sessionStore)
+		store.OnSessionSettings = func(settings humanauth.SessionSettings) {
+			humanauth.ApplySessionSettings(sessions, settings)
+		}
+		if settings, err := store.ReadSessionSettings(startupContext); err == nil {
+			humanauth.ApplySessionSettings(sessions, settings)
+		}
 		sessions.ErrorFunc = func(response http.ResponseWriter, request *http.Request, _ error) {
 			// Session loading precedes routing: raw URLs can contain credentials.
 			logger.Error("Session operation failed",

@@ -81,3 +81,20 @@ func (store *Store) validateTokenCreate(request TokenCreate) error {
 	}
 	return nil
 }
+
+func validateTokenRenew(request TokenRenew) error {
+	if !validTokenPublicID(request.PublicID) {
+		return ErrValidation
+	}
+	if request.NeverExpires && !request.ExpiresAt.IsZero() {
+		return &TokenValidationError{Field: "expires_at", Reason: "expiry_conflicts_with_never"}
+	}
+	if !request.NeverExpires && request.ExpiresAt.IsZero() {
+		return &TokenValidationError{Field: "expires_at", Reason: "expiry_required"}
+	}
+	if !request.ExpiresAt.IsZero() && !time.Now().Before(request.ExpiresAt) {
+		return &TokenValidationError{Field: "expires_at", Reason: "expiry_in_past"}
+	}
+	return nil
+}
+

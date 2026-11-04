@@ -35,6 +35,8 @@ type ConfigRepository interface {
 	RecordRejectedMutation(context.Context, mysqlstore.RejectedMutation) error
 	ChangeSessions(context.Context, mysqlstore.SessionChange) (mysqlstore.SessionChangeResult, error)
 	ListSessionPolicies(context.Context, mysqlstore.InventoryQuery) (mysqlstore.InventoryPage[mysqlstore.SessionPolicySummary], error)
+	ReadSessionSettings(context.Context) (humanauth.SessionSettings, error)
+	UpdateSessionSettings(context.Context, mysqlstore.SessionSettingsChange) (mysqlstore.SessionSettingsResult, error)
 	ListEnvironments(context.Context, mysqlstore.EnvironmentQuery) (mysqlstore.InventoryPage[mysqlstore.Environment], error)
 	ApplyEnvironmentChange(context.Context, mysqlstore.EnvironmentChange) (mysqlstore.EnvironmentChangeResult, error)
 	ListConfigs(context.Context, mysqlstore.ConfigQuery) (mysqlstore.InventoryPage[mysqlstore.ConfigSummary], error)
@@ -59,6 +61,7 @@ type ConfigRepository interface {
 	ListTokens(context.Context, mysqlstore.InventoryQuery) (mysqlstore.InventoryPage[mysqlstore.TokenSummary], error)
 	CreateToken(context.Context, mysqlstore.TokenCreate) (mysqlstore.TokenCreateResult, error)
 	SetTokenEnvironments(context.Context, mysqlstore.TokenEnvironmentChange) (mysqlstore.TokenEnvironmentResult, error)
+	RenewToken(context.Context, mysqlstore.TokenRenew) (mysqlstore.TokenRenewResult, error)
 	RevokeToken(context.Context, mysqlstore.TokenRevoke) (mysqlstore.TokenRevokeResult, error)
 	ListClientCertificates(context.Context, mysqlstore.InventoryQuery) (mysqlstore.InventoryPage[mysqlstore.ClientCertificate], error)
 	RegisterVerifiedClientCertificate(context.Context, mysqlstore.ClientCertificateRegister) (mysqlstore.ClientCertificateResult, error)
@@ -99,6 +102,8 @@ func NewHandler(configs ConfigRepository, publisher machine.AccessPublisher, cli
 	mux.HandleFunc("GET /v1/me", server.readMe)
 	mux.HandleFunc("GET /v1/session-policies", server.listSessionPolicies)
 	mux.HandleFunc("POST /v1/session-policies", server.changeSessions)
+	mux.HandleFunc("GET /v1/session-settings", server.readSessionSettings)
+	mux.HandleFunc("PUT /v1/session-settings", server.updateSessionSettings)
 	mux.HandleFunc("GET /v1/environments", server.listEnvironments)
 	mux.HandleFunc("POST /v1/environments", server.createEnvironment)
 	mux.HandleFunc("PATCH /v1/environments/{environment}", server.renameEnvironment)
@@ -134,6 +139,7 @@ func NewHandler(configs ConfigRepository, publisher machine.AccessPublisher, cli
 	mux.HandleFunc("POST /v1/api-tokens", server.createToken)
 	mux.HandleFunc("PUT /v1/api-tokens/{public_id}/environments", server.setTokenEnvironments)
 	mux.HandleFunc("PATCH /v1/api-tokens/{public_id}/environments", server.patchTokenEnvironments)
+	mux.HandleFunc("PATCH /v1/api-tokens/{public_id}/expiry", server.renewToken)
 	mux.HandleFunc("POST /v1/api-tokens/{public_id}/revoke", server.revokeToken)
 	mux.HandleFunc("GET /v1/client-certificates", server.listClientCertificates)
 	mux.HandleFunc("GET /v1/certificate-authorities", server.listCertificateAuthorities)
@@ -948,6 +954,32 @@ func (server *server) patchTokenEnvironments(response http.ResponseWriter, reque
 		Outcome  mysqlstore.Outcome `json:"outcome"`
 		PublicID string             `json:"public_id"`
 	}{result.Outcome, result.PublicID}, err)
+}
+
+func (server *server) renewToken(response http.ResponseWriter, request *http.Request) {
+	principal, ok := requireAdmin(response, request)
+	if !ok {
+		return
+	}
+	var body struct {
+		ExpiresAt    *time.Time `json:"expires_at"`
+		NeverExpires bool       `json:"never_expires"`
+	}
+	if !decodeJSON(response, request, &body) {
+		return
+	}
+	var expiresAt time.Time
+	if body.ExpiresAt != nil {
+		expiresAt = body.ExpiresAt.UTC()
+	}
+	result, err := server.configs.RenewToken(request.Context(), mysqlstore.TokenRenew{
+		OperationID:  request.Header.Get("Idempotency-Key"),
+		Actor:        mysqlstore.Actor{Type: "user", ID: principal.ActorID()},
+		PublicID:     request.PathValue("public_id"),
+		ExpiresAt:    expiresAt,
+		NeverExpires: body.NeverExpires,
+	})
+	writeMutationResult(response, result, err)
 }
 
 func (server *server) revokeToken(response http.ResponseWriter, request *http.Request) {

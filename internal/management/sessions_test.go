@@ -7,6 +7,7 @@ import (
 
 	"github.com/viber-ops/configra/internal/humanauth"
 	"github.com/viber-ops/configra/internal/management"
+	"github.com/viber-ops/configra/internal/storage/mysqlstore"
 )
 
 func TestSessionPolicyChangesRequireAdministratorMFA(t *testing.T) {
@@ -27,3 +28,37 @@ func TestSessionPolicyChangesRequireAdministratorMFA(t *testing.T) {
 		}
 	}
 }
+
+func TestSessionSettingsAndTokenRenewalRoutes(t *testing.T) {
+	repository := &recordingConfigWriter{
+		tokenRenewResult: mysqlstore.TokenRenewResult{
+			Outcome:      mysqlstore.OutcomeSuccess,
+			PublicID:     "0123456789abcdef",
+			NeverExpires: true,
+		},
+	}
+	handler := management.NewHandler(repository, nil, nil)
+
+	putReq := httptest.NewRequest("PUT", "https://configra.test/v1/session-settings", strings.NewReader(`{"idle_timeout":"24h","lifetime":"7d"}`))
+	putReq.Header.Set("Content-Type", "application/json")
+	putReq.Header.Set("Origin", "https://configra.test")
+	putReq.Header.Set("Idempotency-Key", "session-settings-test")
+	putReq = putReq.WithContext(humanauth.WithPrincipal(putReq.Context(), humanauth.Principal{Subject: "admin", Role: humanauth.RoleAdmin}))
+	putRes := httptest.NewRecorder()
+	handler.ServeHTTP(putRes, putReq)
+	if putRes.Code != 200 {
+		t.Fatalf("PUT /v1/session-settings HTTP %d: %s", putRes.Code, putRes.Body.String())
+	}
+
+	renewReq := httptest.NewRequest("PATCH", "https://configra.test/v1/api-tokens/0123456789abcdef/expiry", strings.NewReader(`{"never_expires":true}`))
+	renewReq.Header.Set("Content-Type", "application/json")
+	renewReq.Header.Set("Origin", "https://configra.test")
+	renewReq.Header.Set("Idempotency-Key", "token-renew-test")
+	renewReq = renewReq.WithContext(humanauth.WithPrincipal(renewReq.Context(), humanauth.Principal{Subject: "admin", Role: humanauth.RoleAdmin}))
+	renewRes := httptest.NewRecorder()
+	handler.ServeHTTP(renewRes, renewReq)
+	if renewRes.Code != 200 || len(repository.tokenRenews) != 1 || !repository.tokenRenews[0].NeverExpires {
+		t.Fatalf("PATCH /v1/api-tokens/{id}/expiry HTTP %d, renews=%+v", renewRes.Code, repository.tokenRenews)
+	}
+}
+

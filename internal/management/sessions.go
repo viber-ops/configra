@@ -42,3 +42,37 @@ func (server *server) listSessionPolicies(response http.ResponseWriter, request 
 	}
 	writeJSON(response, items)
 }
+
+func (server *server) readSessionSettings(response http.ResponseWriter, request *http.Request) {
+	if _, ok := requireAdmin(response, request); !ok {
+		return
+	}
+	settings, err := server.configs.ReadSessionSettings(request.Context())
+	if err != nil {
+		writeReadError(response, err)
+		return
+	}
+	writeJSON(response, settings)
+}
+
+func (server *server) updateSessionSettings(response http.ResponseWriter, request *http.Request) {
+	principal, ok := requireAdmin(response, request)
+	if !ok {
+		return
+	}
+	var body struct {
+		IdleTimeout string `json:"idle_timeout"`
+		Lifetime    string `json:"lifetime"`
+	}
+	if !decodeJSON(response, request, &body) {
+		return
+	}
+	result, err := server.configs.UpdateSessionSettings(request.Context(), mysqlstore.SessionSettingsChange{
+		OperationID: request.Header.Get("Idempotency-Key"),
+		Actor:       mysqlstore.Actor{Type: "user", ID: principal.ActorID()},
+		IdleTimeout: body.IdleTimeout,
+		Lifetime:    body.Lifetime,
+	})
+	writeMutationResult(response, result, err)
+}
+

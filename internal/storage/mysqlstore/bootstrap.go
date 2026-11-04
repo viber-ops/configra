@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 
+	"github.com/viber-ops/configra/internal/humanauth"
 	"github.com/viber-ops/configra/internal/vaultcrypto"
 )
 
@@ -22,7 +23,8 @@ type Store struct {
 	db           *sql.DB
 	provider     *vaultcrypto.LocalKeyProvider
 	// Set once at startup; zero uses the 90-day policy.
-	WriteTokenMaxTTL time.Duration
+	WriteTokenMaxTTL  time.Duration
+	OnSessionSettings func(humanauth.SessionSettings)
 }
 
 func OpenManagement(ctx context.Context, dsn string, provider *vaultcrypto.LocalKeyProvider) (*Store, error) {

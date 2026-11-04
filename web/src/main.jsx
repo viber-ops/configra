@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { AuthorityManagement, CertificateManagement, authorityLabel } from './security/Certificates.jsx';
 import { Sessions, sessionLabel } from './security/Sessions.jsx';
 import { request, managementError, ActionError, useInventory, InventoryPagination, useMutation } from './management.jsx';
-import { validateTokenInput, tokenValidationMessage } from './token-validation.js';
+import { validateTokenInput, validateTokenExpiryInput, tokenValidationMessage } from './token-validation.js';
 import { CopyValue } from './CopyValue.jsx';
 import { Expiration, ExpiryInput, useCurrentTime } from './security/Lifetime.jsx';
 import './styles.css';
@@ -126,6 +126,12 @@ const messages = {
     next: 'Next',
     pagination: 'Config pagination',
     copy: 'Copy',
+    copyConfiguration: 'Config content',
+    resetToSource: 'Reset to source',
+    templateFromExisting: 'Template from existing config',
+    loadTemplate: 'Load template',
+    renewToken: 'Renew',
+    saveTokenExpiry: 'Save expiry',
     copyReference: 'Copy reference',
     copyValue: 'Copy value',
     copyRequestID: 'Copy Request ID',
@@ -503,6 +509,12 @@ const messages = {
     next: '下一页',
     pagination: 'Config 分页',
     copy: '复制',
+    copyConfiguration: '配置内容',
+    resetToSource: '还原为源内容',
+    templateFromExisting: '从已有配置导入模板',
+    loadTemplate: '加载模板',
+    renewToken: '续期',
+    saveTokenExpiry: '保存有效期',
     copyReference: '复制引用',
     copyValue: '复制值',
     copyRequestID: '复制 Request ID',
@@ -1381,6 +1393,8 @@ function Configs({ principal, filters = new URLSearchParams(), t }) {
   const [createFormat, setCreateFormat] = useState('yaml');
   const [createContent, setCreateContent] = useState('');
   const [createEnvironment, setCreateEnvironment] = useState('');
+  const [templateConfigKey, setTemplateConfigKey] = useState('');
+  const [templateEnvKey, setTemplateEnvKey] = useState('');
   const state = useInventory(`/v1/configs?${new URLSearchParams({ status: statusFilter, environment: environmentFilter, q: query, unbound: String(filters.get('unbound') === 'true') })}`, refresh, initialPage);
   const filterKey = filters.toString();
   useEffect(() => {
@@ -1425,6 +1439,34 @@ function Configs({ principal, filters = new URLSearchParams(), t }) {
         <label>{t.resourceKey}<input name="key" required maxLength="63" pattern="[a-z][a-z0-9_-]{0,62}" autoComplete="off" /></label>
         <label>{t.displayName}<input name="display_name" required maxLength="255" autoComplete="off" /></label>
         <label>{t.format}<select name="format" value={createFormat} onChange={event => setCreateFormat(event.target.value)}><option value="yaml">YAML</option><option value="json">JSON</option></select></label>
+        <div className="template-import-bar">
+          <label>{t.templateFromExisting}
+            <select aria-label={t.templateFromExisting} value={templateConfigKey} onChange={event => {
+              const nextKey = event.target.value;
+              setTemplateConfigKey(nextKey);
+              const item = state.items.find(candidate => candidate.key === nextKey);
+              setTemplateEnvKey(item?.environments?.[0]?.key || '');
+            }}>
+              <option value="">{t.configs}</option>
+              {state.items.filter(item => item.environments?.length > 0).map(item => <option key={item.key} value={item.key}>{item.display_name} · {item.key}</option>)}
+            </select>
+          </label>
+          {templateConfigKey && <EnvironmentSelect label={`${t.templateFromExisting} · ${t.environment}`} value={templateEnvKey} scope={`&config=${encodeURIComponent(templateConfigKey)}`} onChange={setTemplateEnvKey} t={t} />}
+          {templateConfigKey && templateEnvKey && <button type="button" onClick={async event => {
+            const form = event.currentTarget.closest('form');
+            try {
+              const tpl = await request(`/v1/environments/${encodeURIComponent(templateEnvKey)}/configs/${encodeURIComponent(templateConfigKey)}`);
+              setCreateFormat(tpl.format);
+              setCreateContent(tpl.content);
+              const keyInput = form?.elements.namedItem('key');
+              const nameInput = form?.elements.namedItem('display_name');
+              if (keyInput && !keyInput.value) keyInput.value = tpl.config_key;
+              if (nameInput && !nameInput.value) nameInput.value = tpl.config_name;
+            } catch (failure) {
+              setError(managementError(failure, t, t.loadFailed));
+            }
+          }}>{t.loadTemplate}</button>}
+        </div>
         <div className="form-source"><span>{t.configurationSource}</span><ConfigCodeEditor label={t.configurationSource} value={createContent} format={createFormat} readOnly={false} onChange={setCreateContent} /></div>
         <div className="form-actions"><ActionError error={error} t={t} /><button className="primary-action compact-action" type="submit" disabled={!createContent.trim()}>{t.createConfig}</button></div>
       </form>}
@@ -2069,6 +2111,8 @@ function TokensPanel({ t, principal }) {
   const [writeScoped, setWriteScoped] = useState(false);
   const [created, setCreated] = useState(null);
   const [editing, setEditing] = useState('');
+  const [renewing, setRenewing] = useState(null);
+  const [renewNeverExpires, setRenewNeverExpires] = useState(false);
   const [confirming, setConfirming] = useState('');
   const [error, setError] = useState(null);
   const configuredDays = principal.write_token_max_ttl_days;
@@ -2153,6 +2197,42 @@ function TokensPanel({ t, principal }) {
       setError(managementError(failure, t, t.operationFailed));
     }
   };
+  const saveRenewal = async event => {
+    event.preventDefault();
+    if (saving || !renewing) return;
+    setError(null);
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const expiryInput = form.elements.namedItem('expires_at');
+    if (!renewNeverExpires && expiryInput?.validity.badInput) {
+      setError(tokenValidationMessage({ field: 'expires_at', reason: 'expiry_invalid' }, t, maxDays));
+      expiryInput.focus();
+      return;
+    }
+    const body = { never_expires: renewNeverExpires };
+    if (!renewNeverExpires && data.get('expires_at')) body.expires_at = data.get('expires_at');
+    const invalid = validateTokenExpiryInput(body);
+    if (invalid) {
+      setError(tokenValidationMessage(invalid, t, maxDays));
+      form.elements.namedItem(invalid.field)?.focus();
+      return;
+    }
+    if (body.expires_at) body.expires_at = new Date(body.expires_at).toISOString();
+    setSaving(true);
+    try {
+      await request(`/v1/api-tokens/${encodeURIComponent(renewing.public_id)}/expiry`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+        body: JSON.stringify(body),
+      });
+      setRenewing(null);
+      setRefresh(value => value + 1);
+    } catch (failure) {
+      setError(tokenValidationMessage(failure, t, maxDays));
+    } finally {
+      setSaving(false);
+    }
+  };
   return (
     <section className="admin-panel tokens-panel">
       <div className="panel-actions"><span>{t.tokenEnvironmentGrant}</span><button className="primary-action compact-action" type="button" disabled={creatingToken} onClick={() => { resetMutation(); setCreating(value => !value); setEnvironmentKeys([]); setError(null); setCreated(null); }}>{t.newAPIToken}</button></div>
@@ -2180,10 +2260,19 @@ function TokensPanel({ t, principal }) {
         <button className="primary-action compact-action" type="submit" disabled={saving || !Object.keys(grants).length}>{t.saveEnvironmentGrants}</button>
         <button type="button" disabled={saving} onClick={() => { if (confirmDiscard()) { setEditing(''); setGrants({}); } }}>{t.cancel}</button>
       </form>}
+      {renewing && <form className="grant-form token-renew-form" noValidate onSubmit={saveRenewal} onInput={() => setError(null)}>
+        <strong>{renewing.display_name}</strong>
+        <label className="check-line"><input type="checkbox" checked={renewNeverExpires} onChange={event => { setRenewNeverExpires(event.target.checked); setError(null); }} />{t.neverExpires}</label>
+        {!renewNeverExpires && <ExpiryInput t={t} required feedback={inputFeedback('expires_at')} onEdit={() => setError(null)} />}
+        <div className="row-actions">
+          <button className="primary-action compact-action" type="submit" disabled={saving}>{t.saveTokenExpiry}</button>
+          <button type="button" disabled={saving} onClick={() => { setRenewing(null); setError(null); }}>{t.cancel}</button>
+        </div>
+      </form>}
       {!creating && error && <ActionError error={error} t={t} />}
       <CollectionState state={state} t={t} empty={search || statusFilter !== 'active' ? t.noMatchingResults : undefined}>
         <div className="table-frame"><table><thead><tr><th>{t.tokenName}</th><th>{t.prefix}</th><th>{t.environments}</th><th>mTLS</th><th>{t.expiresAt}</th><th>{t.status}</th><th /></tr></thead>
-          <tbody>{state.items.map(token => <tr key={token.public_id}><td><strong title={token.display_name}>{token.display_name}</strong><CopyValue value={token.public_id} label="Token ID" t={t} /><small>{token.kind || 'read-only'}</small>{(token.kind === 'write-scoped' || token.parent_public_id) && <details><summary>{t.allowedEnvironments}</summary><p>{t.configAllowlist}: {token.config_keys == null ? '*' : token.config_keys.join(', ') || '∅'}</p><p>{t.namespaceAllowlist}: {token.namespace_keys == null ? '*' : token.namespace_keys.join(', ') || '∅'}</p></details>}</td><td><code title={token.display_prefix}>{token.display_prefix}</code></td><td><div className="environment-links">{token.environment_keys.map(environment => <code key={environment}>{environment}</code>)}{token.environment_count > token.environment_keys.length && <span>+{token.environment_count - token.environment_keys.length}</span>}</div></td><td>{token.allow_without_mtls ? t.tokenOnlyAllowed : t.mtlsRequired}</td><td><Expiration value={token.expires_at} now={now} revoked={token.revoked} t={t} /></td><td><span className={token.revoked || Date.parse(token.expires_at) <= now ? 'status archived' : 'status active'}>{token.revoked ? t.revoked : Date.parse(token.expires_at) <= now ? (t.locale.startsWith('zh') ? '已过期' : 'Expired') : t.statusActive}</span></td><td>{!token.revoked && <div className="row-actions">{token.kind !== 'write-scoped' && !token.parent_public_id && <button type="button" disabled={saving} aria-label={`${t.editEnvironments} ${token.display_name}`} onClick={() => { if (confirmDiscard()) { setEditing(token); setGrants({}); } }}>{t.editEnvironments}</button>}{confirming === token.public_id ? <button className="danger-link" type="button" aria-label={`${t.confirmRevoke} ${token.display_name}`} onClick={() => revoke(token.public_id)}>{t.confirmRevoke}</button> : <button className="danger-link" type="button" aria-label={`${t.revoke} ${token.display_name}`} onClick={() => setConfirming(token.public_id)}>{t.revoke}</button>}</div>}</td></tr>)}</tbody>
+          <tbody>{state.items.map(token => <tr key={token.public_id}><td><strong title={token.display_name}>{token.display_name}</strong><CopyValue value={token.public_id} label="Token ID" t={t} /><small>{token.kind || 'read-only'}</small>{(token.kind === 'write-scoped' || token.parent_public_id) && <details><summary>{t.allowedEnvironments}</summary><p>{t.configAllowlist}: {token.config_keys == null ? '*' : token.config_keys.join(', ') || '∅'}</p><p>{t.namespaceAllowlist}: {token.namespace_keys == null ? '*' : token.namespace_keys.join(', ') || '∅'}</p></details>}</td><td><code title={token.display_prefix}>{token.display_prefix}</code></td><td><div className="environment-links">{token.environment_keys.map(environment => <code key={environment}>{environment}</code>)}{token.environment_count > token.environment_keys.length && <span>+{token.environment_count - token.environment_keys.length}</span>}</div></td><td>{token.allow_without_mtls ? t.tokenOnlyAllowed : t.mtlsRequired}</td><td><Expiration value={token.expires_at} now={now} revoked={token.revoked} t={t} /></td><td><span className={token.revoked || Date.parse(token.expires_at) <= now ? 'status archived' : 'status active'}>{token.revoked ? t.revoked : Date.parse(token.expires_at) <= now ? (t.locale.startsWith('zh') ? '已过期' : 'Expired') : t.statusActive}</span></td><td>{!token.revoked && <div className="row-actions"><button type="button" disabled={saving} aria-label={`${t.renewToken} ${token.display_name}`} onClick={() => { if (confirmDiscard()) { setEditing(''); setGrants({}); setRenewing(token); setRenewNeverExpires(!token.expires_at); setError(null); } }}>{t.renewToken}</button>{token.kind !== 'write-scoped' && !token.parent_public_id && <button type="button" disabled={saving} aria-label={`${t.editEnvironments} ${token.display_name}`} onClick={() => { if (confirmDiscard()) { setRenewing(null); setEditing(token); setGrants({}); } }}>{t.editEnvironments}</button>}{confirming === token.public_id ? <button className="danger-link" type="button" aria-label={`${t.confirmRevoke} ${token.display_name}`} onClick={() => revoke(token.public_id)}>{t.confirmRevoke}</button> : <button className="danger-link" type="button" aria-label={`${t.revoke} ${token.display_name}`} onClick={() => setConfirming(token.public_id)}>{t.revoke}</button>}</div>}</td></tr>)}</tbody>
         </table></div>
       </CollectionState>
       <InventoryPagination collection={state} t={t} />
@@ -2540,7 +2629,7 @@ function ConfigDetail({ principal, configKey, environmentKey, t }) {
             inspection.status === 'loading' ? <div className="collection-state"><span className="loading-line" /></div>
               : inspection.status === 'failed' ? <p className="inline-error" role="alert">{t.operationFailed}</p>
                 : <section className="editor-panel">
-                  <div className="editor-toolbar"><span>{viewedFormat.toUpperCase()}</span><code>{t.revision} {viewedRevision}</code></div>
+                  <div className="editor-toolbar"><span>{viewedFormat.toUpperCase()}</span><code>{t.revision} {viewedRevision}</code><CopyValue value={viewedContent} label={t.copyConfiguration} t={t} /></div>
                   <ConfigCodeEditor label={viewingCurrent ? t.configurationSource : t.revisionLabel.replace('{revision}', viewedRevision)} value={viewedContent} format={viewedFormat} readOnly={!viewingCurrent || principal.role !== 'admin'} onChange={value => { setSource(value); setSaveError(null); setValidation({ status: 'idle', warnings: [] }); }} />
                   {principal.role === 'admin' && viewingCurrent && <div className="editor-actions">
                     <div className="editor-feedback" role="status">
@@ -2765,7 +2854,7 @@ function ResolvedPreview({ path, t }) {
   }
   return (
     <section className="transfer-result resolved-result">
-      <div className="resolved-meta"><strong>{t.vaultRevisions}</strong>{Object.entries(state.value.vault_revisions).map(([item, revision]) => <code key={item}>{item} @ v{revision}</code>)}</div>
+      <div className="resolved-meta"><strong>{t.vaultRevisions}</strong>{Object.entries(state.value.vault_revisions).map(([item, revision]) => <code key={item}>{item} @ v{revision}</code>)}<CopyValue value={state.value.content} label={t.copyConfiguration} t={t} /></div>
       <ConfigCodeEditor label={t.resolvedConfiguration} readOnly value={state.value.content} format={state.value.format} />
     </section>
   );
@@ -2773,8 +2862,10 @@ function ResolvedPreview({ path, t }) {
 
 function ConfigCopy({ path, config, newConfig, t }) {
   const [environment, setEnvironment] = useState('');
+  const [content, setContent] = useState(config.content);
   const [state, setState] = useState({ status: 'idle' });
   const [mutate, resetMutation] = useMutation(request);
+  const edited = content !== config.content;
   const submit = async event => {
     event.preventDefault();
     if (state.status === 'loading' || state.status === 'ready') return;
@@ -2782,9 +2873,20 @@ function ConfigCopy({ path, config, newConfig, t }) {
     const targetConfig = newConfig ? data.get('target_config') : config.config_key;
     setState({ status: 'loading' });
     try {
-      const result = await mutate(newConfig ? `${path}/clone` : `/v1/environments/${encodeURIComponent(environment)}/configs/${encodeURIComponent(targetConfig)}/replace`, newConfig
-        ? { target_environment: environment, target_config: targetConfig, target_name: data.get('target_name'), source_revision: config.revision }
-        : { source_environment: config.environment_key, source_config: config.config_key, source_revision: config.revision, target_revision: 0, expected_target_revision: 0 });
+      const result = edited
+        ? await request(`/v1/environments/${encodeURIComponent(environment)}/configs/${encodeURIComponent(targetConfig)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+          body: JSON.stringify({
+            name: newConfig ? data.get('target_name') : config.config_name,
+            expected_revision: 0,
+            format: config.format,
+            content,
+          }),
+        })
+        : await mutate(newConfig ? `${path}/clone` : `/v1/environments/${encodeURIComponent(environment)}/configs/${encodeURIComponent(targetConfig)}/replace`, newConfig
+          ? { target_environment: environment, target_config: targetConfig, target_name: data.get('target_name'), source_revision: config.revision }
+          : { source_environment: config.environment_key, source_config: config.config_key, source_revision: config.revision, target_revision: 0, expected_target_revision: 0 });
       setState({ status: 'ready', result, environment, targetConfig });
     } catch (error) {
       setState({ status: 'failed', error: managementError(error, t, t.operationFailed), reason: error.reason, environment, targetConfig });
@@ -2806,7 +2908,7 @@ function ConfigCopy({ path, config, newConfig, t }) {
         {newConfig && <><label>{t.targetConfig}<input name="target_config" required pattern="[a-z][a-z0-9_-]{0,62}" /></label>
           <label>{t.targetName}<input name="target_name" required maxLength="255" defaultValue={config.config_name} /></label></>}
         <div className="form-actions">
-          <button className="primary-action compact-action" type="submit" disabled={!environment || state.status === 'loading' || state.status === 'ready'}>{newConfig ? t.cloneConfig : t.copyFirstVersion.replace('{environment}', environment || '…')}</button>
+          <button className="primary-action compact-action" type="submit" disabled={!environment || !content.trim() || state.status === 'loading' || state.status === 'ready'}>{newConfig ? t.cloneConfig : t.copyFirstVersion.replace('{environment}', environment || '…')}</button>
         </div>
       </fieldset>
     </form>
@@ -2814,7 +2916,8 @@ function ConfigCopy({ path, config, newConfig, t }) {
     {state.status === 'ready' && <p className="success-note" role="status">{t.copyComplete.replace('{target}', `${state.environment}/${state.targetConfig}`).replace('{revision}', state.result.revision)}</p>}
     {(state.status === 'ready' || state.reason === 'target_config_exists') && <p><a href={`#/configs/${encodeURIComponent(state.targetConfig)}/${encodeURIComponent(state.environment)}`}>{t.openTargetConfig}</a></p>}
     {state.result?.warnings?.length > 0 && <div className="config-warning-list" role="status"><ConfigWarningLines warnings={state.result.warnings} t={t} /></div>}
-    <ConfigCodeEditor label={t.source} readOnly value={config.content} format={config.format} />
+    <div className="editor-toolbar"><span>{config.format.toUpperCase()}</span><CopyValue value={content} label={t.copyConfiguration} t={t} />{edited && <button type="button" onClick={() => { setContent(config.content); change(); }}>{t.resetToSource}</button>}</div>
+    <ConfigCodeEditor label={t.source} readOnly={false} value={content} format={config.format} onChange={value => { setContent(value); change(); }} />
   </section>;
 }
 
