@@ -20,6 +20,10 @@ const expectedClientSDK = readFileSync(join(root, 'go.mod'), 'utf8')
 assert.ok(expectedClientSDK, 'CLI declares its SDK version');
 // The reviewed manifest pins the exact MPL source archive for the MySQL driver version that is linked.
 const reviewedModules = JSON.parse(readFileSync(join(root, 'scripts/go-licenses/reviewed.json'), 'utf8')).modules;
+// The UI notices name the React version that the reviewed UI inventory approves.
+const reviewedReact = JSON.parse(readFileSync(join(root, 'web/scripts/reviewed-licenses.json'), 'utf8')).packages
+  .find((entry) => entry.name === 'react');
+assert.ok(reviewedReact, 'The reviewed UI inventory lists React');
 const checksums = new Map(
   readFileSync(join(directory, 'SHA256SUMS'), 'utf8').trim().split('\n').map((line) => {
     const match = /^([a-f0-9]{64})  (configra_[A-Za-z0-9_.-]+\.tar\.gz)$/.exec(line);
@@ -63,7 +67,7 @@ for (const platform of ['darwin', 'linux']) {
     assert.match(read('licenses/go1.26.10/SOURCE.md'), /fd63e883ba2f2bfca93c1646b31ebef63e2b1e4d2b317c9789d976a68d81f36f/);
     const uiNotices = read('licenses/ui/THIRD_PARTY_NOTICES.txt');
     const uiBOMText = read('licenses/ui/sbom.cdx.json');
-    assert.match(uiNotices, /react@19\.2\.8/);
+    assert.ok(uiNotices.includes(`===== react@${reviewedReact.version} =====`), `${name}: UI notices name the bundled React`);
     assert.equal(JSON.parse(uiBOMText).bomFormat, 'CycloneDX');
     const build = JSON.parse(read('BUILD.json'));
     assert.equal(build.version, version);
