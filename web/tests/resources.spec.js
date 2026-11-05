@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { chooseEnvironment } from './environment.js';
 import { inventoryPage } from './inventory.js';
 
 async function mockIdentity(page, role = 'admin') {
@@ -148,12 +149,12 @@ test('viewer opens an Environment and carries its exact filter into Config and V
 
   await page.getByRole('link', { name: 'View all Configs in Production' }).click();
   await expect(page).toHaveURL(/#\/configs\?environment=production$/);
-  await expect(page.getByLabel('Environment filter', { exact: true })).toHaveValue('production');
+  await expect(page.getByRole('combobox', { name: 'Environment filter', exact: true })).toHaveValue(/· production$/);
   await expect(page.getByRole('link', { name: 'Open Config Payment service' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Open Config Worker' })).toHaveCount(0);
 
   await page.goto('/ui/#/vault?environment=production');
-  await expect(page.getByLabel('Environment filter', { exact: true })).toHaveValue('production');
+  await expect(page.getByRole('combobox', { name: 'Environment filter', exact: true })).toHaveValue(/· production$/);
   await expect(page.getByRole('link', { name: 'platform.mysql · MySQL credentials · v5' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'recovery', exact: true })).toHaveCount(0);
   await expect(page.getByRole('link', { name: '+4', exact: true })).toHaveAttribute('href', '#/vault/platform/mysql');
@@ -304,7 +305,7 @@ test('administrator creates, archives, and restores a Config identity', async ({
 
   await page.getByRole('button', { name: 'New config' }).click();
   if (process.env.CONFIGRA_CONFIG_CREATE_SCREENSHOT) await page.screenshot({ path: process.env.CONFIGRA_CONFIG_CREATE_SCREENSHOT, fullPage: true });
-  await page.getByRole('combobox', { name: 'Environment', exact: true }).selectOption('production');
+  await chooseEnvironment(page, 'Environment', 'production');
   await page.getByLabel('Resource key').fill('payment');
   await page.getByLabel('Display name').fill('Payment service');
   await page.getByLabel('Format').selectOption('yaml');
@@ -585,7 +586,7 @@ test('administrator compares, restores, and clones an immutable Config Revision'
 
   await page.locator('summary[aria-label="More actions"]').click();
   await page.getByRole('button', { name: 'Clone', exact: true }).click();
-  await page.getByLabel('Target environment', { exact: true }).selectOption('recovery');
+  await chooseEnvironment(page, 'Target environment', 'recovery');
   await page.getByLabel('Target config').fill('payment_recovery');
   await page.getByLabel('Target name').fill('Recovery payment');
   await page.getByRole('button', { name: 'Clone config' }).click();
@@ -644,11 +645,11 @@ test('viewer compares paged Config revisions across peer Environments and keeps 
   await expect(page.getByTestId('compare-source-slot')).toContainText('recovery/payment@v7');
   await expect(lanes.last().getByRole('navigation')).toContainText('Page 1');
   // Environment changes reset only that lane; old selections remain explicit.
-  await page.getByLabel('Environment A', { exact: true }).selectOption('recovery');
+  await chooseEnvironment(page, 'Environment A', 'recovery');
   await expect(lanes.first().getByRole('navigation')).toContainText('Page 1');
   await expect(lanes.first().getByTestId('revision-recovery-57')).toBeVisible();
   await expect(page.getByTestId('compare-target-slot')).toContainText('production/payment@v3');
-  await page.getByLabel('Environment A', { exact: true }).selectOption('production');
+  await chooseEnvironment(page, 'Environment A', 'production');
   await expect(lanes.first().getByRole('navigation')).toContainText('Page 1');
   await expect(lanes.first().getByTestId('revision-production-53')).toBeVisible();
 });

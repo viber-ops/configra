@@ -47,18 +47,13 @@ test('on a phone the long title wraps, the page does not scroll sideways and the
   expect(title.width).toBeLessThanOrEqual(390);
 });
 
-test('the environment picker shares one row only where it has room', async ({ page }) => {
+test('the header Environment picker is one searchable control that names the current Environment', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await detailPage(page);
-  const header = page.locator('.detail-heading-actions .environment-select');
-  const select = await header.locator('select').boundingBox();
-  const search = await header.locator('input[type=search]').boundingBox();
-  expect(Math.abs(select.y - search.y)).toBeLessThan(2);
-  expect(search.x).toBeGreaterThan(select.x + select.width);
-
-  await page.getByRole('button', { name: 'Copy to environment', exact: true }).click();
-  const target = page.locator('.clone-form .environment-select');
-  const targetSelect = await target.locator('select').boundingBox();
-  const targetSearch = await target.locator('input[type=search]').boundingBox();
-  expect(targetSearch.y).toBeGreaterThan(targetSelect.y + targetSelect.height - 1);
+  const picker = page.getByRole('combobox', { name: 'Environment', exact: true });
+  await expect(picker).toHaveValue('Production · Singapore · production');
+  await expect(page.locator('.detail-heading-actions input[type=search]')).toHaveCount(0);
+  await picker.click();
+  await expect(page.getByRole('listbox', { name: 'Environment' }).getByRole('option', { name: /Staging \/ Integration/ })).toBeVisible();
+  expect(await currentRevisionInView(page)).toBe(true);
 });
