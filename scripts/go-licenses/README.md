@@ -61,4 +61,4 @@ while emitting Unknown findings. Segmentio's MIT-0 resolution is bound to its
 reviewed module/version/sum and exact LICENSE bytes; there is no blanket Unknown
 exception.
 
-The Go 1.26.10 patch review is recorded in [2026-11-04 verification](../../docs/verification/2026-11-04.md); all twelve package-selection digests and curated runtime notice bytes remain unchanged.
+The Go 1.26.10 patch review is recorded in [2026-11-04 verification](../../docs/verification/2026-11-04.md); it left all twelve package-selection digests and curated runtime notice bytes unchanged. Later dependency reviews are dated follow-ups in the [transitive review](../../docs/research/transitive-go-license-inventory.md).
