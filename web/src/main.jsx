@@ -938,10 +938,11 @@ function RevisionPagination({ history, t }) {
 }
 
 
-function EnvironmentSelect({ label, value, onChange, name, required = false, scope = '', includeArchived = false, emptyLabel, unavailable, unavailableLabel, t }) {
+// `inline` puts the select and its search on one row; use it only where the picker has room.
+function EnvironmentSelect({ label, value, onChange, name, required = false, scope = '', includeArchived = false, emptyLabel, unavailable, unavailableLabel, inline = false, t }) {
   const [search, setSearch] = useState('');
   const collection = useInventory(`/v1/environments?include_archived=${includeArchived}&q=${encodeURIComponent(search)}${scope}`);
-  return <div className="environment-select">
+  return <div className={inline ? 'environment-select environment-select-inline' : 'environment-select'}>
     <label><span>{label}</span><select aria-label={label} name={name} required={required} value={value} onChange={event => onChange(event.target.value)}>
       <option value="">{emptyLabel || t.environment}</option>
       {value && !collection.items.some(item => item.key === value) && <option value={value}>{value}</option>}
@@ -1606,7 +1607,7 @@ function ConfigTemplatePicker({ initialConfig = '', initialEnvironment = '', rep
       <input type="search" aria-label={`${t.templateFromExisting} · ${t.search}`} placeholder={t.search} value={search} onChange={event => setSearch(event.target.value)} />
       <InventoryPagination collection={configs} t={t} hideSinglePage />
     </div>
-    {configKey && <EnvironmentSelect label={`${t.templateFromExisting} · ${t.environment}`} value={environmentKey} scope={`&config=${encodeURIComponent(configKey)}`} onChange={setEnvironmentKey} t={t} />}
+    {configKey && <EnvironmentSelect inline label={`${t.templateFromExisting} · ${t.environment}`} value={environmentKey} scope={`&config=${encodeURIComponent(configKey)}`} onChange={setEnvironmentKey} t={t} />}
     <div className="template-import-status">
       {fetched.status === 'loading' && <span className="loading-line" aria-busy="true" />}
       {fetched.status === 'ready' && fetched.applied && <p className="muted-note" role="status">{t.templateLoaded.replace('{template}', name)}</p>}
@@ -1690,7 +1691,7 @@ function Configs({ principal, filters = new URLSearchParams(), t }) {
           {filters.get('unbound') === 'true' && <p>{t.noActiveConfigContext} · <a href="#/configs">{t.configs}</a></p>}
           <div className="config-index-toolbar">
             <label><span>{t.searchConfigs}</span><input type="search" value={query} placeholder={t.searchConfigsPlaceholder} onChange={event => { setQuery(event.target.value); setInitialPage(1); replaceHashQuery({ q: event.target.value, page: 1 }); }} /></label>
-            <EnvironmentSelect label={t.environmentFilter} emptyLabel={t.allEnvironments} value={environmentFilter} includeArchived onChange={value => { setEnvironmentFilter(value); setInitialPage(1); replaceHashQuery({ environment: value, page: 1 }); }} t={t} />
+            <EnvironmentSelect inline label={t.environmentFilter} emptyLabel={t.allEnvironments} value={environmentFilter} includeArchived onChange={value => { setEnvironmentFilter(value); setInitialPage(1); replaceHashQuery({ environment: value, page: 1 }); }} t={t} />
             <StatusFilter value={statusFilter} onChange={value => { setStatusFilter(value); setInitialPage(1); replaceHashQuery({ status: value, page: 1 }); }} t={t} />
             <output>{state.status === 'ready' ? state.total : '…'} {t.configs}</output>
           </div>
@@ -2028,7 +2029,7 @@ function VaultItems({ principal, filters = new URLSearchParams(), t }) {
       </form>}
       <div className="vault-index-tools">
         <label><span>{t.searchVault}</span><input type="search" aria-label={t.searchVault} placeholder={t.searchVaultPlaceholder} value={search} onChange={event => { setSearch(event.target.value); replaceHashQuery({ q: event.target.value }); }} /></label>
-        <EnvironmentSelect label={t.environmentFilter} emptyLabel={t.allEnvironments} value={environmentFilter} includeArchived onChange={value => { setEnvironmentFilter(value); replaceHashQuery({ environment: value }); }} t={t} />
+        <EnvironmentSelect inline label={t.environmentFilter} emptyLabel={t.allEnvironments} value={environmentFilter} includeArchived onChange={value => { setEnvironmentFilter(value); replaceHashQuery({ environment: value }); }} t={t} />
         <label><span>{t.namespace}</span><input type="search" aria-label={t.namespaceFilter} placeholder={t.allNamespaces} value={namespaceFilter} onChange={event => { setNamespaceFilter(event.target.value); replaceHashQuery({ namespace: event.target.value }); }} /></label>
         <StatusFilter value={statusFilter} onChange={value => { setStatusFilter(value); replaceHashQuery({ status: value }); }} t={t} />
       </div>
@@ -2869,7 +2870,7 @@ function ConfigDetail({ principal, configKey, environmentKey, t }) {
           <div className="config-title-line"><h1 title={state.config.config_name}>{state.config.config_name}</h1><code title={configKey}>{configKey}</code><span>{t.current} v{state.config.revision}</span></div>
         </div>
         <div className="detail-heading-actions">
-          <EnvironmentSelect label={t.environment} value={environmentKey} scope={`&config=${encodeURIComponent(configKey)}`} onChange={value => { if (value && confirmDiscard()) window.location.hash = `/configs/${configKey}/${value}`; }} t={t} />
+          <EnvironmentSelect inline label={t.environment} value={environmentKey} scope={`&config=${encodeURIComponent(configKey)}`} onChange={value => { if (value && confirmDiscard()) window.location.hash = `/configs/${configKey}/${value}`; }} t={t} />
           <div className="detail-action-group">
             <div className="config-operation-switch">
               <button type="button" aria-pressed={tab === 'compare'} onClick={() => { setCompareSeed(null); setTab('compare'); }}>{t.compare}</button>
