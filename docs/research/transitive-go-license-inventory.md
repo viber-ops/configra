@@ -61,6 +61,10 @@ for new copyright holders, license statements and notes about copied code.
   longer linked by the server. All other updated modules keep byte-identical
   legal files, and their changed sources carry only their projects' usual
   headers. Primary license identifiers are unchanged for every updated module.
+- **Follow-up #42.** `go.yaml.in/yaml/v3` moves from v3.0.5 to v3.0.6 for all
+  twelve targets. One line in `resolve.go` changes, so that a literal `"<<"` is
+  quoted on encode. LICENSE and NOTICE are byte-identical, and the package
+  guards are unchanged.
 
 ## Follow-up — 2026-10-03 (v1.2.0)
 
