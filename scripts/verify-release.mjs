@@ -18,6 +18,8 @@ assert.ok(expectedSDK, 'Kubernetes declares its SDK version');
 const expectedClientSDK = readFileSync(join(root, 'go.mod'), 'utf8')
   .match(/^\s*github\.com\/viber-ops\/configra-go\s+(\S+)$/m)?.[1];
 assert.ok(expectedClientSDK, 'CLI declares its SDK version');
+// The reviewed manifest pins the exact MPL source archive for the MySQL driver version that is linked.
+const reviewedModules = JSON.parse(readFileSync(join(root, 'scripts/go-licenses/reviewed.json'), 'utf8')).modules;
 const checksums = new Map(
   readFileSync(join(directory, 'SHA256SUMS'), 'utf8').trim().split('\n').map((line) => {
     const match = /^([a-f0-9]{64})  (configra_[A-Za-z0-9_.-]+\.tar\.gz)$/.exec(line);
@@ -116,10 +118,13 @@ for (const platform of ['darwin', 'linux']) {
           const source = read('licenses/configra-modules/SOURCE_ACCESS.md');
           assert.match(source, /github\.com\/go-sql-driver\/mysql/);
           assert.match(source, /MPL-2\.0/);
+          const mysql = info.Deps.find((dep) => dep.Path === 'github.com/go-sql-driver/mysql');
+          const covered = reviewedModules.find((entry) => entry.module === mysql?.Path && entry.version === mysql?.Version)
+            ?.covered_source_archive;
+          assert.ok(covered?.verified, `${name}: the linked MySQL driver has a reviewed source archive`);
           const zip = execFileSync('tar', ['-xOf', archive,
-            `${name}/licenses/configra-modules/sources/mysql-v1.10.0.zip`], { maxBuffer: 10 * 1024 * 1024 });
-          assert.equal(createHash('sha256').update(zip).digest('hex'),
-            'dc93f5770556406e82bf750a980d2316f882a19d883a3689eadb820708c2b651', 'Exact upstream MPL source is delivered');
+            `${name}/licenses/configra-modules/sources/mysql-${mysql.Version}.zip`], { maxBuffer: 10 * 1024 * 1024 });
+          assert.equal(createHash('sha256').update(zip).digest('hex'), covered.sha256, 'Exact upstream MPL source is delivered');
         }
         if (binary === 'configra-kubernetes' || binary === 'configractl') {
           const sdk = info.Deps.find((dep) => dep.Path === 'github.com/viber-ops/configra-go');
