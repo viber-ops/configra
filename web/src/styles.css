@@ -330,7 +330,7 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .config-index-page .resource-heading { margin-bottom: 24px; }
 .config-index-page .resource-heading h1 { font-size: 30px; }
 .config-index-page .resource-heading p:not(.eyebrow) { margin-top: 9px; font-size: 14px; }
-.config-index-toolbar { display: grid; grid-template-columns: minmax(260px, 1fr) 180px 160px auto; align-items: end; gap: 12px; margin-bottom: 10px; border: 1px solid var(--line); border-radius: 7px; padding: 10px 12px; background: var(--surface); }
+.config-index-toolbar { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(280px, 1.1fr) 160px auto; align-items: end; gap: 12px; margin-bottom: 10px; border: 1px solid var(--line); border-radius: 7px; padding: 10px 12px; background: var(--surface); }
 .config-index-toolbar label { display: grid; gap: 5px; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
 .config-index-toolbar input, .config-index-toolbar select { min-height: 34px; border: 1px solid var(--line-strong); border-radius: 4px; padding: 6px 9px; background: var(--surface); color: var(--ink); }
 .config-index-toolbar output { align-self: center; min-width: max-content; color: var(--muted); font: 700 11px ui-monospace, "SFMono-Regular", Consolas, monospace; }
@@ -358,6 +358,9 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .environment-select { display: grid; align-content: start; gap: 5px; min-width: 0; }
 .environment-select label { display: grid; gap: 5px; }
 .environment-select input, .environment-select select { width: 100%; min-width: 0; min-height: 36px; border: 1px solid var(--line-strong); border-radius: 4px; padding: 6px 9px; background: var(--surface); color: var(--ink); }
+/* Select and search share a row where the picker has room (adapted from #36); narrow form columns stay stacked. */
+.environment-select-inline { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: end; column-gap: 8px; }
+.environment-select-inline > :not(label):not(input) { grid-column: 1 / -1; }
 .environment-select .config-pagination, .resource-rail .config-pagination { flex-wrap: wrap; gap: 5px; padding: 5px 0; font-size: 10px; }
 .environment-select .config-pagination div, .resource-rail .config-pagination div { gap: 5px; }
 .vault-environment-picker > input[type="search"] { margin-bottom: 8px; }
@@ -434,16 +437,17 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .detail-more-menu button, .detail-more-menu a { border: 0; padding: 9px 12px; background: transparent; color: var(--blue); cursor: pointer; text-align: left; font-weight: 700; }
 .detail-more-menu > * + * { border-top: 1px solid var(--line); }
 .detail-more-menu button:hover, .detail-more-menu a:hover { background: var(--blue-soft); }
-.revision-track { display: flex; align-items: start; overflow-x: auto; margin: 24px 0 18px; padding: 0; background: linear-gradient(var(--line-strong), var(--line-strong)) center 9px / calc(100% - 20px) 1px no-repeat; }
-.revision-track button { position: relative; display: grid; width: 132px; min-height: 64px; flex: 1 0 132px; place-items: center; align-content: start; border: 0; padding: 29px 7px 0; background: transparent; color: var(--ink); cursor: pointer; font: 700 11px ui-monospace, "SFMono-Regular", Consolas, monospace; }
-.revision-track button::before { position: absolute; top: 1px; left: calc(50% - 9px); box-sizing: border-box; width: 18px; height: 18px; border: 2px solid var(--line-strong); border-radius: 50%; background: var(--surface); content: ""; }
+.revision-track { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 20px 0 16px; padding: 0; }
+/* Up to eight revision chips wrap instead of scrolling, so the current version stays in view (adapted from #36). */
+.revision-track button { position: relative; display: inline-flex; min-width: 92px; min-height: 44px; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px 6px 28px; background: var(--surface); color: var(--ink); cursor: pointer; font: 700 11px ui-monospace, "SFMono-Regular", Consolas, monospace; }
+.revision-track button::before { position: absolute; top: calc(50% - 5px); left: 11px; box-sizing: border-box; width: 10px; height: 10px; border: 2px solid var(--line-strong); border-radius: 50%; background: var(--surface); content: ""; }
 .revision-track button b { line-height: 1.2; }
-.revision-track button small { margin-top: 2px; color: var(--muted); font: 10px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-.revision-track button + button { margin-left: 28px; }
+.revision-track button small { color: var(--muted); font: 10px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.revision-track button:hover { border-color: var(--blue-line); }
 .revision-track button.current-revision { color: var(--blue); }
-.revision-track button.current-revision::before { border: 3px solid var(--blue); background: var(--surface); }
-.revision-track button.selected-revision { color: var(--blue); }
-.revision-track button.selected-revision::before { border-color: var(--blue); background: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+.revision-track button.current-revision::before { border-color: var(--blue); }
+.revision-track button.selected-revision { border-color: var(--blue); background: var(--blue-soft); color: var(--blue); }
+.revision-track button.selected-revision::before { border-color: var(--blue); background: var(--blue); }
 .config-detail-content { display: grid; grid-template-columns: minmax(0, 1fr) 225px; align-items: start; gap: 16px; }
 .config-detail-content.operation-mode { grid-template-columns: minmax(0, 1fr); }
 .config-detail-main { min-width: 0; }
@@ -842,7 +846,7 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .vault-index-table td:nth-child(1), .vault-index-table td:nth-child(2), .vault-index-table td:nth-child(5), .vault-index-table td:last-child { white-space: nowrap; }
 .vault-index-table td:nth-child(3) strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vault-index-table td:last-child { text-align: right; }
-.vault-index-tools { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(160px, 220px) minmax(160px, 220px) minmax(120px, 160px); gap: 12px; margin-bottom: 12px; }
+.vault-index-tools { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(280px, 1.1fr) minmax(150px, 200px) minmax(120px, 160px); gap: 12px; margin-bottom: 12px; }
 .index-toolbar { display: grid; grid-template-columns: minmax(220px, 420px) minmax(120px, 160px); gap: 12px; margin-bottom: 12px; }
 .index-toolbar label { display: grid; gap: 5px; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
 .index-toolbar input, .index-toolbar select { width: 100%; min-height: 38px; border: 1px solid var(--line-strong); border-radius: 4px; padding: 7px 9px; background: var(--surface); color: var(--ink); text-transform: none; }
@@ -969,6 +973,7 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
   .environment-summary div { border-bottom: 1px solid var(--line); }
   .environment-summary div:nth-last-child(-n+2) { border-bottom: 0; }
   .config-index-toolbar { grid-template-columns: 1fr; }
+  .environment-select-inline { grid-template-columns: minmax(0, 1fr); }
   .config-pagination { align-items: flex-start; flex-direction: column; }
   .config-create-form, .vault-editor-form, .clone-form { grid-template-columns: 1fr; }
   .vault-item-basics > div:last-child, .vault-item-basics > .vault-item-identity, .vault-definition-row, .vault-value-editor, .vault-index-tools, .index-toolbar { grid-template-columns: 1fr; }
@@ -995,8 +1000,9 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
   .log-summary { grid-template-columns: 1fr; }
   .log-summary article { border-right: 0; border-bottom: 1px solid var(--line); }
   .config-detail-heading { display: block; }
-  .config-title-line { grid-template-columns: max-content max-content; justify-content: start; }
-  .config-title-line h1 { width: 100%; grid-column: 1 / -1; }
+  /* A spanning title in max-content tracks sized them to the whole one-line title, widening the page. */
+  .config-title-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .config-title-line h1 { flex: 1 1 100%; min-width: 0; }
   .detail-heading-actions { align-items: flex-start; flex-direction: column; margin-top: 18px; }
   .detail-action-group { flex-wrap: wrap; }
   .detail-heading-actions .config-identity { margin-top: 0; }
