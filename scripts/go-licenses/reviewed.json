@@ -2336,8 +2336,8 @@
     },
     {
       "module": "go.yaml.in/yaml/v3",
-      "version": "v3.0.5",
-      "module_sum": "h1:N6y/pJk8buWs9NY5ERU2HSMfm+IuD/OtfdAnq6kESPw=",
+      "version": "v3.0.6",
+      "module_sum": "h1:zcDfvjXEqTQmpjniUBLc91xYJMB2c4QOFxEF/LCEckM=",
       "primary_license_identifiers": [
         "Apache-2.0",
         "MIT"
@@ -2347,21 +2347,21 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/yaml/go-yaml",
-        "hash": "e16c7af9361b241fa02d91582fb59ce4954d8afc"
+        "hash": "5a62aba63b773192cd10ab954e21e143d7b00c7a"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "d18f6323b71b0b768bb5e9616e36da390fbd39369a81807cca352de4e4e6aa0b",
-          "source": "https://github.com/yaml/go-yaml/blob/e16c7af9361b241fa02d91582fb59ce4954d8afc/LICENSE",
+          "source": "https://github.com/yaml/go-yaml/blob/5a62aba63b773192cd10ab954e21e143d7b00c7a/LICENSE",
           "verified": true
         },
         {
           "path": "NOTICE",
           "kind": "notice",
           "sha256": "f6c2dd3a67b576eafb89b80200b8b1627230bf3821a0c14cb99a22ac19107d00",
-          "source": "https://github.com/yaml/go-yaml/blob/e16c7af9361b241fa02d91582fb59ce4954d8afc/NOTICE",
+          "source": "https://github.com/yaml/go-yaml/blob/5a62aba63b773192cd10ab954e21e143d7b00c7a/NOTICE",
           "verified": true
         }
       ],
