@@ -27,6 +27,10 @@ type DeploymentCredentialResult struct {
 }
 
 func (store *Store) IssueDeploymentCredential(ctx context.Context, request DeploymentCredentialIssue) (DeploymentCredentialResult, error) {
+	return retryDeadlock(ctx, func() (DeploymentCredentialResult, error) { return store.issueDeploymentCredential(ctx, request) })
+}
+
+func (store *Store) issueDeploymentCredential(ctx context.Context, request DeploymentCredentialIssue) (DeploymentCredentialResult, error) {
 	if !validOperationID(request.OperationID) || !validScopedActor(request.Actor) || request.Actor.Type != "token" {
 		return DeploymentCredentialResult{}, ErrValidation
 	}

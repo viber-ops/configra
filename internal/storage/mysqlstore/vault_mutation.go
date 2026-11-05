@@ -48,6 +48,10 @@ type VaultCommitResult struct {
 }
 
 func (store *Store) CommitVault(ctx context.Context, request VaultCommit) (VaultCommitResult, error) {
+	return retryDeadlock(ctx, func() (VaultCommitResult, error) { return store.commitVault(ctx, request) })
+}
+
+func (store *Store) commitVault(ctx context.Context, request VaultCommit) (VaultCommitResult, error) {
 	if !validOperationID(request.OperationID) || !validScopedActor(request.Actor) {
 		return VaultCommitResult{}, ErrValidation
 	}
