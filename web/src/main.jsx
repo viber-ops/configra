@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import React, { lazy, Suspense, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AuthorityManagement, CertificateManagement, authorityLabel } from './security/Certificates.jsx';
 import { Sessions, sessionLabel } from './security/Sessions.jsx';
@@ -121,6 +121,7 @@ const messages = {
     allNamespaces: 'All namespaces',
     namespaceFilter: 'Filter by namespace',
     noMatchingVaultItems: 'No Vault item matches the current filters.',
+    noMatchingEnvironments: 'No Environment matches this search.',
     moreContexts: 'more Environment contexts',
     previous: 'Previous',
     next: 'Next',
@@ -545,6 +546,7 @@ const messages = {
     allNamespaces: '全部 Namespace',
     namespaceFilter: '按 Namespace 筛选',
     noMatchingVaultItems: '没有符合当前筛选条件的 Vault Item。',
+    noMatchingEnvironments: '没有匹配的 Environment。',
     moreContexts: '个其他 Environment 上下文',
     previous: '上一页',
     next: '下一页',
@@ -938,21 +940,101 @@ function RevisionPagination({ history, t }) {
 }
 
 
-// `inline` puts the select and its search on one row; use it only where the picker has room.
-function EnvironmentSelect({ label, value, onChange, name, required = false, scope = '', includeArchived = false, emptyLabel, unavailable, unavailableLabel, inline = false, t }) {
-  const [search, setSearch] = useState('');
+// One searchable control: type to search Environments on the server, arrows to move, Enter to choose (adapted from #39).
+// The list opens on click, typing or an arrow key, never on focus alone, and Tab always leaves the control.
+function EnvironmentSelect({ label, value, onChange, name, required = false, scope = '', includeArchived = false, emptyLabel, unavailable, unavailableLabel, t }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState(null);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const [chosen, setChosen] = useState(null);
+  const rootRef = useRef(null);
+  const listID = useId();
+  const search = query ?? '';
   const collection = useInventory(`/v1/environments?include_archived=${includeArchived}&q=${encodeURIComponent(search)}${scope}`);
-  return <div className={inline ? 'environment-select environment-select-inline' : 'environment-select'}>
-    <label><span>{label}</span><select aria-label={label} name={name} required={required} value={value} onChange={event => onChange(event.target.value)}>
-      <option value="">{emptyLabel || t.environment}</option>
-      {value && !collection.items.some(item => item.key === value) && <option value={value}>{value}</option>}
-      {collection.items.map(item => {
-        const taken = unavailable?.has(item.key) && item.key !== value;
-        return <option key={item.key} value={item.key} disabled={taken}>{item.display_name} · {item.key}{taken ? ` · ${unavailableLabel}` : ''}</option>;
-      })}
-    </select></label>
-    <input type="search" aria-label={`${label} · ${t.search}`} placeholder={t.search} value={search} onChange={event => setSearch(event.target.value)} />
-    <InventoryPagination collection={collection} t={t} hideSinglePage />
+  const current = collection.items.find(item => item.key === value);
+  const currentLabel = !value ? '' : current ? `${current.display_name} · ${current.key}` : chosen?.key === value ? chosen.label : value;
+  const options = [];
+  if (emptyLabel && !search.trim()) options.push({ key: '', label: emptyLabel });
+  if (value && !search.trim() && !current) options.push({ key: value, label: currentLabel });
+  for (const item of collection.items) {
+    options.push({ key: item.key, label: `${item.display_name} · ${item.key}`, displayName: item.display_name, taken: Boolean(unavailable?.has(item.key) && item.key !== value) });
+  }
+  const enabled = index => Boolean(options[index] && !options[index].taken);
+  const firstEnabled = () => options.findIndex((_, index) => enabled(index));
+  const active = enabled(activeIndex) ? activeIndex : firstEnabled();
+  const step = (from, direction) => {
+    const start = from < 0 ? (direction > 0 ? -1 : options.length) : from;
+    for (let count = 1; count <= options.length; count += 1) {
+      const index = (((start + direction * count) % options.length) + options.length) % options.length;
+      if (enabled(index)) return index;
+    }
+    return -1;
+  };
+  const close = () => { setOpen(false); setQuery(null); };
+  const show = () => {
+    if (open) return;
+    setOpen(true);
+    setActiveIndex(options.findIndex(option => option.key === value));
+  };
+  const choose = option => {
+    if (!option || option.taken) return;
+    setChosen({ key: option.key, label: option.label });
+    close();
+    if (option.key !== value) onChange(option.key);
+  };
+  useEffect(() => {
+    if (!open) return undefined;
+    const closeOutside = event => { if (!rootRef.current?.contains(event.target)) close(); };
+    document.addEventListener('mousedown', closeOutside);
+    return () => document.removeEventListener('mousedown', closeOutside);
+  }, [open]);
+  const pages = collection.status === 'ready' ? Math.max(1, Math.ceil(collection.total / 50)) : collection.page;
+  return <div className="environment-select environment-combobox" ref={rootRef} onBlur={event => { if (!rootRef.current?.contains(event.relatedTarget)) close(); }}>
+    {name && <input type="hidden" name={name} value={value} />}
+    <label><span>{label}</span>
+      <input type="text" role="combobox" aria-label={label} aria-autocomplete="list" aria-expanded={open}
+        aria-controls={open ? listID : undefined} aria-activedescendant={open && active >= 0 ? `${listID}-${active}` : undefined}
+        autoComplete="off" spellCheck={false} required={required} placeholder={emptyLabel || t.environment} value={query ?? currentLabel}
+        onFocus={event => event.currentTarget.select()} onClick={show}
+        onChange={event => {
+          setQuery(event.target.value);
+          setOpen(true);
+          setActiveIndex(-1);
+          if (!required && event.target.value === '' && value) onChange('');
+        }}
+        onKeyDown={event => {
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            if (!open) show();
+            else setActiveIndex(step(active, event.key === 'ArrowDown' ? 1 : -1));
+          } else if (event.key === 'Enter' && open) {
+            event.preventDefault();
+            choose(options[active]);
+          } else if (event.key === 'Escape' && (open || query !== null)) {
+            event.preventDefault();
+            close();
+          } else if ((event.key === 'PageDown' || event.key === 'PageUp') && open) {
+            event.preventDefault();
+            const next = collection.page + (event.key === 'PageDown' ? 1 : -1);
+            if (next >= 1 && next <= pages) { collection.setPage(next); setActiveIndex(-1); }
+          } else if (event.key === 'Tab' && open) {
+            close();
+          }
+        }} />
+    </label>
+    {open && <div className="environment-combobox-menu" onMouseDown={event => event.preventDefault()}>
+      <div role="listbox" id={listID} aria-label={label} tabIndex={-1} className="environment-combobox-options">
+        {options.map((option, index) => <div key={option.key || '__all__'} id={`${listID}-${index}`} role="option"
+          aria-selected={option.key === value} aria-disabled={option.taken || undefined}
+          className={index === active ? 'environment-combobox-option active' : 'environment-combobox-option'}
+          onMouseMove={() => { if (enabled(index) && index !== activeIndex) setActiveIndex(index); }} onClick={() => choose(option)}>
+          {option.displayName ? <><span>{option.displayName}</span> · <code>{option.key}</code>{option.taken && <small> · {unavailableLabel}</small>}</> : <span>{option.label}</span>}
+        </div>)}
+        {collection.status === 'loading' && <div className="environment-combobox-state" aria-busy="true"><span className="loading-line" /></div>}
+        {collection.status === 'ready' && options.length === 0 && <p className="environment-combobox-empty">{t.noMatchingEnvironments}</p>}
+      </div>
+      <InventoryPagination collection={collection} t={t} hideSinglePage />
+    </div>}
   </div>;
 }
 
@@ -1607,7 +1689,7 @@ function ConfigTemplatePicker({ initialConfig = '', initialEnvironment = '', rep
       <input type="search" aria-label={`${t.templateFromExisting} · ${t.search}`} placeholder={t.search} value={search} onChange={event => setSearch(event.target.value)} />
       <InventoryPagination collection={configs} t={t} hideSinglePage />
     </div>
-    {configKey && <EnvironmentSelect inline label={`${t.templateFromExisting} · ${t.environment}`} value={environmentKey} scope={`&config=${encodeURIComponent(configKey)}`} onChange={setEnvironmentKey} t={t} />}
+    {configKey && <EnvironmentSelect label={`${t.templateFromExisting} · ${t.environment}`} value={environmentKey} scope={`&config=${encodeURIComponent(configKey)}`} onChange={setEnvironmentKey} t={t} />}
     <div className="template-import-status">
       {fetched.status === 'loading' && <span className="loading-line" aria-busy="true" />}
       {fetched.status === 'ready' && fetched.applied && <p className="muted-note" role="status">{t.templateLoaded.replace('{template}', name)}</p>}
@@ -1691,7 +1773,7 @@ function Configs({ principal, filters = new URLSearchParams(), t }) {
           {filters.get('unbound') === 'true' && <p>{t.noActiveConfigContext} · <a href="#/configs">{t.configs}</a></p>}
           <div className="config-index-toolbar">
             <label><span>{t.searchConfigs}</span><input type="search" value={query} placeholder={t.searchConfigsPlaceholder} onChange={event => { setQuery(event.target.value); setInitialPage(1); replaceHashQuery({ q: event.target.value, page: 1 }); }} /></label>
-            <EnvironmentSelect inline label={t.environmentFilter} emptyLabel={t.allEnvironments} value={environmentFilter} includeArchived onChange={value => { setEnvironmentFilter(value); setInitialPage(1); replaceHashQuery({ environment: value, page: 1 }); }} t={t} />
+            <EnvironmentSelect label={t.environmentFilter} emptyLabel={t.allEnvironments} value={environmentFilter} includeArchived onChange={value => { setEnvironmentFilter(value); setInitialPage(1); replaceHashQuery({ environment: value, page: 1 }); }} t={t} />
             <StatusFilter value={statusFilter} onChange={value => { setStatusFilter(value); setInitialPage(1); replaceHashQuery({ status: value, page: 1 }); }} t={t} />
             <output>{state.status === 'ready' ? state.total : '…'} {t.configs}</output>
           </div>
@@ -2029,7 +2111,7 @@ function VaultItems({ principal, filters = new URLSearchParams(), t }) {
       </form>}
       <div className="vault-index-tools">
         <label><span>{t.searchVault}</span><input type="search" aria-label={t.searchVault} placeholder={t.searchVaultPlaceholder} value={search} onChange={event => { setSearch(event.target.value); replaceHashQuery({ q: event.target.value }); }} /></label>
-        <EnvironmentSelect inline label={t.environmentFilter} emptyLabel={t.allEnvironments} value={environmentFilter} includeArchived onChange={value => { setEnvironmentFilter(value); replaceHashQuery({ environment: value }); }} t={t} />
+        <EnvironmentSelect label={t.environmentFilter} emptyLabel={t.allEnvironments} value={environmentFilter} includeArchived onChange={value => { setEnvironmentFilter(value); replaceHashQuery({ environment: value }); }} t={t} />
         <label><span>{t.namespace}</span><input type="search" aria-label={t.namespaceFilter} placeholder={t.allNamespaces} value={namespaceFilter} onChange={event => { setNamespaceFilter(event.target.value); replaceHashQuery({ namespace: event.target.value }); }} /></label>
         <StatusFilter value={statusFilter} onChange={value => { setStatusFilter(value); replaceHashQuery({ status: value }); }} t={t} />
       </div>
@@ -2870,7 +2952,7 @@ function ConfigDetail({ principal, configKey, environmentKey, t }) {
           <div className="config-title-line"><h1 title={state.config.config_name}>{state.config.config_name}</h1><code title={configKey}>{configKey}</code><span>{t.current} v{state.config.revision}</span></div>
         </div>
         <div className="detail-heading-actions">
-          <EnvironmentSelect inline label={t.environment} value={environmentKey} scope={`&config=${encodeURIComponent(configKey)}`} onChange={value => { if (value && confirmDiscard()) window.location.hash = `/configs/${configKey}/${value}`; }} t={t} />
+          <EnvironmentSelect label={t.environment} value={environmentKey} scope={`&config=${encodeURIComponent(configKey)}`} onChange={value => { if (value && confirmDiscard()) window.location.hash = `/configs/${configKey}/${value}`; }} t={t} />
           <div className="detail-action-group">
             <div className="config-operation-switch">
               <button type="button" aria-pressed={tab === 'compare'} onClick={() => { setCompareSeed(null); setTab('compare'); }}>{t.compare}</button>

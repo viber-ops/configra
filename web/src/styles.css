@@ -354,13 +354,28 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .config-pagination { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 2px 0; color: var(--muted); font: 12px ui-monospace, "SFMono-Regular", Consolas, monospace; }
 .config-pagination div { display: flex; align-items: center; gap: 10px; }
 .config-pagination button { min-height: 32px; border: 1px solid var(--line); border-radius: 4px; padding: 0 11px; background: var(--surface); color: var(--blue); cursor: pointer; font-weight: 700; }
+.config-pagination button:hover:not(:disabled) { background: var(--surface-muted); }
 .config-pagination button:disabled { color: var(--disabled); cursor: default; }
 .environment-select { display: grid; align-content: start; gap: 5px; min-width: 0; }
 .environment-select label { display: grid; gap: 5px; }
 .environment-select input, .environment-select select { width: 100%; min-width: 0; min-height: 36px; border: 1px solid var(--line-strong); border-radius: 4px; padding: 6px 9px; background: var(--surface); color: var(--ink); }
-/* Select and search share a row where the picker has room (adapted from #36); narrow form columns stay stacked. */
-.environment-select-inline { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: end; column-gap: 8px; }
-.environment-select-inline > :not(label):not(input) { grid-column: 1 / -1; }
+/* A single searchable control replaces the select, its search box and pager (adapted from #39). */
+.environment-combobox { position: relative; }
+.environment-combobox input[role="combobox"] { padding-right: 28px; text-overflow: ellipsis; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 15px) 50%, calc(100% - 10px) 50%; background-size: 5px 5px; background-repeat: no-repeat; }
+.environment-combobox-menu { position: absolute; z-index: 25; top: calc(100% + 4px); left: 0; min-width: max(100%, 280px); max-width: min(380px, calc(100vw - 32px)); overflow: hidden; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); box-shadow: 0 12px 28px var(--shadow); }
+.detail-heading-actions .environment-combobox-menu { right: 0; left: auto; }
+.environment-combobox-options { display: grid; max-height: 260px; overflow-y: auto; padding: 4px; }
+.environment-combobox-option { display: flex; min-height: 32px; flex-wrap: wrap; align-items: baseline; gap: 4px; border-radius: 4px; padding: 7px 9px; color: var(--ink); cursor: pointer; font-size: 12px; font-weight: 500; }
+.environment-combobox-option code { color: var(--muted); font: 600 11px ui-monospace, "SFMono-Regular", Consolas, monospace; }
+.environment-combobox-option small { color: var(--muted); font-size: 11px; }
+/* The keyboard/hover option carries a 3px accent bar, so it stays visible without relying on a faint tint. */
+.environment-combobox-option.active { background: var(--blue-soft); box-shadow: inset 3px 0 0 var(--blue); }
+.environment-combobox-option[aria-selected="true"] { font-weight: 700; }
+.environment-combobox-option[aria-selected="true"] code { color: var(--blue); }
+.environment-combobox-option[aria-disabled="true"] { color: var(--disabled); cursor: not-allowed; }
+.environment-combobox-state, .environment-combobox-empty { margin: 0; padding: 12px 10px; color: var(--muted); font-size: 12px; text-align: center; }
+.environment-combobox-menu > .config-pagination { border-top: 1px solid var(--line); padding: 6px 8px; background: var(--surface-muted); }
+.environment-combobox-menu > p { margin: 0; padding: 8px 10px; }
 .environment-select .config-pagination, .resource-rail .config-pagination { flex-wrap: wrap; gap: 5px; padding: 5px 0; font-size: 10px; }
 .environment-select .config-pagination div, .resource-rail .config-pagination div { gap: 5px; }
 .vault-environment-picker > input[type="search"] { margin-bottom: 8px; }
@@ -426,12 +441,15 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .detail-action-group { display: flex; flex: none; align-items: center; gap: 8px; }
 .detail-action-group > button:not(.primary-action) { height: 38px; flex: none; border: 1px solid var(--line); border-radius: 5px; padding: 0 14px; background: var(--surface); color: var(--blue); cursor: pointer; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .detail-action-group > button[aria-pressed="true"]:not(.primary-action) { border-color: var(--blue); background: var(--blue-soft); }
+.detail-action-group > button:not(.primary-action):not([aria-pressed="true"]):hover { background: var(--surface-muted); }
 .config-operation-switch { display: inline-flex; height: 38px; overflow: hidden; flex: none; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); }
 .config-operation-switch button { min-width: 62px; height: 100%; flex: none; border: 0; border-right: 1px solid var(--line); padding: 0 14px; background: var(--surface); color: var(--blue); cursor: pointer; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.config-operation-switch button:not([aria-pressed="true"]):hover { background: var(--surface-muted); }
 .config-operation-switch button:last-child { border-right: 0; }
 .config-operation-switch button[aria-pressed="true"] { background: var(--blue); color: var(--on-accent); }
 .detail-more-actions { position: relative; }
 .detail-more-actions summary { display: grid; width: 38px; height: 38px; place-items: center; border: 1px solid var(--line); border-radius: 5px; color: var(--blue); cursor: pointer; list-style: none; }
+.detail-more-actions summary:hover { background: var(--surface-muted); }
 .detail-more-actions summary::-webkit-details-marker { display: none; }
 .detail-more-menu { position: absolute; z-index: 5; top: 42px; right: 0; display: grid; min-width: 220px; overflow: hidden; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); box-shadow: 0 8px 24px var(--shadow); }
 .detail-more-menu button, .detail-more-menu a { border: 0; padding: 9px 12px; background: transparent; color: var(--blue); cursor: pointer; text-align: left; font-weight: 700; }
@@ -973,7 +991,6 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
   .environment-summary div { border-bottom: 1px solid var(--line); }
   .environment-summary div:nth-last-child(-n+2) { border-bottom: 0; }
   .config-index-toolbar { grid-template-columns: 1fr; }
-  .environment-select-inline { grid-template-columns: minmax(0, 1fr); }
   .config-pagination { align-items: flex-start; flex-direction: column; }
   .config-create-form, .vault-editor-form, .clone-form { grid-template-columns: 1fr; }
   .vault-item-basics > div:last-child, .vault-item-basics > .vault-item-identity, .vault-definition-row, .vault-value-editor, .vault-index-tools, .index-toolbar { grid-template-columns: 1fr; }

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { chooseEnvironment, environmentOption } from './environment.js';
 import { inventoryPage } from './inventory.js';
 
 async function sourcePage(page, { configEnvironments = ['test', 'qa'] } = {}) {
@@ -35,8 +36,10 @@ test('copy to an empty environment pins the saved source and shows the resulting
     await route.fulfill({ json: { outcome: 'success', revision: 1, warnings: [{ code: 'missing_vault_environment_variant', namespace_key: 'app', item_key: 'db', field_key: 'password' }] } });
   });
   await page.getByRole('button', { name: 'Copy to environment', exact: true }).click();
-  await page.getByLabel('Target environment', { exact: true }).selectOption('production');
-  await expect(page.getByLabel('Target environment', { exact: true }).getByRole('option', { name: /Retired/ })).toHaveCount(0);
+  await chooseEnvironment(page, 'Target environment', 'production');
+  await page.getByRole('combobox', { name: 'Target environment', exact: true }).click();
+  await expect(page.getByRole('listbox', { name: 'Target environment' }).getByRole('option', { name: /Retired/ })).toHaveCount(0);
+  await page.keyboard.press('Escape');
   await expect(page.getByText('test/server@v3', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Create first version in production' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Copied to production/server · v1' })).toBeVisible();
@@ -50,7 +53,7 @@ test('copy rejection explains an existing target and keeps a copyable Request ID
   await sourcePage(page);
   await page.route('**/v1/environments/production/configs/server/replace', route => route.fulfill({ status: 409, json: { error: { code: 'revision_conflict', field: 'expected_target_revision', reason: 'target_config_exists', request_id: 'copy-conflict-request' } } }));
   await page.getByRole('button', { name: 'Copy to environment', exact: true }).click();
-  await page.getByLabel('Target environment', { exact: true }).selectOption('production');
+  await chooseEnvironment(page, 'Target environment', 'production');
   await page.getByRole('button', { name: 'Create first version in production' }).click();
   await expect(page.getByRole('alert')).toContainText('already has this Config');
   await expect(page.getByRole('alert')).toContainText('Merge or Replace');
@@ -68,7 +71,7 @@ test('clone explains global name collisions and retries a lost response with the
   });
   await openClone(page);
   await expect(page.getByText(/new Config key across all environments/)).toBeVisible();
-  await page.getByLabel('Target environment', { exact: true }).selectOption('production');
+  await chooseEnvironment(page, 'Target environment', 'production');
   await page.getByLabel('Target config', { exact: true }).fill('server');
   await page.getByLabel('Target name', { exact: true }).fill('Server copy');
   await page.getByRole('button', { name: 'Clone config', exact: true }).click();
@@ -152,7 +155,7 @@ test('copy form fits a narrow screen and explains the saved source in Chinese', 
   await sourcePage(page);
   await page.getByRole('button', { name: '中文', exact: true }).click();
   await page.getByRole('button', { name: '复制到环境', exact: true }).click();
-  await page.getByLabel('目标 Environment', { exact: true }).selectOption('production');
+  await chooseEnvironment(page, '目标 Environment', 'production');
   await expect(page.getByText(/复制已保存的 v3/)).toBeVisible();
   await expect(page.getByRole('button', { name: '在 production 创建首个版本' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
@@ -200,7 +203,7 @@ test('an edited copy commits a first version and retries with the same operation
     return route.fulfill({ json: { outcome: 'success', revision: 1 } });
   });
   await page.getByRole('button', { name: 'Copy to environment', exact: true }).click();
-  await page.getByLabel('Target environment', { exact: true }).selectOption('production');
+  await chooseEnvironment(page, 'Target environment', 'production');
   await page.getByLabel('Source', { exact: true }).click();
   await page.keyboard.press('ControlOrMeta+A');
   await page.keyboard.type('port: 7380\n');
@@ -223,10 +226,13 @@ test('clone keeps the saved source read-only so the server-side clone checks sti
 test('the copy target picker marks environments that already have this Config', async ({ page }) => {
   await sourcePage(page);
   await page.getByRole('button', { name: 'Copy to environment', exact: true }).click();
-  const target = page.getByLabel('Target environment', { exact: true });
-  await expect(target.locator('option[value="qa"]')).toHaveAttribute('disabled', '');
-  await expect(target.locator('option[value="qa"]')).toContainText('already has this Config');
-  await expect(target.locator('option[value="production"]')).not.toHaveAttribute('disabled', '');
+  const taken = await environmentOption(page, 'Target environment', 'qa');
+  await expect(taken).toHaveAttribute('aria-disabled', 'true');
+  await expect(taken).toContainText('already has this Config');
+  await expect(await environmentOption(page, 'Target environment', 'production')).not.toHaveAttribute('aria-disabled', 'true');
+  // A taken Environment cannot be chosen by pointer or keyboard.
+  await taken.click({ force: true });
+  await expect(page.getByRole('combobox', { name: 'Target environment', exact: true })).toHaveValue('');
 });
 
 test('copy checks the content against the target environment before writing', async ({ page }) => {
@@ -241,7 +247,7 @@ test('copy checks the content against the target environment before writing', as
   let writes = 0;
   await page.route('**/v1/environments/production/configs/server**', route => { writes += 1; return route.fulfill({ json: { outcome: 'success', revision: 1 } }); });
   await page.getByRole('button', { name: 'Copy to environment', exact: true }).click();
-  await page.getByLabel('Target environment', { exact: true }).selectOption('production');
+  await chooseEnvironment(page, 'Target environment', 'production');
   await expect(page.getByText('Checked against production: these Vault references have no value there yet.')).toBeVisible();
   await expect(page.getByText('{vault.app.db.password}').first()).toBeVisible();
   expect(checks[0]).toEqual({ environment: 'production', format: 'yaml', content: "port: 6380\npassword: '{vault.app.db.password}'\n" });

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { chooseEnvironment } from './environment.js';
 import { inventoryPage } from './inventory.js';
 
 const principal = { issuer: 'https://id.example.com', subject: 'admin-1', email: 'admin@example.com', role: 'admin' };
@@ -31,7 +32,7 @@ test('an ended session keeps the page and recovers after signing in from another
   });
   await page.goto('/ui/#/configs');
   await page.getByRole('button', { name: 'New config' }).click();
-  await page.getByRole('combobox', { name: 'Environment', exact: true }).selectOption('production');
+  await chooseEnvironment(page, 'Environment', 'production');
   await page.getByLabel('Resource key').fill('payment');
   await page.getByLabel('Display name').fill('Payment service');
   await page.getByLabel('Configuration source').fill('port: 6379\n');

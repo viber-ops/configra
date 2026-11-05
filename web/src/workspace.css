@@ -40,7 +40,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .sidebar-group > p { margin: 0 14px 8px; color: var(--sidebar-muted); font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
 .sidebar nav a { min-height: 40px; margin: 2px 0; padding: 0 12px; border-radius: 8px; color: var(--sidebar-ink); font-size: 13px; font-weight: 500; }
 .sidebar nav a:hover { background: #ffffff0c; }
-.sidebar nav a[aria-current="page"] { color: white; background: #2b70ce; box-shadow: 0 3px 8px #08182a22; }
+/* #2d74d3 keeps the current-page mark at 3:1 or more against both rails, with white text at 4.6:1. */
+.sidebar nav a[aria-current="page"] { color: white; background: #2d74d3; box-shadow: 0 3px 8px #08182a22; }
 .sidebar nav .icon { width: 17px; height: 17px; color: var(--sidebar-muted); }
 .sidebar nav a[aria-current="page"] .icon { color: white; }
 .sidebar .identity { border-color: #ffffff16; padding: 18px 8px 0; gap: 9px; }
