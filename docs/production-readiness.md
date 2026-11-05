@@ -2,17 +2,34 @@
 
 This document is the completion contract for Configra V1. A capability is complete only when its evidence below exists and passes from a clean checkout; implementation progress or a narrower test is not substitute evidence.
 
-## Current status — 2026-09-22
+## Current status — 2026-10-16
 
-The release target is **v1.0.1** for the server and **v1.0.0** for the Go SDK. This page records
-release acceptance, not a blanket approval of every production deployment.
-The final runtime passes native Linux integration, capacity and recovery checks,
-three-node Kubernetes acceptance on native Linux and the Mac, and the complete
-[hosted CI run](https://github.com/viber-ops/configra/actions/runs/35694430155).
-Dated results and failed attempts remain in the
-[verification record](verification/2026-09-22.md). Tagged archive/download checks
-are completed before publishing the [release](https://github.com/viber-ops/configra/releases/tag/v1.0.1);
-their post-tag evidence is recorded there.
+The current patch target is **Configra v1.2.1**, compatible with **configra-go v1.2.0**.
+See the [patch upgrade](releases/v1.2.1.md) and [verification record](verification/2026-10-16.md).
+The v1.2.0 baseline added the Cobra
+operator CLI, immutable release sets, pre-install validation, identity/session
+lifecycle, private metrics, write admission, metadata retention and production
+references. [Upgrade](releases/v1.2.0.md) includes MySQL schema 3→4 and separate
+migration/service roles. Scope and secret redaction remain part of acceptance.
+
+The v1.2.0 baseline root/SDK/Kubernetes race tests, scoped SDK/actual CLI real
+MySQL/NATS/ClickHouse E2E, 17-File activation/rollback, restricted MySQL role tests,
+provider/binding batch checks and mixed read/write burst acceptance passed.
+Prometheus rules and HA/backup manifests rendered/validated. Its actual-image
+recovery/rotation, unchanged ten-minute capacity, hosted three-node Kubernetes,
+server/SDK CI and twelve source executable/material checks passed; see the
+[October 3 verification](verification/2026-10-03.md), including retained failures
+and deployment boundaries. Tagged downloads are checked independently before
+publication; prior-version passes do not substitute for this candidate.
+
+v1.1.0 is published and its recorded evidence remains in
+[October 2 verification](verification/2026-10-02.md). Its unchanged capacity gate
+passed on the recorded Mac/Docker host and the hosted three-node Kubernetes gate
+passed. Earlier failures remain recorded; no new native Linux capacity is claimed.
+
+The table below retains the **v1.0.1 / SDK v1.0.0 baseline**. Its native Linux
+integration/capacity/recovery and three-node Kubernetes results, hosted CI and
+tagged archive/download evidence remain in the [September verification record](verification/2026-09-22.md).
 
 Production ingress, capacity on your hardware, independent-host/zone failures,
 backup retention and maintenance-access controls must be checked in your own
@@ -46,16 +63,14 @@ the offline transaction and recovery procedure; online rotation and a multi-key
 keyring are not required. A lost COMMIT response must be resolved with both keys
 while services remain stopped, not treated as proof of rollback.
 
-The user supplied temporary independent Linux machines on September 22 after
+Temporary independent Linux machines were provisioned on September 22 after
 the Mac runs. The initial two-vCPU/3,622-MiB VM saturated under the complete
-stack; the user released it and supplied an eight-vCPU/15,319-MiB replacement,
-also without swap. API, MySQL, NATS, ClickHouse and the load generator share
+stack and was replaced by an eight-vCPU/15,319-MiB machine, also without swap. API, MySQL, NATS, ClickHouse and the load generator share
 that host. The API remains limited to two CPUs and 512 MiB; native MySQL 8.0.22,
 query defaults and capacity thresholds are unchanged. Mac fixtures remain useful for
 the three-node Kubernetes checks; do not stop unrelated projects or equate
-arm64-host/emulated-MySQL measurements with native Linux results. Preserve the
-remote evidence and remove owned fixtures before the user releases the machine.
-Those hosts were subsequently released. Final runtime acceptance uses a new
+arm64-host/emulated-MySQL measurements with native Linux results. Those hosts
+were released after their evidence was copied back. Final runtime acceptance uses a new
 four-vCPU/7,521-MiB native Linux host: the complete stack passes the unchanged
 gate there, with the API still capped at two CPUs and 512 MiB. Its exact result,
 image and distinction from the failed hosted-runner warmup are recorded above.
@@ -72,9 +87,10 @@ independent-host failure behavior still need deployment-specific verification.
 Tests exercise behavior only through these already-decided interfaces:
 
 1. **Management HTTP** — OIDC-authenticated human queries and Mutations used by the Management UI.
-2. **Machine Read HTTP** — the two exact V1 endpoints fixed by ADR-0018, including Token, mTLS, ETag, limits, and stable error envelopes.
+2. **Machine HTTP** — exact Config/File and scoped write/credential/release endpoints, including Token, mTLS, ETag, limits, and stable error envelopes.
 3. **Go Client and Viper Handler** — exported `configra-go` interfaces for resolved Config, File bytes, Load, Reload, Current, Watch, and Change Callback.
 4. **Process and container** — startup validation, readiness, shutdown, migration, Crypto Sentinel verification, and dependency failure behavior.
+5. **Operator CLI** — the distributed Cobra executable using the SDK against real authenticated services, stable exit codes, private files, validation/rotation and value-free output.
 
 Domain behavior may have fast package tests, but acceptance tests do not query implementation tables or mock Configra's own modules. MySQL, ClickHouse, NATS, TLS, and OIDC test adapters sit only at real external seams.
 The release image contains no embedded Identity Provider, local users, test identities, or authentication bypass. Production acceptance authenticates through the configured external OIDC Provider and returns through the fixed Configra callback.
@@ -91,12 +107,14 @@ The MySQL compatibility baseline is the production version `8.0.22`; container i
 6. A release image passes startup, migration, readiness, graceful-shutdown, backup-verification, and dependency-recovery drills.
 7. Load and leakage gates pass on a recorded machine and configuration.
 
-Both modules require Go `1.25.13` or newer, the first patched Go 1.25 release
-covering the reachable standard-library findings present in 1.25.8. The
-production image is built by the digest-pinned Go `1.26.7` builder. The current
-core, SDK and Kubernetes suites passed race checks on both supported toolchains.
-`govulncheck v1.7.0` found no reachable vulnerabilities after the gRPC update;
-unimported advisory-bearing modules in the core graph remain identified separately.
+Core/CLI and SDK modules retain Go `1.25.13` language compatibility. The Kubernetes
+module requires Go `1.26.10` after its x/net security update. Production images and release
+bundles use the digest-pinned/reviewed Go `1.26.10` builder; use the tagged build
+scripts for production builds. The older-toolchain CI lane checks compatibility,
+not the security status of binaries built with that old runtime. Release
+`govulncheck v1.7.0` runs with the production toolchain. Unimported advisory-bearing
+modules in the core graph remain identified separately. The v1.2.1 evidence and
+final CI/artifact receipts are linked from its [release record](verification/2026-10-16.md).
 
 Current image/deployment evidence is runnable with `make image-test` and
 `go test ./internal/app`. The former builds the actual scratch image and verifies

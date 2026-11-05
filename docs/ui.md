@@ -37,7 +37,7 @@ not separate routes. The browser regression suite is in [web/tests/](../web/test
 | `#/environments/:environment` | Environment details and linked Config/Vault filters |
 | `#/configs` | Inventory and creation |
 | `#/configs/:config` | Environment contexts for one Config identity |
-| `#/configs/:config/:environment` | Current source, history, historical inspection, explicit resolved preview, comparison picker/diff, merge/replace preview, clone and not-found states |
+| `#/configs/:config/:environment` | Current source, history, historical inspection, explicit resolved preview, comparison picker/diff, merge/replace preview, copy to an empty environment, clone and not-found states |
 | `#/vault` | Item inventory and creation |
 | `#/vault/:namespace/:item` | Field metadata, explicit reveal, history, structured editing and archived states |
 | `#/notifications` | Destination inventory/creation and delivery history |
@@ -61,6 +61,20 @@ Config comparison and merge/replace use the same paging controls in each
 Environment column. Changing pages does not change your selected Source or
 Target. Check the Environment and version shown in those two slots before
 committing a transfer.
+
+Use **Copy to environment** to create the first version of the same Config in
+another active Environment. **Clone**, under More actions, creates a globally
+new Config key. Both pin the saved source revision shown in the form, retain
+Vault reference text, show warnings and link to the result. An existing target
+is rejected without overwriting it. See [Config copy](config-copy.md).
+
+Transfer failures retain specific guidance, a copyable Request ID and the
+Operation ID used to search Audit. Identical retries after a lost response keep
+their Operation ID. Use **Refresh preview** after a target conflict to review
+the new current revision before starting another transfer. Restore prevents
+duplicate clicks while pending and also preserves its retry identity.
+After a restore, the detail view waits for the complete saved snapshot before
+reenabling copy/transfer actions, so the displayed source matches its revision.
 
 进入 Config 或 Vault Item，打开“历史版本”。每页最多显示 50 个版本，点击“下一页”
 查看更早的版本，“上一页”返回。顶部的近期版本按钮不随翻页变化。加载失败时可以
@@ -136,6 +150,7 @@ GET /v1/environments?limit=50&offset=0
 GET /v1/configs?limit=50&offset=0&q=payment
 GET /v1/vault-items?limit=50&namespace=platform&environment=production
 GET /v1/api-tokens?limit=50&offset=0
+GET /v1/api-tokens?status=active&expiring_within_days=14
 GET /v1/environments?config=payment&limit=50&offset=50
 GET /v1/environments?token=<public_id>&include_archived=true&limit=50
 GET /v1/certificate-authorities?include_revoked=true&limit=50
@@ -164,6 +179,31 @@ records; bounded response size is not a constant-time query guarantee.
 - Default lists exclude archived/revoked rows. Use `include_archived=true` or
   `include_revoked=true`, or `status=active|all|archived` (`revoked` for credentials).
   Do not combine `status` with an `include_*` flag.
+- `/v1/me` reports `session_expires_at`, `session_idle_timeout_seconds` and
+  `session_lifetime_seconds`. The UI warns two minutes before the idle timeout
+  (**Stay signed in** makes one request) and ten minutes before the session ends.
+  A 401 from any request shows a banner instead of the sign-in page, so unsaved
+  work stays; **Sign in in a new tab** returns to `/ui/?signed-in=1`, which notifies
+  the original tab, and that tab reloads if the identity or role changed. Limits are
+  set in Cold-start Configuration (`sessions`, ADR-0035) and shown read-only under
+  Deployment status.
+- The Management UI lists Environments, Configs, Vault Items and API Tokens with
+  a Status filter that defaults to **Active**; choose Archived/Revoked or All to
+  see inactive rows. A non-default status is kept in the page URL.
+- `#/configs?new=1&template=<config>&template_environment=<environment>` opens the
+  create form with that Config's content loaded as a template; the parameters are
+  removed from the URL once the form opens. Copy to environment checks content with
+  `POST /v1/configs/validate` against the chosen target before any write.
+- API Tokens accept `expiring_within_days` (1–365): Tokens whose expiry falls within
+  that window, including ones that already expired. The Overview lists the soonest
+  five for administrators, and the Token list marks a Token "Expires soon" inside
+  the same 14-day window.
+- **Replace** on an API Token prefills a new Token with the same access: name,
+  every active Environment grant (read in full from `?token=`), the mTLS setting and,
+  for a write-scoped Token, its exact Config and Namespace scopes. The old Token
+  keeps working until the administrator revokes it from the replacement steps
+  (create-overlap-revoke, ADR-0019). Deployment credentials are reissued with
+  `configractl`, so they have no Replace action.
 - Config supports exact `environment` and `unbound=true` (no active environment).
   Vault supports exact `namespace` and `environment` filters. Environment lists
   support `config`, paired `namespace` + `item`, and Admin-only `token`.

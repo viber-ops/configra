@@ -40,9 +40,11 @@ type ConfigClone struct {
 	TargetEnvironmentKey string
 	TargetConfigKey      string
 	TargetConfigName     string
+	SourceRevision       uint64 `json:",omitempty"`
 }
 
 type configRevisionSnapshot struct {
+	Active        bool
 	ConfigID      []byte
 	EnvironmentID []byte
 	DisplayName   string
@@ -77,6 +79,9 @@ func (store *Store) CloneConfig(ctx context.Context, request ConfigClone) (Confi
 		return ConfigCommitResult{}, ErrValidation
 	}
 	digest := configCloneDigest(request)
+	if result, found, err := store.replayConfigOperation(ctx, request.OperationID, digest); found || err != nil {
+		return result, err
+	}
 	meta := configCommitMeta{
 		Action:        "clone",
 		SuccessEvent:  "config.cloned",
@@ -93,13 +98,19 @@ func (store *Store) CloneConfig(ctx context.Context, request ConfigClone) (Confi
 	reject := func(outcome Outcome, resultErr error) (ConfigCommitResult, error) {
 		return store.rejectConfigTransfer(ctx, commit, meta, digest, outcome, resultErr)
 	}
-	if !validResourceKey(request.SourceEnvironmentKey) || !validResourceKey(request.SourceConfigKey) ||
-		!validResourceKey(request.TargetEnvironmentKey) || !validResourceKey(request.TargetConfigKey) {
-		return reject(OutcomeValidationFailed, ErrValidation)
+	if err := validateConfigTransferKeys(request.SourceEnvironmentKey, request.SourceConfigKey, request.TargetEnvironmentKey, request.TargetConfigKey); err != nil {
+		return reject(OutcomeValidationFailed, err)
 	}
-	source, revision, err := store.readCurrentConfig(ctx, request.SourceEnvironmentKey, request.SourceConfigKey)
+	var source configRevisionSnapshot
+	var err error
+	revision := request.SourceRevision
+	if revision == 0 {
+		source, revision, err = store.readCurrentConfig(ctx, request.SourceEnvironmentKey, request.SourceConfigKey)
+	} else {
+		source, err = store.readConfigRevision(ctx, request.SourceEnvironmentKey, request.SourceConfigKey, revision)
+	}
 	if errors.Is(err, sql.ErrNoRows) {
-		return reject(OutcomeValidationFailed, ErrValidation)
+		return reject(OutcomeValidationFailed, &ConfigMutationError{Field: "source_revision", Reason: "source_revision_unavailable"})
 	}
 	if err != nil {
 		return ConfigCommitResult{}, err
@@ -124,7 +135,11 @@ func (store *Store) transferConfig(
 	if !validOperationID(request.OperationID) || !validActor(request.Actor) {
 		return ConfigCommitResult{}, ErrValidation
 	}
-	meta := configCommitMeta{Action: action, SuccessEvent: "config." + action + "d"}
+	digest := configTransferDigest(request, action)
+	if result, found, err := store.replayConfigOperation(ctx, request.OperationID, digest); found || err != nil {
+		return result, err
+	}
+	meta := configCommitMeta{Action: action, SuccessEvent: "config." + action + "d", RequestDigest: &digest}
 	commit := ConfigCommit{
 		OperationID:      request.OperationID,
 		Actor:            request.Actor,
@@ -133,16 +148,23 @@ func (store *Store) transferConfig(
 		ExpectedRevision: request.ExpectedTargetRevision,
 	}
 	reject := func(outcome Outcome, resultErr error) (ConfigCommitResult, error) {
-		return store.rejectConfigTransfer(ctx, commit, meta, configTransferDigest(request, action), outcome, resultErr)
+		return store.rejectConfigTransfer(ctx, commit, meta, digest, outcome, resultErr)
 	}
-	if !validResourceKey(request.SourceEnvironmentKey) || !validResourceKey(request.SourceConfigKey) ||
-		!validResourceKey(request.TargetEnvironmentKey) || !validResourceKey(request.TargetConfigKey) ||
-		request.SourceRevision == 0 || request.TargetRevision == 0 || request.ExpectedTargetRevision == 0 {
-		return reject(OutcomeValidationFailed, ErrValidation)
+	if err := validateConfigTransferKeys(request.SourceEnvironmentKey, request.SourceConfigKey, request.TargetEnvironmentKey, request.TargetConfigKey); err != nil {
+		return reject(OutcomeValidationFailed, err)
 	}
-	source, err := store.readConfigRevision(ctx, request.SourceEnvironmentKey, request.SourceConfigKey, request.SourceRevision)
+	if request.SourceRevision == 0 {
+		return reject(OutcomeValidationFailed, &ConfigMutationError{Field: "source_revision", Reason: "source_revision_required"})
+	}
+	// Expected revision zero creates the first environment version only. The
+	// normal commit CAS check rejects a target created concurrently.
+	createTarget := action == "replace" && request.TargetRevision == 0 && request.ExpectedTargetRevision == 0
+	if !createTarget && (request.TargetRevision == 0 || request.ExpectedTargetRevision == 0) {
+		return reject(OutcomeValidationFailed, &ConfigMutationError{Field: "target_revision", Reason: "target_revision_required"})
+	}
+	source, err := store.readConfigRevisionIncludingArchived(ctx, request.SourceEnvironmentKey, request.SourceConfigKey, request.SourceRevision)
 	if errors.Is(err, sql.ErrNoRows) {
-		return reject(OutcomeValidationFailed, ErrValidation)
+		return reject(OutcomeValidationFailed, &ConfigMutationError{Field: "source_revision", Reason: "source_revision_unavailable"})
 	}
 	if err != nil {
 		return ConfigCommitResult{}, err
@@ -154,27 +176,52 @@ func (store *Store) transferConfig(
 	commit.Format = source.Format
 	commit.Content = source.Content
 
-	target, err := store.readConfigRevision(ctx, request.TargetEnvironmentKey, request.TargetConfigKey, request.TargetRevision)
-	if errors.Is(err, sql.ErrNoRows) {
-		return reject(OutcomeValidationFailed, ErrValidation)
-	}
-	if err != nil {
-		return ConfigCommitResult{}, err
-	}
-	if merge {
-		if target.Format != source.Format {
-			return reject(OutcomeValidationFailed, ErrValidation)
+	targetActive := true
+	if !createTarget {
+		target, err := store.readConfigRevisionIncludingArchived(ctx, request.TargetEnvironmentKey, request.TargetConfigKey, request.TargetRevision)
+		if errors.Is(err, sql.ErrNoRows) {
+			return reject(OutcomeValidationFailed, &ConfigMutationError{Field: "target_revision", Reason: "target_revision_unavailable"})
 		}
-		merged, err := configdoc.Merge(source.Format, source.Content, target.Content)
 		if err != nil {
-			return reject(OutcomeValidationFailed, fmt.Errorf("%w: %v", ErrValidation, err))
+			return ConfigCommitResult{}, err
 		}
-		commit.Content = merged.Content
+		targetActive = target.Active
+		if merge {
+			if target.Format != source.Format {
+				return reject(OutcomeValidationFailed, &ConfigMutationError{Field: "target_revision", Reason: "config_format_mismatch"})
+			}
+			merged, err := configdoc.Merge(source.Format, source.Content, target.Content)
+			if err != nil {
+				return reject(OutcomeValidationFailed, &ConfigMutationError{Field: "content", Reason: "config_document_invalid"})
+			}
+			commit.Content = merged.Content
+		}
+		// Validate the old digest using immutable history, including archived
+		// resources. Only a matching completed operation may bypass lifecycle checks.
+		legacy := configCommitDigest(commit, meta)
+		meta.LegacyRequestDigest = &legacy
+		if result, found, err := store.replayConfigOperation(ctx, request.OperationID, legacy); found || err != nil {
+			return result, err
+		}
+	}
+	if !source.Active {
+		return reject(OutcomeValidationFailed, &ConfigMutationError{Field: "source_revision", Reason: "source_revision_unavailable"})
+	}
+	if !targetActive {
+		return reject(OutcomeValidationFailed, &ConfigMutationError{Field: "target_revision", Reason: "target_revision_unavailable"})
 	}
 	return store.commitConfig(ctx, commit, meta)
 }
 
-func (store *Store) readConfigRevision(
+func (store *Store) readConfigRevision(ctx context.Context, environmentKey, configKey string, revision uint64) (configRevisionSnapshot, error) {
+	snapshot, err := store.readConfigRevisionIncludingArchived(ctx, environmentKey, configKey, revision)
+	if err == nil && !snapshot.Active {
+		return configRevisionSnapshot{}, sql.ErrNoRows
+	}
+	return snapshot, err
+}
+
+func (store *Store) readConfigRevisionIncludingArchived(
 	ctx context.Context,
 	environmentKey string,
 	configKey string,
@@ -182,15 +229,14 @@ func (store *Store) readConfigRevision(
 ) (configRevisionSnapshot, error) {
 	var snapshot configRevisionSnapshot
 	if err := store.db.QueryRowContext(ctx, `
-		SELECT cr.config_id, cr.environment_id, c.display_name, cr.format, cr.content
+		SELECT cr.config_id, cr.environment_id, c.display_name, cr.format, cr.content, (c.archived_at IS NULL AND e.archived_at IS NULL)
 		FROM config_revisions cr
 		JOIN configs c ON c.id = cr.config_id
 		JOIN environments e ON e.id = cr.environment_id
-		WHERE c.resource_key = ? AND c.archived_at IS NULL
-		  AND e.resource_key = ? AND e.archived_at IS NULL
+		WHERE c.resource_key = ? AND e.resource_key = ?
 		  AND cr.revision = ?
 	`, configKey, environmentKey, revision).Scan(
-		&snapshot.ConfigID, &snapshot.EnvironmentID, &snapshot.DisplayName, &snapshot.Format, &snapshot.Content,
+		&snapshot.ConfigID, &snapshot.EnvironmentID, &snapshot.DisplayName, &snapshot.Format, &snapshot.Content, &snapshot.Active,
 	); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return configRevisionSnapshot{}, sql.ErrNoRows
@@ -265,11 +311,19 @@ func (store *Store) rejectConfigTransfer(
 		return ConfigCommitResult{}, err
 	}
 	if replayed {
-		var previous ConfigCommitResult
-		if err := json.Unmarshal(replay.Response, &previous); err != nil || previous.Outcome != replay.Outcome {
-			return ConfigCommitResult{}, errors.New("existing Operation failed integrity validation")
-		}
-		return previous, outcomeError(previous.Outcome)
+		return replayConfigResult(replay)
 	}
 	return finishConfigFailure(ctx, transaction, request, meta, outcome, meta.event(string(outcome)), resultErr)
+}
+
+func validateConfigTransferKeys(sourceEnv, sourceConfig, targetEnv, targetConfig string) error {
+	for _, key := range []struct{ field, value string }{
+		{"source_environment", sourceEnv}, {"source_config", sourceConfig},
+		{"target_environment", targetEnv}, {"target_config", targetConfig},
+	} {
+		if !validResourceKey(key.value) {
+			return &ConfigMutationError{Field: key.field, Reason: key.field + "_invalid"}
+		}
+	}
+	return nil
 }

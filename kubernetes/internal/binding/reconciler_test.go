@@ -32,15 +32,51 @@ type fakeSource struct {
 	version      string
 	err          error
 	beforeReturn func()
+	materials    []source.Material
 }
 
 func (upstream *fakeSource) Read(context.Context, []source.Object, map[string][]byte) ([]source.Material, error) {
 	upstream.calls++
 	materials := []source.Material{{Path: "app.yaml", Version: upstream.version, Bytes: []byte(upstream.contents), Sensitive: upstream.sensitive, Format: "yaml"}}
+	if upstream.materials != nil {
+		materials = upstream.materials
+	}
 	if upstream.beforeReturn != nil {
 		upstream.beforeReturn()
 	}
 	return materials, upstream.err
+}
+
+func TestReleaseBindingPublishesOneSecretAndRetainsItOnMixedBatch(t *testing.T) {
+	for _, kind := range []string{"Secret", "ConfigMap"} {
+		t.Run(kind, func(t *testing.T) {
+			reconciler, kube, object, upstream := fixture(t, kind, "files")
+			_ = unstructured.SetNestedSlice(object.Object, []any{map[string]any{"type": "release", "environment": "production", "config": "app", "path": "."}}, "spec", "objects")
+			if err := kube.Update(context.Background(), object); err != nil {
+				t.Fatal(err)
+			}
+			upstream.materials = []source.Material{{Path: "app.yaml", Version: "release-1", Bytes: []byte("version: 1\n"), Format: "yaml"}, {Path: "key.pem", Version: "release-1", Bytes: []byte("private-release-key"), Sensitive: true}}
+			reconcile(t, reconciler)
+			key := types.NamespacedName{Namespace: "apps", Name: "application-config"}
+			if kind == "ConfigMap" {
+				var target corev1.ConfigMap
+				if err := kube.Get(context.Background(), key, &target); err == nil {
+					t.Fatal("release File published into ConfigMap")
+				}
+				return
+			}
+			var target corev1.Secret
+			if err := kube.Get(context.Background(), key, &target); err != nil || len(target.Data) != 2 || string(target.Data["key.pem"]) != "private-release-key" {
+				t.Fatal("release Secret incomplete", err)
+			}
+			previous := target.ResourceVersion
+			upstream.materials[1].Version = "release-2"
+			reconcile(t, reconciler)
+			if err := kube.Get(context.Background(), key, &target); err != nil || target.ResourceVersion != previous {
+				t.Fatal("mixed release replaced current target", err)
+			}
+		})
+	}
 }
 
 func fixture(t *testing.T, kind, mode string, extra ...client.Object) (*binding.Reconciler, client.Client, *unstructured.Unstructured, *fakeSource) {

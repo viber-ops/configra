@@ -37,7 +37,11 @@ func TestViewerReadsIdentityAndEnvironmentList(t *testing.T) {
 	meRequest = meRequest.WithContext(humanauth.WithPrincipal(meRequest.Context(), principal))
 	meResponse := httptest.NewRecorder()
 	handler.ServeHTTP(meResponse, meRequest)
-	if meResponse.Code != http.StatusOK || meResponse.Body.String() != "{\"issuer\":\"https://identity.example.com\",\"subject\":\"viewer-1\",\"email\":\"viewer@example.com\",\"role\":\"viewer\"}\n" {
+	var me struct {
+		Issuer, Subject, Email, Role string
+		WriteTokenMaxTTLDays         int `json:"write_token_max_ttl_days"`
+	}
+	if meResponse.Code != http.StatusOK || json.Unmarshal(meResponse.Body.Bytes(), &me) != nil || me.Issuer != "https://identity.example.com" || me.Subject != "viewer-1" || me.Email != "viewer@example.com" || me.Role != "viewer" || me.WriteTokenMaxTTLDays != 90 {
 		t.Fatalf("me response = %d %q", meResponse.Code, meResponse.Body.String())
 	}
 
@@ -881,6 +885,34 @@ func TestAdminManagesEnvironmentScopedAPITokensWithoutListingSecrets(t *testing.
 	}
 }
 
+func TestWriteScopedTokenIssuanceRequiresMFA(t *testing.T) {
+	repository := &recordingConfigWriter{}
+	handler := management.NewHandler(repository, nil, nil)
+	body := `{"kind":"write-scoped","display_name":"Operator","environment_keys":["production"],"config_keys":["server"],"namespace_keys":["deployment"],"expires_at":"2099-01-01T00:00:00Z"}`
+	for _, test := range []struct {
+		role   humanauth.Role
+		mfa    bool
+		status int
+	}{
+		{"", false, 401}, {humanauth.RoleViewer, true, 403}, {humanauth.RoleAdmin, false, 403}, {humanauth.RoleAdmin, true, 200},
+	} {
+		request := httptest.NewRequest(http.MethodPost, "https://management.test/v1/api-tokens", strings.NewReader(body))
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Idempotency-Key", "scoped-create-token")
+		if test.role != "" {
+			request = request.WithContext(humanauth.WithPrincipal(request.Context(), humanauth.Principal{Subject: "admin", Role: test.role, MFAVerified: test.mfa}))
+		}
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != test.status {
+			t.Fatalf("issuance HTTP %d, want %d", response.Code, test.status)
+		}
+	}
+	if len(repository.tokenCreates) != 1 || repository.tokenCreates[0].Kind != machine.TokenWriteScoped || len(repository.tokenCreates[0].ConfigKeys) != 1 || len(repository.tokenCreates[0].NamespaceKeys) != 1 {
+		t.Fatal("issuance scope was not preserved")
+	}
+}
+
 func TestAdminImportsOnlyClientCASignedCertificatesAndRevokesByFingerprint(t *testing.T) {
 	roots, certificatePEM := signedClientCertificate(t, "datacenter-a")
 	_, untrustedPEM := signedClientCertificate(t, "untrusted")
@@ -1117,6 +1149,7 @@ type recordingConfigWriter struct {
 	tokenEnvironmentChanges        []mysqlstore.TokenEnvironmentChange
 	tokenEnvironmentResult         mysqlstore.TokenEnvironmentResult
 	tokenRevokes                   []mysqlstore.TokenRevoke
+	tokenQueries                   []mysqlstore.TokenQuery
 	tokenRevokeResult              mysqlstore.TokenRevokeResult
 	certificates                   []mysqlstore.ClientCertificate
 	certificateLists               []bool
@@ -1267,8 +1300,9 @@ func (writer *recordingConfigWriter) ApplyVaultLifecycleChange(_ context.Context
 	return writer.vaultLifecycleResult, nil
 }
 
-func (writer *recordingConfigWriter) ListTokens(_ context.Context, query mysqlstore.InventoryQuery) (mysqlstore.InventoryPage[mysqlstore.TokenSummary], error) {
-	writer.inventoryQueries = append(writer.inventoryQueries, query)
+func (writer *recordingConfigWriter) ListTokens(_ context.Context, query mysqlstore.TokenQuery) (mysqlstore.InventoryPage[mysqlstore.TokenSummary], error) {
+	writer.inventoryQueries = append(writer.inventoryQueries, query.InventoryQuery)
+	writer.tokenQueries = append(writer.tokenQueries, query)
 	writer.tokenLists = append(writer.tokenLists, query.IncludeInactive)
 	return mysqlstore.InventoryPage[mysqlstore.TokenSummary]{Items: writer.tokens, Total: uint64(len(writer.tokens))}, nil
 }
@@ -1384,7 +1418,68 @@ func (writer *recordingConfigWriter) ReadResolvedConfig(_ context.Context, envir
 	writer.resolvedReads = append(writer.resolvedReads, [2]string{environment, config})
 	return writer.resolved, writer.resolvedErr
 }
+func (writer *recordingConfigWriter) ChangeSessions(context.Context, mysqlstore.SessionChange) (mysqlstore.SessionChangeResult, error) {
+	return mysqlstore.SessionChangeResult{}, nil
+}
+func (writer *recordingConfigWriter) ListSessionPolicies(context.Context, mysqlstore.InventoryQuery) (mysqlstore.InventoryPage[mysqlstore.SessionPolicySummary], error) {
+	return mysqlstore.InventoryPage[mysqlstore.SessionPolicySummary]{Items: []mysqlstore.SessionPolicySummary{}}, nil
+}
+
 func (writer *recordingConfigWriter) RecordRejectedMutation(_ context.Context, request mysqlstore.RejectedMutation) error {
 	writer.rejectedMutations = append(writer.rejectedMutations, request)
 	return nil
+}
+
+func (writer *recordingConfigWriter) WriteTokenLifetime() time.Duration { return 90 * 24 * time.Hour }
+
+func TestTokenListAcceptsAnExpiryWindow(t *testing.T) {
+	repository := &recordingConfigWriter{}
+	handler := management.NewHandler(repository, nil, nil)
+	admin := humanauth.Principal{Subject: "admin-1", Role: humanauth.RoleAdmin}
+	list := func(query string) *httptest.ResponseRecorder {
+		input := httptest.NewRequest(http.MethodGet, "https://configra.test/v1/api-tokens"+query, nil)
+		input = input.WithContext(humanauth.WithPrincipal(input.Context(), admin))
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, input)
+		return response
+	}
+	if response := list("?status=active&expiring_within_days=14"); response.Code != http.StatusOK || len(repository.tokenQueries) != 1 ||
+		repository.tokenQueries[0].ExpiringWithinDays != 14 || repository.tokenQueries[0].IncludeInactive {
+		t.Fatalf("expiring Token list = %d %q; queries %#v", response.Code, response.Body.String(), repository.tokenQueries)
+	}
+	for _, query := range []string{"?expiring_within_days=0", "?expiring_within_days=366", "?expiring_within_days=soon", "?expiring_within_days=7&expiring_within_days=8"} {
+		if response := list(query); response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid_request") {
+			t.Fatalf("%s = %d %q", query, response.Code, response.Body.String())
+		}
+	}
+	if len(repository.tokenQueries) != 1 {
+		t.Fatalf("rejected windows reached the store: %#v", repository.tokenQueries)
+	}
+}
+
+func TestMeReportsTheSessionLimitsForTheBrowser(t *testing.T) {
+	handler := management.NewHandler(&recordingConfigWriter{}, nil, nil)
+	expiresAt := time.Date(2026, 11, 5, 18, 30, 0, 0, time.UTC)
+	me := func(principal humanauth.Principal) map[string]any {
+		request := httptest.NewRequest(http.MethodGet, "https://configra.test/v1/me", nil)
+		request = request.WithContext(humanauth.WithPrincipal(request.Context(), principal))
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		var body map[string]any
+		if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil {
+			t.Fatalf("/v1/me = %d %q", response.Code, response.Body.String())
+		}
+		return body
+	}
+	body := me(humanauth.Principal{Subject: "admin-1", Role: humanauth.RoleAdmin,
+		SessionExpiresAt: expiresAt, SessionIdleTimeout: 30 * time.Minute, SessionLifetime: 8 * time.Hour})
+	if body["session_expires_at"] != "2026-11-05T18:30:00Z" || body["session_idle_timeout_seconds"] != float64(1800) || body["session_lifetime_seconds"] != float64(28800) {
+		t.Fatalf("session fields = %#v", body)
+	}
+	body = me(humanauth.Principal{Subject: "admin-1", Role: humanauth.RoleAdmin})
+	for _, field := range []string{"session_expires_at", "session_idle_timeout_seconds", "session_lifetime_seconds"} {
+		if _, present := body[field]; present {
+			t.Fatalf("%s present without a session: %#v", field, body)
+		}
+	}
 }

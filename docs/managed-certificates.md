@@ -4,6 +4,21 @@ Administration now manages both certificate authorities and client certificates.
 The CA is for Configra machine-client mTLS; it does not replace the independent
 HTTPS certificate used by the Management or API listener.
 
+## Find and copy identifiers
+
+Open **Administration → Certificate authorities**. Each card shows the full
+**CA ID** and **Fingerprint SHA-256**; click either value to copy it. CA ID is the
+identifier used by `configractl deployment-credential issue --authority` and the
+API `authority_id` field; the fingerprint
+identifies the public certificate. Neither requires opening an API URL.
+Client-certificate rows likewise expose a copyable fingerprint and issuer CA ID.
+Copy success/failure is explicit; if the browser denies clipboard access, select
+the visible full value and copy it manually.
+
+管理端“证书颁发机构”卡片直接显示完整 CA ID 和 SHA-256 指纹，点击即可复制，并显示
+成功或失败反馈。客户端证书列表也可复制指纹及所属 CA ID。签发时会预览到期日期和
+有效天数；CA 更早到期时明确提示实际有效期会被缩短。
+
 ## Lifecycle
 
 Create a CA, save its initial backup ZIP, then issue a client credential. The CA

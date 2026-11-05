@@ -19,7 +19,7 @@ func TestInventoryStorageRejectsUnboundedQueries(t *testing.T) {
 		if _, err := store.ListVaultItems(context.Background(), VaultQuery{InventoryQuery: query}); !errors.Is(err, ErrValidation) {
 			t.Fatal(err)
 		}
-		if _, err := store.ListTokens(context.Background(), query); !errors.Is(err, ErrValidation) {
+		if _, err := store.ListTokens(context.Background(), TokenQuery{InventoryQuery: query}); !errors.Is(err, ErrValidation) {
 			t.Fatal(err)
 		}
 		if _, err := store.ListClientCertificates(context.Background(), query); !errors.Is(err, ErrValidation) {

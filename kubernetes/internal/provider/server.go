@@ -73,14 +73,14 @@ func (server *Server) Mount(ctx context.Context, request *pb.MountRequest) (*pb.
 	if err != nil {
 		return nil, status.Error(codes.Unavailable, "Configra objects could not be fetched")
 	}
-	if len(materials) != len(objects) {
+	if source.ValidateMaterials(objects, materials) != nil {
 		return nil, status.Error(codes.Internal, "incomplete Configra response")
 	}
 	result := &pb.MountResponse{}
 	total := 0
-	for index, material := range materials {
+	for _, material := range materials {
 		total += len(material.Bytes)
-		if material.Path != objects[index].Path || material.Version == "" || total > source.MaxContentBytes {
+		if material.Version == "" || total > source.MaxContentBytes {
 			return nil, status.Error(codes.Internal, "invalid Configra response")
 		}
 		result.Files = append(result.Files, &pb.File{Path: material.Path, Mode: mode, Contents: material.Bytes})

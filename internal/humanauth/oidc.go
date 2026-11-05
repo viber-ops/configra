@@ -29,6 +29,9 @@ const (
 	sessionIdentitySubject = "oidc.identity.subject"
 	sessionIdentityEmail   = "oidc.identity.email"
 	sessionIdentityRole    = "oidc.identity.role"
+	sessionIdentityMFA     = "oidc.identity.mfa"
+	sessionIdentityPolicy  = "oidc.identity.policy"
+	sessionIdentitySID     = "oidc.identity.sid"
 )
 
 type RoleSource string
@@ -49,19 +52,22 @@ type OIDCConfig struct {
 	ViewerValues          []string
 	AdminValues           []string
 	AllowInsecureLoopback bool
+	SessionAuthority      SessionAuthority
 }
 
 type OIDC struct {
-	sessions   *scs.SessionManager
-	provider   *oidc.Provider
-	verifier   *oidc.IDTokenVerifier
-	oauth      oauth2.Config
-	roles      RoleMapper
-	roleSource RoleSource
-	clientID   string
-	publicHost string
-	httpClient *http.Client
-	now        func() time.Time
+	sessions       *scs.SessionManager
+	provider       *oidc.Provider
+	verifier       *oidc.IDTokenVerifier
+	logoutVerifier *oidc.IDTokenVerifier
+	oauth          oauth2.Config
+	roles          RoleMapper
+	roleSource     RoleSource
+	clientID       string
+	publicHost     string
+	httpClient     *http.Client
+	now            func() time.Time
+	authority      SessionAuthority
 }
 
 func NewOIDC(ctx context.Context, config OIDCConfig, sessions *scs.SessionManager) (*OIDC, error) {
@@ -100,6 +106,9 @@ func NewOIDC(ctx context.Context, config OIDCConfig, sessions *scs.SessionManage
 		sessions: sessions,
 		provider: provider,
 		verifier: provider.Verifier(&oidc.Config{ClientID: config.ClientID}),
+		// Logout Tokens need no exp claim; signature/issuer/audience are still
+		// verified here, with mandatory iat and optional exp checked by the route.
+		logoutVerifier: provider.Verifier(&oidc.Config{ClientID: config.ClientID, SkipExpiryCheck: true}),
 		oauth: oauth2.Config{
 			ClientID:     config.ClientID,
 			ClientSecret: config.ClientSecret,
@@ -113,6 +122,7 @@ func NewOIDC(ctx context.Context, config OIDCConfig, sessions *scs.SessionManage
 		publicHost: redirect.Host,
 		httpClient: httpClient,
 		now:        time.Now,
+		authority:  config.SessionAuthority,
 	}, nil
 }
 
@@ -120,6 +130,8 @@ func (authentication *OIDC) Handler(next http.Handler) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /auth/login", authentication.login)
 	mux.HandleFunc("GET /auth/callback", authentication.callback)
+	// This OP-to-RP callback authenticates its signed Logout Token, not cookies.
+	mux.HandleFunc("POST /auth/backchannel-logout", authentication.backchannelLogout)
 	csrf := http.NewCrossOriginProtection()
 	mux.Handle("POST /auth/logout", csrf.Handler(http.HandlerFunc(authentication.logout)))
 	mux.HandleFunc("/auth/logout", func(response http.ResponseWriter, _ *http.Request) {
@@ -208,14 +220,32 @@ func (authentication *OIDC) callback(response http.ResponseWriter, request *http
 		return
 	}
 	principal := Principal{
-		Issuer:  idToken.Issuer,
-		Subject: idToken.Subject,
-		Email:   claimString(idClaims, "email"),
-		Role:    role,
+		Issuer:      idToken.Issuer,
+		Subject:     idToken.Subject,
+		Email:       claimString(idClaims, "email"),
+		Role:        role,
+		MFAVerified: verifiedMFA(idClaims),
 	}
 	if principal.ActorID() == "" || len(principal.ActorID()) > 255 {
 		writeOIDCError(response, http.StatusUnauthorized, "authentication_failed")
 		return
+	}
+	sid := claimString(idClaims, "sid")
+	if len(sid) > 1024 {
+		writeOIDCError(response, http.StatusUnauthorized, "authentication_failed")
+		return
+	}
+	policy := SessionPolicy{}
+	if authentication.authority != nil {
+		policy, err = authentication.authority.SessionPolicy(ctx, principal.Issuer, principal.Subject, sid)
+		if err != nil {
+			writeOIDCError(response, http.StatusServiceUnavailable, "authentication_unavailable")
+			return
+		}
+		if policy.Blocked || (!policy.RevokedAt.IsZero() && !idToken.IssuedAt.After(policy.RevokedAt)) {
+			writeOIDCError(response, http.StatusUnauthorized, "session_revoked")
+			return
+		}
 	}
 	if err := authentication.sessions.RenewToken(ctx); err != nil {
 		writeOIDCError(response, http.StatusServiceUnavailable, "authentication_unavailable")
@@ -225,6 +255,9 @@ func (authentication *OIDC) callback(response http.ResponseWriter, request *http
 	authentication.sessions.Put(ctx, sessionIdentitySubject, principal.Subject)
 	authentication.sessions.Put(ctx, sessionIdentityEmail, principal.Email)
 	authentication.sessions.Put(ctx, sessionIdentityRole, string(principal.Role))
+	authentication.sessions.Put(ctx, sessionIdentityMFA, principal.MFAVerified)
+	authentication.sessions.Put(ctx, sessionIdentityPolicy, policy.stamp())
+	authentication.sessions.Put(ctx, sessionIdentitySID, sid)
 	response.Header().Set("Cache-Control", "no-store")
 	http.Redirect(response, request, safeReturnTo(returnTo), http.StatusSeeOther)
 }
@@ -232,17 +265,46 @@ func (authentication *OIDC) callback(response http.ResponseWriter, request *http
 func (authentication *OIDC) attachPrincipal(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		principal := Principal{
-			Issuer:  authentication.sessions.GetString(request.Context(), sessionIdentityIssuer),
-			Subject: authentication.sessions.GetString(request.Context(), sessionIdentitySubject),
-			Email:   authentication.sessions.GetString(request.Context(), sessionIdentityEmail),
-			Role:    Role(authentication.sessions.GetString(request.Context(), sessionIdentityRole)),
+			Issuer:      authentication.sessions.GetString(request.Context(), sessionIdentityIssuer),
+			Subject:     authentication.sessions.GetString(request.Context(), sessionIdentitySubject),
+			Email:       authentication.sessions.GetString(request.Context(), sessionIdentityEmail),
+			Role:        Role(authentication.sessions.GetString(request.Context(), sessionIdentityRole)),
+			MFAVerified: authentication.sessions.GetBool(request.Context(), sessionIdentityMFA),
 		}
 		if principal.Subject != "" && len(principal.ActorID()) <= 255 &&
 			(principal.Role == RoleViewer || principal.Role == RoleAdmin) {
+			if authentication.authority != nil {
+				policy, err := authentication.authority.SessionPolicy(request.Context(), principal.Issuer, principal.Subject, authentication.sessions.GetString(request.Context(), sessionIdentitySID))
+				if err != nil {
+					writeOIDCError(response, http.StatusServiceUnavailable, "authentication_unavailable")
+					return
+				}
+				if !policy.accepts(authentication.sessions.GetString(request.Context(), sessionIdentityPolicy)) {
+					if authentication.sessions.Destroy(request.Context()) != nil {
+						writeOIDCError(response, http.StatusServiceUnavailable, "authentication_unavailable")
+						return
+					}
+					writeOIDCError(response, http.StatusUnauthorized, "session_revoked")
+					return
+				}
+			}
+			principal.SessionExpiresAt = authentication.sessions.Deadline(request.Context()).UTC()
+			principal.SessionIdleTimeout = authentication.sessions.IdleTimeout
+			principal.SessionLifetime = authentication.sessions.Lifetime
 			request = request.WithContext(WithPrincipal(request.Context(), principal))
 		}
 		next.ServeHTTP(response, request)
 	})
+}
+
+// Only the verified ID Token can attest MFA. Role/UserInfo claims and request
+// headers are never authentication evidence. An absent or malformed amr fails closed.
+func verifiedMFA(claims map[string]json.RawMessage) bool {
+	var methods []string
+	if json.Unmarshal(claims["amr"], &methods) != nil {
+		return false
+	}
+	return slices.Contains(methods, "mfa") || (slices.Contains(methods, "pwd") && slices.Contains(methods, "otp"))
 }
 
 func validAuthorizedParty(audience []string, claims map[string]json.RawMessage, clientID string) bool {

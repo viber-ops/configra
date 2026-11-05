@@ -7,19 +7,22 @@ import (
 	"fmt"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 
 	"github.com/viber-ops/configra/internal/vaultcrypto"
 )
 
 const (
-	schemaVersion     = 2
+	schemaVersion     = 4
 	migrationLockName = "configra:schema-migration"
 )
 
 type Store struct {
-	db       *sql.DB
-	provider *vaultcrypto.LocalKeyProvider
+	machineReads machineStatements
+	db           *sql.DB
+	provider     *vaultcrypto.LocalKeyProvider
+	// Set once at startup; zero uses the 90-day policy.
+	WriteTokenMaxTTL time.Duration
 }
 
 func OpenManagement(ctx context.Context, dsn string, provider *vaultcrypto.LocalKeyProvider) (*Store, error) {
@@ -63,7 +66,7 @@ func open(ctx context.Context, dsn string, provider *vaultcrypto.LocalKeyProvide
 }
 
 func (store *Store) Close() error {
-	return store.db.Close()
+	return errors.Join(store.machineReads.close(), store.db.Close())
 }
 
 func (store *Store) Ping(ctx context.Context) error {
@@ -95,11 +98,16 @@ func initializeOrVerify(ctx context.Context, db *sql.DB, provider *vaultcrypto.L
 	}
 	defer releaseMigrationLock(connection)
 
-	if _, err := connection.ExecContext(ctx, schemaMigrationsDDL); err != nil {
-		return fmt.Errorf("create schema migration table: %w", err)
-	}
 	var version uint64
-	if err := connection.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
+	err = connection.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version)
+	var missing *mysql.MySQLError
+	if errors.As(err, &missing) && missing.Number == 1146 {
+		if _, err := connection.ExecContext(ctx, schemaMigrationsDDL); err != nil {
+			return fmt.Errorf("create schema migration table: %w", err)
+		}
+		err = connection.QueryRowContext(ctx, "SELECT COALESCE(MAX(version),0) FROM schema_migrations").Scan(&version)
+	}
+	if err != nil {
 		return fmt.Errorf("read schema version: %w", err)
 	}
 	if version > schemaVersion {
@@ -118,6 +126,22 @@ func initializeOrVerify(ctx context.Context, db *sql.DB, provider *vaultcrypto.L
 		}
 		if _, err := connection.ExecContext(ctx, "INSERT INTO schema_migrations (version) VALUES (2)"); err != nil {
 			return fmt.Errorf("record schema v2: %w", err)
+		}
+	}
+	if version > 0 && version < 3 {
+		if err := applySchemaV3(ctx, connection); err != nil {
+			return err
+		}
+		if _, err := connection.ExecContext(ctx, "INSERT INTO schema_migrations (version) VALUES (3)"); err != nil {
+			return fmt.Errorf("record schema v3: %w", err)
+		}
+	}
+	if version > 0 && version < 4 {
+		if err := applySchemaV4(ctx, connection); err != nil {
+			return err
+		}
+		if _, err := connection.ExecContext(ctx, "INSERT INTO schema_migrations (version) VALUES (4)"); err != nil {
+			return errors.New("record schema v4")
 		}
 	}
 	return nil
@@ -159,6 +183,12 @@ func initializeSchema(ctx context.Context, connection *sql.Conn, provider *vault
 		}
 	}
 	if err := applySchemaV2(ctx, connection); err != nil {
+		return err
+	}
+	if err := applySchemaV3(ctx, connection); err != nil {
+		return err
+	}
+	if err := applySchemaV4(ctx, connection); err != nil {
 		return err
 	}
 	sentinel, err := provider.CreateSentinel()

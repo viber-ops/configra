@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"strings"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -34,6 +36,8 @@ type AccessRecord struct {
 }
 
 type AuditRecord struct {
+	FieldKey     string    `json:"field_key,omitempty"`
+	SourceIP     string    `json:"source_ip,omitempty"`
 	ID           string    `json:"id"`
 	Time         time.Time `json:"time"`
 	EventType    string    `json:"event_type"`
@@ -138,7 +142,7 @@ func (store *Store) AppendAudits(ctx context.Context, events []AuditRecord) erro
 		INSERT INTO audit_events (
 			schema_version, event_id, event_time, event_type, operation_id,
 			actor_type, actor_id, action, outcome, environment, request_id, error_code,
-			namespace, resource_type, resource, revision, delivery_attempt
+			namespace, resource_type, resource, revision, delivery_attempt, source_ip, field_key
 		)
 	`)
 	if err != nil {
@@ -149,7 +153,7 @@ func (store *Store) AppendAudits(ctx context.Context, events []AuditRecord) erro
 		if err := batch.Append(
 			uint16(1), event.ID, event.Time.UTC(), event.EventType, event.OperationID,
 			event.ActorType, event.ActorID, event.Action, event.Outcome, event.Environment, event.RequestID, event.ErrorCode,
-			event.Namespace, event.ResourceType, event.Resource, event.Revision, event.Attempt,
+			event.Namespace, event.ResourceType, event.Resource, event.Revision, event.Attempt, event.SourceIP, event.FieldKey,
 		); err != nil {
 			return errors.New("encode Audit Event batch")
 		}
@@ -196,7 +200,7 @@ func (store *Store) ListAudits(ctx context.Context, query AuditQuery) (AuditPage
 	statement := `
 		SELECT event_id, event_time, event_type, operation_id, request_id, error_code,
 		       actor_type, actor_id, action, outcome, environment,
-		       namespace, resource_type, resource, revision, delivery_attempt
+		       namespace, resource_type, resource, revision, delivery_attempt, source_ip, field_key
 		FROM audit_events
 	`
 	arguments := make([]any, 0, 3)
@@ -204,7 +208,7 @@ func (store *Store) ListAudits(ctx context.Context, query AuditQuery) (AuditPage
 		statement += `
 		WHERE positionCaseInsensitiveUTF8(
 			concat(event_id, ' ', operation_id, ' ', request_id, ' ', error_code, ' ', actor_id, ' ', action, ' ', outcome, ' ',
-			       environment, ' ', namespace, ' ', resource_type, ' ', resource), ?
+			       environment, ' ', namespace, ' ', resource_type, ' ', resource, ' ', source_ip, ' ', field_key), ?
 		) > 0
 		`
 		arguments = append(arguments, query.Search)
@@ -225,7 +229,7 @@ func (store *Store) ListAudits(ctx context.Context, query AuditQuery) (AuditPage
 		if err := rows.Scan(
 			&record.ID, &record.Time, &record.EventType, &record.OperationID, &record.RequestID, &record.ErrorCode,
 			&record.ActorType, &record.ActorID, &record.Action, &record.Outcome, &record.Environment,
-			&record.Namespace, &record.ResourceType, &record.Resource, &record.Revision, &record.Attempt,
+			&record.Namespace, &record.ResourceType, &record.Resource, &record.Revision, &record.Attempt, &record.SourceIP, &record.FieldKey,
 		); err != nil {
 			return AuditPage{}, fmt.Errorf("scan Audit Event: %w", err)
 		}
@@ -253,6 +257,8 @@ func DecodeAuditOutbox(event mysqlstore.OutboxEvent) (AuditRecord, error) {
 	}
 	var payload struct {
 		Time           time.Time          `json:"time"`
+		SourceIP       string             `json:"source_ip,omitempty"`
+		FieldKey       string             `json:"field_key,omitempty"`
 		OperationID    string             `json:"operation_id"`
 		RequestID      string             `json:"request_id,omitempty"`
 		ErrorCode      string             `json:"error_code,omitempty"`
@@ -276,6 +282,9 @@ func DecodeAuditOutbox(event mysqlstore.OutboxEvent) (AuditRecord, error) {
 	if payload.Outcome == mysqlstore.OutcomeValidationFailed {
 		// Older writers retained invalid input in identity slots. It is omitted
 		// when recovering those records; value-bearing/unknown JSON fields still fail.
+		if !auditNamedKey(payload.FieldKey) {
+			payload.FieldKey = ""
+		}
 		if !auditNamedKey(payload.EnvironmentKey) {
 			payload.EnvironmentKey = ""
 		}
@@ -296,7 +305,10 @@ func DecodeAuditOutbox(event mysqlstore.OutboxEvent) (AuditRecord, error) {
 		return AuditRecord{}, errors.New("invalid Audit request identity")
 	}
 	if payload.Time.IsZero() || payload.OperationID != event.OperationID ||
-		(payload.Actor.Type != "user" && payload.Actor.Type != "system") || payload.Actor.ID == "" || len(payload.Actor.ID) > 255 ||
+		(payload.SourceIP != "" && net.ParseIP(payload.SourceIP) == nil) ||
+		(payload.FieldKey != "" && !auditNamedKey(payload.FieldKey)) ||
+		(payload.Actor.Type == "token" && !validAuditResourceKey("api_token", payload.Actor.ID)) ||
+		(payload.Actor.Type != "user" && payload.Actor.Type != "system" && payload.Actor.Type != "token") || payload.Actor.ID == "" || len(payload.Actor.ID) > 255 ||
 		payload.Action == "" || len(payload.Action) > 128 || payload.ResourceType == "" || len(payload.ResourceType) > 64 ||
 		len(payload.NamespaceKey) > 63 || (payload.ResourceType == "vault_item" && payload.NamespaceKey == "" && payload.Outcome != mysqlstore.OutcomeValidationFailed) ||
 		(!(payload.Outcome == mysqlstore.OutcomeValidationFailed && payload.ResourceKey == "") && !validAuditResourceKey(payload.ResourceType, payload.ResourceKey)) || !validAuditOutcome(payload.Outcome) ||
@@ -305,6 +317,8 @@ func DecodeAuditOutbox(event mysqlstore.OutboxEvent) (AuditRecord, error) {
 	}
 	return AuditRecord{
 		ID:           hex.EncodeToString(event.ID[:]),
+		SourceIP:     payload.SourceIP,
+		FieldKey:     payload.FieldKey,
 		Time:         payload.Time.UTC(),
 		EventType:    event.Type,
 		OperationID:  payload.OperationID,
@@ -324,8 +338,12 @@ func DecodeAuditOutbox(event mysqlstore.OutboxEvent) (AuditRecord, error) {
 }
 
 func validAuditResourceKey(resourceType, key string) bool {
-	if resourceType == "client_certificate" || resourceType == "certificate_authority" || resourceType == "api_token" {
-		length := map[string]int{"client_certificate": 64, "certificate_authority": 32, "api_token": 16}[resourceType]
+	if resourceType == "release" {
+		a, b, ok := strings.Cut(key, ".")
+		return ok && auditNamedKey(a) && auditNamedKey(b)
+	}
+	if resourceType == "client_certificate" || resourceType == "certificate_authority" || resourceType == "api_token" || resourceType == "identity" || resourceType == "outbox_archive" {
+		length := map[string]int{"client_certificate": 64, "certificate_authority": 32, "api_token": 16, "identity": 64, "outbox_archive": 64}[resourceType]
 		decoded, err := hex.DecodeString(key)
 		return err == nil && len(key) == length && len(decoded)*2 == length
 	}
@@ -405,4 +423,6 @@ var clickHouseSchemaV1 = []string{
 	ORDER BY (event_time, event_id)`,
 	`ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS request_id String DEFAULT ''`,
 	`ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS error_code LowCardinality(String) DEFAULT ''`,
+	`ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS source_ip String DEFAULT ''`,
+	`ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS field_key String DEFAULT ''`,
 }

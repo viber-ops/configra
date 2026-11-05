@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/viber-ops/configra/internal/configdoc"
+	"github.com/viber-ops/configra/internal/machine"
 )
 
 type Actor struct {
@@ -54,9 +55,10 @@ type ConfigWarning struct {
 }
 
 type ConfigCommitResult struct {
-	Outcome  Outcome         `json:"outcome"`
-	Revision uint64          `json:"revision,omitempty"`
-	Warnings []ConfigWarning `json:"warnings,omitempty"`
+	Outcome  Outcome              `json:"outcome"`
+	Revision uint64               `json:"revision,omitempty"`
+	Warnings []ConfigWarning      `json:"warnings,omitempty"`
+	Failure  *ConfigMutationError `json:"failure,omitempty"`
 }
 
 func (store *Store) CommitConfig(ctx context.Context, request ConfigCommit) (ConfigCommitResult, error) {
@@ -70,6 +72,7 @@ type configCommitMeta struct {
 	SourceEnvironmentID []byte
 	SourceRevision      uint64
 	RequestDigest       *[sha256.Size]byte
+	LegacyRequestDigest *[sha256.Size]byte
 	CreateOnly          bool
 }
 
@@ -78,7 +81,7 @@ func (meta configCommitMeta) event(suffix string) string {
 }
 
 func (store *Store) commitConfig(ctx context.Context, request ConfigCommit, meta configCommitMeta) (ConfigCommitResult, error) {
-	if !validOperationID(request.OperationID) || !validActor(request.Actor) {
+	if !validOperationID(request.OperationID) || !validScopedActor(request.Actor) {
 		return ConfigCommitResult{}, ErrValidation
 	}
 	digest := configCommitDigest(request, meta)
@@ -89,6 +92,9 @@ func (store *Store) commitConfig(ctx context.Context, request ConfigCommit, meta
 	var document configdoc.Document
 	if validationErr == nil {
 		document, validationErr = configdoc.Canonicalize(request.Format, request.Content)
+		if validationErr != nil {
+			validationErr = &ConfigMutationError{Field: "content", Reason: "config_document_invalid"}
+		}
 	}
 
 	transaction, err := store.db.BeginTx(ctx, nil)
@@ -96,26 +102,33 @@ func (store *Store) commitConfig(ctx context.Context, request ConfigCommit, meta
 		return ConfigCommitResult{}, fmt.Errorf("begin Config Commit: %w", err)
 	}
 	defer transaction.Rollback()
-	replayed, replay, err := beginOperation(ctx, transaction, request.OperationID, digest, request.Actor)
+	token, err := authorizeScopedWrite(ctx, transaction, request.Actor, request.EnvironmentKey, request.ConfigKey, "")
+	if err != nil {
+		return ConfigCommitResult{}, err
+	}
+	if request.Actor.Type == "token" {
+		if meta.Action != "commit" {
+			return ConfigCommitResult{}, machine.ErrForbidden
+		}
+		for _, reference := range document.References {
+			if !token.AllowsNamespace(reference.NamespaceKey) {
+				return ConfigCommitResult{}, machine.ErrForbidden
+			}
+		}
+	}
+	var compatible [][sha256.Size]byte
+	if meta.LegacyRequestDigest != nil {
+		compatible = append(compatible, *meta.LegacyRequestDigest)
+	}
+	replayed, replay, err := beginOperation(ctx, transaction, request.OperationID, digest, request.Actor, compatible...)
 	if err != nil {
 		return ConfigCommitResult{}, err
 	}
 	if replayed {
-		var previous ConfigCommitResult
-		if err := json.Unmarshal(replay.Response, &previous); err != nil || previous.Outcome != replay.Outcome {
-			return ConfigCommitResult{}, errors.New("existing Operation failed integrity validation")
-		}
-		return previous, outcomeError(previous.Outcome)
+		return replayConfigResult(replay)
 	}
 	if validationErr != nil {
-		result := ConfigCommitResult{Outcome: OutcomeValidationFailed}
-		if err := finishConfigOperation(ctx, transaction, request, meta, result, meta.event("validation_failed"), false); err != nil {
-			return ConfigCommitResult{}, err
-		}
-		if err := transaction.Commit(); err != nil {
-			return ConfigCommitResult{}, fmt.Errorf("commit Config validation Audit: %w", err)
-		}
-		return result, withCommittedAudit(fmt.Errorf("%w: %v", ErrValidation, validationErr))
+		return finishConfigFailure(ctx, transaction, request, meta, OutcomeValidationFailed, meta.event("validation_failed"), validationErr)
 	}
 
 	var environmentID []byte
@@ -123,7 +136,7 @@ func (store *Store) commitConfig(ctx context.Context, request ConfigCommit, meta
 		SELECT id FROM environments WHERE resource_key = ? AND archived_at IS NULL
 	`, request.EnvironmentKey).Scan(&environmentID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return finishConfigFailure(ctx, transaction, request, meta, OutcomeValidationFailed, meta.event("validation_failed"), ErrValidation)
+		return finishConfigFailure(ctx, transaction, request, meta, OutcomeValidationFailed, meta.event("validation_failed"), &ConfigMutationError{Field: "target_environment", Reason: "target_environment_unavailable"})
 	}
 	if err != nil {
 		return ConfigCommitResult{}, fmt.Errorf("read Config Environment: %w", err)
@@ -134,13 +147,13 @@ func (store *Store) commitConfig(ctx context.Context, request ConfigCommit, meta
 		return ConfigCommitResult{}, err
 	}
 	if found && meta.CreateOnly {
-		return finishConfigFailure(ctx, transaction, request, meta, OutcomeConflict, meta.event("conflict"), ErrConflict)
+		return finishConfigFailure(ctx, transaction, request, meta, OutcomeConflict, meta.event("conflict"), &ConfigMutationError{Field: "target_config", Reason: "clone_target_exists"})
 	}
 	if archived {
-		return finishConfigFailure(ctx, transaction, request, meta, OutcomeValidationFailed, meta.event("validation_failed"), ErrValidation)
+		return finishConfigFailure(ctx, transaction, request, meta, OutcomeValidationFailed, meta.event("validation_failed"), &ConfigMutationError{Field: "target_config", Reason: "config_archived"})
 	}
 	if !found && request.ExpectedRevision != 0 {
-		return finishConfigFailure(ctx, transaction, request, meta, OutcomeConflict, meta.event("conflict"), ErrConflict)
+		return finishConfigFailure(ctx, transaction, request, meta, OutcomeConflict, meta.event("conflict"), &ConfigMutationError{Field: "expected_target_revision", Reason: "target_revision_changed"})
 	}
 	if !found {
 		configID, err = randomID()
@@ -154,18 +167,22 @@ func (store *Store) commitConfig(ctx context.Context, request ConfigCommit, meta
 		}
 	}
 
-	currentRevision, currentContent, err := lockCurrentConfig(ctx, transaction, configID, environmentID)
+	currentRevision, currentContent, currentFormat, err := lockCurrentConfig(ctx, transaction, configID, environmentID)
 	if err != nil {
 		return ConfigCommitResult{}, err
 	}
 	if request.ExpectedRevision != currentRevision {
-		return finishConfigFailure(ctx, transaction, request, meta, OutcomeConflict, meta.event("conflict"), ErrConflict)
+		reason := "target_revision_changed"
+		if request.ExpectedRevision == 0 {
+			reason = "target_config_exists"
+		}
+		return finishConfigFailure(ctx, transaction, request, meta, OutcomeConflict, meta.event("conflict"), &ConfigMutationError{Field: "expected_target_revision", Reason: reason})
 	}
 	warnings, err := configWarnings(ctx, transaction, environmentID, document.References)
 	if err != nil {
 		return ConfigCommitResult{}, err
 	}
-	if currentRevision > 0 && bytes.Equal(currentContent, document.Content) {
+	if currentRevision > 0 && currentFormat == request.Format && bytes.Equal(currentContent, document.Content) {
 		result := ConfigCommitResult{Outcome: OutcomeNoChange, Revision: currentRevision, Warnings: warnings}
 		if err := finishConfigOperation(ctx, transaction, request, meta, result, meta.event("no_change"), false); err != nil {
 			return ConfigCommitResult{}, err
@@ -222,11 +239,14 @@ func (store *Store) commitConfig(ctx context.Context, request ConfigCommit, meta
 }
 
 func validateConfigCommit(request ConfigCommit) error {
-	if !validResourceKey(request.EnvironmentKey) || !validResourceKey(request.ConfigKey) {
-		return errors.New("invalid Resource Key")
+	if !validResourceKey(request.EnvironmentKey) {
+		return &ConfigMutationError{Field: "target_environment", Reason: "target_environment_invalid"}
+	}
+	if !validResourceKey(request.ConfigKey) {
+		return &ConfigMutationError{Field: "target_config", Reason: "target_config_invalid"}
 	}
 	if request.ConfigName == "" || len(request.ConfigName) > 255 {
-		return errors.New("Config display name is required and must not exceed 255 bytes")
+		return &ConfigMutationError{Field: "name", Reason: "config_name_invalid"}
 	}
 	return nil
 }
@@ -256,6 +276,7 @@ func beginOperation(
 	operationID string,
 	digest [sha256.Size]byte,
 	actor Actor,
+	compatibleDigests ...[sha256.Size]byte,
 ) (bool, operationReplay, error) {
 	result, err := transaction.ExecContext(ctx, `
 		INSERT INTO operations (operation_id, request_sha256, actor_type, actor_id, outcome)
@@ -280,7 +301,11 @@ func beginOperation(
 	`, operationID).Scan(&storedDigest, &outcome, &response); err != nil {
 		return false, operationReplay{}, fmt.Errorf("read existing Operation: %w", err)
 	}
-	if !bytes.Equal(storedDigest, digest[:]) {
+	matches := bytes.Equal(storedDigest, digest[:])
+	for _, compatible := range compatibleDigests {
+		matches = matches || bytes.Equal(storedDigest, compatible[:])
+	}
+	if !matches {
 		return false, operationReplay{}, ErrOperationReuse
 	}
 	if outcome == "pending" || len(response) == 0 {
@@ -309,7 +334,7 @@ func lockCurrentConfig(
 	transaction *sql.Tx,
 	configID []byte,
 	environmentID []byte,
-) (uint64, []byte, error) {
+) (uint64, []byte, configdoc.Format, error) {
 	var revision uint64
 	err := transaction.QueryRowContext(ctx, `
 		SELECT current_revision
@@ -318,19 +343,20 @@ func lockCurrentConfig(
 		FOR UPDATE
 	`, configID, environmentID).Scan(&revision)
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, nil, nil
+		return 0, nil, "", nil
 	}
 	if err != nil {
-		return 0, nil, fmt.Errorf("lock current Config Revision: %w", err)
+		return 0, nil, "", fmt.Errorf("lock current Config Revision: %w", err)
 	}
 	var content []byte
+	var format configdoc.Format
 	if err := transaction.QueryRowContext(ctx, `
-		SELECT content FROM config_revisions
+		SELECT content, format FROM config_revisions
 		WHERE config_id = ? AND environment_id = ? AND revision = ?
-	`, configID, environmentID, revision).Scan(&content); err != nil {
-		return 0, nil, fmt.Errorf("read current Config content: %w", err)
+	`, configID, environmentID, revision).Scan(&content, &format); err != nil {
+		return 0, nil, "", fmt.Errorf("read current Config content: %w", err)
 	}
-	return revision, content, nil
+	return revision, content, format, nil
 }
 
 func configWarnings(
@@ -393,6 +419,10 @@ func finishConfigFailure(
 	resultErr error,
 ) (ConfigCommitResult, error) {
 	result := ConfigCommitResult{Outcome: outcome}
+	var issue *ConfigMutationError
+	if errors.As(resultErr, &issue) {
+		result.Failure = issue
+	}
 	if err := finishConfigOperation(ctx, transaction, request, meta, result, eventType, false); err != nil {
 		return ConfigCommitResult{}, err
 	}
@@ -435,6 +465,7 @@ func nullableRevision(value uint64) any {
 }
 
 type mutationEvent struct {
+	FieldKey       string
 	Type           string
 	Action         string
 	EnvironmentKey string
@@ -471,6 +502,8 @@ func finishOperation(
 	}
 	payload := struct {
 		Time           time.Time `json:"time"`
+		SourceIP       string    `json:"source_ip,omitempty"`
+		FieldKey       string    `json:"field_key,omitempty"`
 		OperationID    string    `json:"operation_id"`
 		Actor          Actor     `json:"actor"`
 		Action         string    `json:"action"`
@@ -482,6 +515,8 @@ func finishOperation(
 		Revision       uint64    `json:"revision,omitempty"`
 	}{
 		Time:           time.Now().UTC(),
+		SourceIP:       auditSourceIP(ctx),
+		FieldKey:       event.FieldKey,
 		OperationID:    operationID,
 		Actor:          actor,
 		Action:         event.Action,
@@ -496,6 +531,9 @@ func finishOperation(
 	}
 	if outcome == OutcomeValidationFailed {
 		// Rejected input is not a resource identity and may contain secret text.
+		if !validResourceKey(payload.FieldKey) {
+			payload.FieldKey = ""
+		}
 		if !validResourceKey(payload.EnvironmentKey) {
 			payload.EnvironmentKey = ""
 		}
@@ -606,4 +644,8 @@ func validResourceKey(value string) bool {
 		}
 	}
 	return true
+}
+
+func validScopedActor(actor Actor) bool {
+	return validActor(actor) || (actor.Type == "token" && validTokenPublicID(actor.ID))
 }

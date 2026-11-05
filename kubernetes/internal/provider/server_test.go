@@ -19,6 +19,7 @@ type fakeSource struct {
 	calls       int
 	err         error
 	credentials map[string][]byte
+	materials   []source.Material
 }
 
 func (upstream *fakeSource) Read(_ context.Context, objects []source.Object, credentials map[string][]byte) ([]source.Material, error) {
@@ -30,7 +31,24 @@ func (upstream *fakeSource) Read(_ context.Context, objects []source.Object, cre
 	if upstream.err != nil {
 		return nil, upstream.err
 	}
+	if upstream.materials != nil {
+		return upstream.materials, nil
+	}
 	return []source.Material{{Path: objects[0].Path, Version: `"revision-2"`, Bytes: []byte("PORT: 8080\n")}}, nil
+}
+
+func TestProviderReturnsCompleteReleaseAndRejectsInconsistentVersion(t *testing.T) {
+	upstream := &fakeSource{materials: []source.Material{{Path: "app.yaml", Version: "release-1", Bytes: []byte("version: 1\n")}, {Path: "secrets/key.pem", Version: "release-1", Bytes: []byte("private-key"), Sensitive: true}}}
+	server := &provider.Server{Source: upstream}
+	request := &pb.MountRequest{Attributes: `{"objects":"- type: release\n  environment: prod\n  config: app\n  path: .\n"}`, Secrets: `{}`}
+	result, err := server.Mount(context.Background(), request)
+	if err != nil || len(result.Files) != 2 || len(result.ObjectVersion) != 2 || result.Files[1].Path != "secrets/key.pem" {
+		t.Fatal("incomplete release mount", err)
+	}
+	upstream.materials[1].Version = "release-2"
+	if result, err := server.Mount(context.Background(), request); err == nil || result != nil {
+		t.Fatal("provider returned mixed release")
+	}
 }
 
 func TestProviderWireContractAndRestrictedPaths(t *testing.T) {

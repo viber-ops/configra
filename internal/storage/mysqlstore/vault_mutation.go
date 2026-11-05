@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/viber-ops/configra/internal/machine"
 	"github.com/viber-ops/configra/internal/vaultcrypto"
 	"github.com/viber-ops/configra/internal/vaultdoc"
 )
@@ -28,6 +29,7 @@ type VaultCommit struct {
 	action           string
 	successEvent     string
 	restoredFrom     uint64
+	scoped           *ScopedVaultWrite
 }
 
 type VaultRestore struct {
@@ -46,7 +48,7 @@ type VaultCommitResult struct {
 }
 
 func (store *Store) CommitVault(ctx context.Context, request VaultCommit) (VaultCommitResult, error) {
-	if !validOperationID(request.OperationID) || !validActor(request.Actor) {
+	if !validOperationID(request.OperationID) || !validScopedActor(request.Actor) {
 		return VaultCommitResult{}, ErrValidation
 	}
 	digest := vaultCommitDigest(request)
@@ -64,6 +66,14 @@ func (store *Store) CommitVault(ctx context.Context, request VaultCommit) (Vault
 	defer transaction.Rollback()
 	if err := store.lockMasterKey(ctx, transaction, false); err != nil {
 		return VaultCommitResult{}, err
+	}
+	if request.Actor.Type == "token" {
+		if request.scoped == nil {
+			return VaultCommitResult{}, machine.ErrForbidden
+		}
+		if _, err := authorizeScopedWrite(ctx, transaction, request.Actor, request.scoped.EnvironmentKey, "", request.NamespaceKey); err != nil {
+			return VaultCommitResult{}, err
+		}
 	}
 	replayed, replay, err := beginOperation(ctx, transaction, request.OperationID, digest, request.Actor)
 	if err != nil {
@@ -87,8 +97,36 @@ func (store *Store) CommitVault(ctx context.Context, request VaultCommit) (Vault
 	if archived {
 		return finishVaultFailure(ctx, transaction, request, OutcomeValidationFailed, "vault.archived", ErrValidation)
 	}
-	if request.ExpectedRevision != currentRevision {
+	creatingVariant := false
+	if request.scoped != nil && found && request.ExpectedRevision == 0 && (request.scoped.Action == "put_item" || request.scoped.Action == "put_field") {
+		var bound bool
+		if err := transaction.QueryRowContext(ctx, `SELECT EXISTS (
+			SELECT 1 FROM vault_revision_variant_environments AS binding JOIN environments AS environment ON environment.id = binding.environment_id
+			WHERE binding.item_id = ? AND binding.revision = ? AND environment.resource_key = ?
+		)`, itemID, currentRevision, request.scoped.EnvironmentKey).Scan(&bound); err != nil {
+			return VaultCommitResult{}, err
+		}
+		// Zero creates a missing Environment Variant without disclosing any other
+		// Environment's values or requiring a read of its global Item revision.
+		creatingVariant = !bound
+	}
+	if request.ExpectedRevision != currentRevision && !creatingVariant {
 		return finishVaultFailure(ctx, transaction, request, OutcomeConflict, "vault.conflict", ErrConflict)
+	}
+	if request.scoped != nil {
+		if err := store.prepareScopedVault(ctx, transaction, &request, found, itemID, currentRevision); err != nil {
+			return VaultCommitResult{}, err
+		}
+		if request.scoped.Action == "delete_item" {
+			result := VaultCommitResult{Outcome: OutcomeSuccess, Revision: currentRevision}
+			if err := finishVaultOperation(ctx, transaction, request, result, "vault.archived", true); err != nil {
+				return VaultCommitResult{}, err
+			}
+			if err := transaction.Commit(); err != nil {
+				return VaultCommitResult{}, errors.New("commit scoped Vault deletion")
+			}
+			return result, nil
+		}
 	}
 	if !found {
 		itemID, err = randomID()
@@ -132,6 +170,9 @@ func (store *Store) CommitVault(ctx context.Context, request VaultCommit) (Vault
 		variantIDs[index] = variant.ID
 	}
 	slices.Sort(variantIDs)
+	if request.Actor.Type == "token" {
+		variantIDs = nil
+	}
 
 	if currentRevision > 0 {
 		currentPlaintext, currentStructure, err := store.currentVaultSnapshot(ctx, transaction, itemID, currentRevision)
@@ -568,10 +609,26 @@ func finishVaultOperation(
 		action = "commit"
 	}
 	return finishOperation(ctx, transaction, request.OperationID, request.Actor, result.Outcome, result.Revision, result, mutationEvent{
-		Type:         eventType,
-		Action:       "vault." + action,
-		NamespaceKey: request.NamespaceKey,
-		ResourceType: "vault_item",
-		ResourceKey:  request.ItemKey,
+		Type:           eventType,
+		Action:         "vault." + action,
+		NamespaceKey:   request.NamespaceKey,
+		ResourceType:   "vault_item",
+		ResourceKey:    request.ItemKey,
+		EnvironmentKey: request.scopedEnvironment(),
+		FieldKey:       request.scopedField(),
 	}, notify)
+}
+
+func (request VaultCommit) scopedEnvironment() string {
+	if request.scoped != nil {
+		return request.scoped.EnvironmentKey
+	}
+	return ""
+}
+
+func (request VaultCommit) scopedField() string {
+	if request.scoped != nil {
+		return request.scoped.Field.Key
+	}
+	return ""
 }

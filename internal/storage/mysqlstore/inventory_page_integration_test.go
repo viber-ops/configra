@@ -96,7 +96,7 @@ func TestInventoryPagesBoundParentsAndAssociationsAndPatchOnlyNamedGrants(t *tes
 					t.Fatalf("unbounded vault associations: %d", len(item.EnvironmentKeys))
 				}
 			}
-			tokens, err := store.ListTokens(ctx, query)
+			tokens, err := store.ListTokens(ctx, TokenQuery{InventoryQuery: query})
 			if err != nil || len(tokens.Items) != wanted || tokens.Total != size {
 				t.Fatalf("tokens limit=%d offset=%d: count=%d total=%d err=%v", limit, offset, len(tokens.Items), tokens.Total, err)
 			}
@@ -149,7 +149,7 @@ func TestInventoryPagesBoundParentsAndAssociationsAndPatchOnlyNamedGrants(t *tes
 			t.Fatalf("composite search in %s: %#v, %v", namespace, page, err)
 		}
 	}
-	if page, err := store.ListTokens(ctx, InventoryQuery{Limit: 1, Search: primary.PublicID}); err != nil || page.Total != 1 || len(page.Items) != 1 || page.Items[0].PublicID != primary.PublicID {
+	if page, err := store.ListTokens(ctx, TokenQuery{InventoryQuery: InventoryQuery{Limit: 1, Search: primary.PublicID}}); err != nil || page.Total != 1 || len(page.Items) != 1 || page.Items[0].PublicID != primary.PublicID {
 		t.Fatalf("Token search: %#v, %v", page, err)
 	}
 	if page, err := store.ListEnvironments(ctx, EnvironmentQuery{InventoryQuery: InventoryQuery{Limit: 1, Search: strings.ToUpper(keys[size-1])}}); err != nil || page.Total != 1 || len(page.Items) != 1 || page.Items[0].Key != keys[size-1] {
@@ -184,7 +184,7 @@ func TestInventoryPagesBoundParentsAndAssociationsAndPatchOnlyNamedGrants(t *tes
 	if _, err = store.SetTokenEnvironments(ctx, patch); !errors.Is(err, ErrValidation) {
 		t.Fatalf("overlapping patch: %v", err)
 	}
-	grants, err := store.ListTokens(ctx, InventoryQuery{Limit: 1, Key: primary.PublicID})
+	grants, err := store.ListTokens(ctx, TokenQuery{InventoryQuery: InventoryQuery{Limit: 1, Key: primary.PublicID}})
 	if err != nil || len(grants.Items) != 1 || grants.Items[0].EnvironmentCount != size-2 || grants.Items[0].EnvironmentKeys[0] != keys[1] {
 		t.Fatalf("unrelated grants changed: %#v, %v", grants, err)
 	}
@@ -205,7 +205,7 @@ func TestInventoryPagesBoundParentsAndAssociationsAndPatchOnlyNamedGrants(t *tes
 			t.Fatal(err)
 		}
 	}
-	grants, err = store.ListTokens(ctx, InventoryQuery{Limit: 1, Key: primary.PublicID})
+	grants, err = store.ListTokens(ctx, TokenQuery{InventoryQuery: InventoryQuery{Limit: 1, Key: primary.PublicID}})
 	if err != nil || len(grants.Items) != 1 || grants.Items[0].EnvironmentCount != size-4 || grants.Items[0].EnvironmentKeys[0] != keys[3] {
 		t.Fatalf("concurrent patches lost an independent edit: %#v, %v", grants, err)
 	}

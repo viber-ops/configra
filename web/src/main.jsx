@@ -1,7 +1,11 @@
-import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import React, { lazy, Suspense, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AuthorityManagement, CertificateManagement, authorityLabel } from './security/Certificates.jsx';
-import { request, managementError, ActionError, useInventory, InventoryPagination } from './management.jsx';
+import { Sessions, sessionLabel } from './security/Sessions.jsx';
+import { request, managementError, ActionError, useInventory, InventoryPagination, useMutation } from './management.jsx';
+import { validateTokenInput, tokenValidationMessage } from './token-validation.js';
+import { CopyValue } from './CopyValue.jsx';
+import { Expiration, ExpiryInput, useCurrentTime } from './security/Lifetime.jsx';
 import './styles.css';
 import './workspace.css';
 
@@ -21,6 +25,29 @@ const messages = {
     administration: 'Administration',
     administrationBody: 'Manage application access, client identities, and workspace integrations.',
     allowWithoutMTLS: 'Allow this token without mTLS',
+    writeScoped: 'Scoped write token',
+    configAllowlist: 'Config key allowlist',
+    namespaceAllowlist: 'Vault namespace allowlist',
+    scopeHint: 'Comma-separated resource keys; leave empty to allow all in the selected environments.',
+    writeTokenHint: 'Requires verified OIDC MFA, mTLS and an explicit expiry. Scopes are immutable; rotate to change them.',
+    tokenValidationFallback: 'Check the token name, selected environments, expiry and key allowlists. The server did not identify a field.',
+    writeTokenDeadline: 'Maximum {days} days. Latest expiry: {date} (your local time).',
+    tokenValidation_write_token_expiry_limit: 'Must be within {days} days of issuance. Choose an earlier date.',
+    tokenValidation_expiry_required: 'Choose an expiry for this write token.',
+    tokenValidation_expiry_in_past: 'Choose a future date and time.',
+    tokenValidation_expiry_invalid: 'Enter a valid date and time.',
+    tokenValidation_scope_key_invalid: 'Use 1–63 ASCII characters: start with a–z, then use a–z, 0–9, underscore (_) or hyphen (-). Separate keys with commas.',
+    tokenValidation_scope_keys_duplicate: 'Remove duplicate keys.',
+    tokenValidation_scope_keys_too_many: 'Use at most 256 keys.',
+    tokenValidation_environment_required: 'Select at least one environment.',
+    tokenValidation_environment_keys_invalid: 'Select valid, distinct environment keys.',
+    tokenValidation_environment_unavailable: 'An environment is unavailable or archived. Refresh the list and select again.',
+    tokenValidation_token_name_invalid: 'Enter a token name of 1–255 UTF-8 bytes.',
+    tokenValidation_token_kind_invalid: 'Select a supported token type.',
+    tokenValidation_write_token_requires_user: 'A signed-in administrator must issue write tokens.',
+    tokenValidation_write_token_requires_mtls: 'Write tokens require mTLS.',
+    tokenValidation_expiry_conflicts_with_never: 'Clear the expiry or turn off Never expires.',
+    mfa_required: 'MFA evidence is required. Sign in again after enabling MFA at your identity provider.',
     allowedEnvironments: 'Allowed environments',
     apiTokens: 'API tokens',
     audit: 'Audit',
@@ -37,6 +64,30 @@ const messages = {
     cancel: 'Cancel',
     clone: 'Clone',
     cloneComplete: 'Clone created.',
+    copyToEnvironment: 'Copy to environment',
+    copyFirstVersion: 'Create first version in {environment}',
+    copyComplete: 'Copied to {target} · v{revision}',
+    openTargetConfig: 'Open target config',
+    copyExplanation: 'Create v1 of this Config in an environment where it has no version yet. An existing target must be reviewed using Merge or Replace.',
+    cloneExplanation: 'Clone requires a new Config key across all environments. To keep the same key in another environment, use Copy to environment.',
+    copySavedRevision: 'Copies saved v{revision}. Unsaved edits and revision history are excluded. Vault references stay as references and resolve using the target environment.',
+    refreshTransferPreview: 'Refresh preview',
+    clone_target_exists: 'This Config key already exists in Configra. Choose a new key for Clone, or use Copy to environment to keep the same key.',
+    target_config_exists: 'The target environment already has this Config. Open it and use Merge or Replace to review the change before writing.',
+    target_revision_changed: 'The target changed since this operation was prepared. Refresh and review the latest version before submitting again.',
+    target_environment_unavailable: 'The target environment does not exist or is archived. Select an active environment, or restore it from Environments.',
+    source_revision_unavailable: 'The source revision is unavailable, or its Config or environment is archived. Refresh the source and select an available revision.',
+    target_revision_unavailable: 'The target revision is unavailable, or its Config or environment is archived. Refresh the target; use Copy to environment if it has no version yet.',
+    config_archived: 'This Config is archived. Restore it from Configs before writing a new version.',
+    config_format_mismatch: 'Merge requires the source and target to use the same format. Convert the format first, or review a Replace operation.',
+    config_document_invalid: 'The Config could not be processed. Check its YAML/JSON syntax, duplicate keys, Vault reference syntax and size limit (5 MiB).',
+    source_revision_required: 'Select a source revision before continuing.',
+    target_revision_required: 'Select a target revision. To create its first version, use Copy to environment.',
+    source_environment_invalid: 'Select a valid source environment.',
+    target_environment_invalid: 'Select a valid target environment.',
+    source_config_invalid: 'The source Config key is invalid. Use 1–63 lowercase letters, digits, underscores or hyphens, starting with a letter.',
+    target_config_invalid: 'The target Config key is invalid. Use 1–63 lowercase letters, digits, underscores or hyphens, starting with a letter.',
+    config_name_invalid: 'Enter a Config display name of at most 255 UTF-8 bytes.',
     cloneConfig: 'Clone config',
     compare: 'Compare',
     compareDragHint: 'Drag any two revisions into Source and Target. Use one Environment for history, or two for a cross-Environment comparison.',
@@ -75,6 +126,23 @@ const messages = {
     next: 'Next',
     pagination: 'Config pagination',
     copy: 'Copy',
+    copyConfiguration: 'Config content',
+    copyContent: 'Copy content',
+    resetToSource: 'Reset to source',
+    templateFromExisting: 'Template from existing config',
+    loadTemplate: 'Load template',
+    editedCopyNote: 'Edited content is saved as a new first version, not as a copy of the source revision.',
+    alreadyHasConfig: 'already has this Config',
+    preflightChecking: 'Checking against {environment}…',
+    preflightClear: 'Checked against {environment}: every Vault reference has a value there.',
+    preflightWarnings: 'Checked against {environment}: these Vault references have no value there yet.',
+    showChanges: 'Show changes',
+    hideChanges: 'Hide changes',
+    editedCopy: 'Edited',
+    newFromTemplate: 'New Config from this template',
+    cloneEditHint: 'Clone copies the saved content exactly. To change the content, start a new Config from this template.',
+    replaceWithTemplate: 'Replace the editor content with {template}',
+    templateLoaded: 'Loaded {template}.',
     copyReference: 'Copy reference',
     copyValue: 'Copy value',
     copyRequestID: 'Copy Request ID',
@@ -185,6 +253,36 @@ const messages = {
     registerCertificate: 'Register certificate',
     revoke: 'Revoke',
     revoked: 'Revoked',
+    replaceToken: 'Replace',
+    replaceTitle: 'Replace {name}',
+    replaceExplanation: 'This creates a new Token with the same access. {name} keeps working until you revoke it, so its consumers can move over first.',
+    replaceScopesFixed: 'A replacement keeps the same Environments and scopes. Create a new Token to change them.',
+    replaceLoadingGrants: 'Loading the current Environments…',
+    finishReplacement: 'Finish replacing {name}',
+    replacementStepDeploy: 'Give the new Token to every consumer of {name}, for example its Kubernetes Secret, and check that they read with it.',
+    replacementStepRevoke: 'Then revoke {name}. The Access page lists recent reads by Token ID.',
+    replacementCascade: 'Revoking a write-scoped Token also revokes every deployment credential it issued. Issue new ones with configractl using the new Token.',
+    revokeOldToken: 'Revoke {name}',
+    confirmRevokeOld: 'Confirm revoke {name}',
+    oldTokenRevoked: '{name} was revoked.',
+    tokenExpired: 'Expired',
+    expiringSoon: 'Expires soon',
+    statusExpiring: 'Expiring within {days} days',
+    expiringTokens: 'API Tokens expiring soon',
+    expiringTokensEmpty: 'No API Token expires within {days} days.',
+    viewAllExpiring: 'View all {count}',
+    sessionEnded: 'Your session has ended. Sign in again to continue; anything you have not saved stays on this page.',
+    unauthenticated: 'Your session has ended. Sign in again, then retry; nothing was saved.',
+    unauthorized: 'Your session has ended. Sign in again, then retry; nothing was saved.',
+    session_revoked: 'Your session was ended by an administrator. Sign in again, then retry; nothing was saved.',
+    signInNewTab: 'Sign in in a new tab',
+    sessionCheckAgain: 'I have signed in',
+    sessionIdleWarning: 'You will be signed out in about two minutes because of inactivity.',
+    staySignedIn: 'Stay signed in',
+    sessionLifetimeWarning: 'Your session ends at {time}. Sign in again to keep working without interruption.',
+    signedInElsewhere: 'You are signed in. Return to your Configra tab to continue, or close this one.',
+    openConfigra: 'Open Configra',
+    adminSessionLimits: '{idle} idle · {lifetime} maximum',
     tokenOnlyAllowed: 'Token-only allowed',
     tokenName: 'Token name',
     targetConfig: 'Target config',
@@ -197,6 +295,8 @@ const messages = {
     textType: 'Text',
     tokenOnce: 'This token will not be shown again.',
     noResources: 'No managed resources yet.',
+    noMatchingResults: 'Nothing matches the current search and status filter.',
+    resourceKeyInUse: 'This resource key is already in use. Choose another key, or open the existing resource.',
     noFileSelected: 'No file selected',
     overview: 'Overview',
     overviewBody: 'Service status, recent changes, and configuration gaps.',
@@ -231,7 +331,7 @@ const messages = {
     savedRevision: 'Saved as v{revision}.',
     unsavedChanges: 'You have unsaved changes. Discard them?',
     revision_conflict: 'This resource changed after you opened it. Review the latest Revision and try again.',
-    validation_failed: 'The input is invalid. Review the highlighted fields and try again.',
+    validation_failed: 'The server rejected these values. Check the input and use the Request ID to locate the failure.',
     request_too_large: 'The request exceeds the supported size limit.',
     service_unavailable: 'The service is temporarily unavailable. Try again shortly.',
     operation_id_reused: 'This operation identifier was already used for different content.',
@@ -349,6 +449,29 @@ const messages = {
     administration: '管理',
     administrationBody: '管理业务凭据并只读查看运行信息；冷启动 YAML 不会在这里编辑。',
     allowWithoutMTLS: '允许此 Token 不使用 mTLS',
+    writeScoped: '有范围的写令牌',
+    configAllowlist: 'Config 资源键白名单',
+    namespaceAllowlist: 'Vault namespace 白名单',
+    scopeHint: '用逗号分隔资源键；留空允许所选环境内的全部资源。',
+    writeTokenHint: '需要 OIDC MFA 证明、mTLS 和明确过期时间。范围不可修改；变更时请轮换令牌。',
+    tokenValidationFallback: '请检查 Token 名称、所选环境、过期时间和 key 白名单。服务端未提供具体字段。',
+    writeTokenDeadline: '最长 {days} 天。最晚可选：{date}（你的本地时间）。',
+    tokenValidation_write_token_expiry_limit: '不得超过签发后 {days} 天，请选择更早的日期。',
+    tokenValidation_expiry_required: '写令牌必须设置过期时间。',
+    tokenValidation_expiry_in_past: '请选择未来的日期和时间。',
+    tokenValidation_expiry_invalid: '请输入有效的日期和时间。',
+    tokenValidation_scope_key_invalid: '每个 key 为 1–63 个 ASCII 字符，以小写 a–z 开头，其后仅允许 a–z、0–9、下划线 (_) 和半角连字符 (-)。多个 key 用半角逗号分隔。',
+    tokenValidation_scope_keys_duplicate: '请移除重复的 key。',
+    tokenValidation_scope_keys_too_many: '最多允许 256 个 key。',
+    tokenValidation_environment_required: '请至少选择一个环境。',
+    tokenValidation_environment_keys_invalid: '请选择有效且不重复的环境 key。',
+    tokenValidation_environment_unavailable: '某个环境不存在或已归档，请刷新列表并重新选择。',
+    tokenValidation_token_name_invalid: '请输入名称，UTF-8 编码长度需为 1–255 字节。',
+    tokenValidation_token_kind_invalid: '请选择支持的令牌类型。',
+    tokenValidation_write_token_requires_user: '写令牌必须由已登录的管理员签发。',
+    tokenValidation_write_token_requires_mtls: '写令牌必须使用 mTLS。',
+    tokenValidation_expiry_conflicts_with_never: '请清空过期时间，或关闭“永不过期”。',
+    mfa_required: '需要 MFA 证明。请在身份提供方启用 MFA 后重新登录。',
     allowedEnvironments: '允许访问的 Environment',
     apiTokens: 'API Token',
     audit: '审计日志',
@@ -361,10 +484,34 @@ const messages = {
     noMatchingAudits: '没有符合当前搜索条件的审计记录。',
     auditPagination: '审计日志分页',
     pageNumber: '第 {page} 页',
-    archive: 'Archive',
+    archive: '归档',
     cancel: '取消',
     clone: '克隆',
     cloneComplete: '克隆已创建。',
+    copyToEnvironment: '复制到环境',
+    copyFirstVersion: '在 {environment} 创建首个版本',
+    copyComplete: '已复制到 {target} · v{revision}',
+    openTargetConfig: '打开目标 Config',
+    copyExplanation: '在尚未配置此 Config 的环境创建 v1。目标已有版本时，请通过合并或替换查看差异后再提交。',
+    cloneExplanation: '克隆需要一个在所有环境中都未使用过的新 Config 键名。如需保留同名配置，请使用“复制到环境”。',
+    copySavedRevision: '复制已保存的 v{revision}，不包含未保存的编辑和历史版本。Vault 引用保持不变，在目标环境解析为对应的值。',
+    refreshTransferPreview: '刷新预览',
+    clone_target_exists: '此 Config 键名已在 Configra 中存在。克隆请使用新键名；保留同名配置请使用“复制到环境”。',
+    target_config_exists: '目标环境已有此 Config。请打开目标，通过“合并”或“替换”查看差异后再写入。',
+    target_revision_changed: '目标配置在准备操作后已发生变化。请刷新并核对最新版本，再重新提交。',
+    target_environment_unavailable: '目标环境不存在或已归档。请选择有效环境，或先在环境页面恢复它。',
+    source_revision_unavailable: '源版本不存在，或源 Config、环境已归档。请刷新源配置并选择有效版本。',
+    target_revision_unavailable: '目标版本不存在，或目标 Config、环境已归档。请刷新目标；若还没有版本，请使用“复制到环境”。',
+    config_archived: '此 Config 已归档。请先在 Config 列表恢复，再写入新版本。',
+    config_format_mismatch: '合并要求源和目标使用相同格式。请先转换格式，或通过“替换”查看变更。',
+    config_document_invalid: '无法处理此 Config。请检查 YAML/JSON 语法、重复键、Vault 引用格式，以及是否超过 5 MiB。',
+    source_revision_required: '请先选择源版本。',
+    target_revision_required: '请选择目标版本；若要创建首个版本，请使用“复制到环境”。',
+    source_environment_invalid: '请选择有效的源环境。',
+    target_environment_invalid: '请选择有效的目标环境。',
+    source_config_invalid: '源 Config 键名无效：需以小写字母开头，由 1–63 位小写字母、数字、下划线或连字符组成。',
+    target_config_invalid: '目标 Config 键名无效：需以小写字母开头，由 1–63 位小写字母、数字、下划线或连字符组成。',
+    config_name_invalid: '请填写 Config 显示名，长度不能超过 255 个 UTF-8 字节。',
     cloneConfig: '克隆 Config',
     compare: '对比',
     compareDragHint: '把任意两个 Revision 拖入 Source 和 Target；同一 Environment 是历史对比，不同 Environment 是跨环境对比。',
@@ -374,7 +521,7 @@ const messages = {
     diffAdded: '新增',
     diffRemoved: '删除',
     configured: '已配置',
-    confirmArchive: '确认 Archive',
+    confirmArchive: '确认归档',
     confirmRestore: '确认恢复 v{revision}',
     configs: '配置',
     configBody: '同一个 Config 身份，在每个所在 Environment 中拥有独立的 Revision 历史。',
@@ -403,6 +550,23 @@ const messages = {
     next: '下一页',
     pagination: 'Config 分页',
     copy: '复制',
+    copyConfiguration: '配置内容',
+    copyContent: '复制内容',
+    resetToSource: '还原为源内容',
+    templateFromExisting: '从已有配置导入模板',
+    loadTemplate: '加载模板',
+    editedCopyNote: '编辑后的内容将作为新的首个版本保存，而不是源 Revision 的副本。',
+    alreadyHasConfig: '已有此 Config',
+    preflightChecking: '正在按 {environment} 检查…',
+    preflightClear: '已按 {environment} 检查：所有 Vault 引用在该环境都有值。',
+    preflightWarnings: '已按 {environment} 检查：以下 Vault 引用在该环境尚无值。',
+    showChanges: '查看改动',
+    hideChanges: '收起改动',
+    editedCopy: '编辑后',
+    newFromTemplate: '以此为模板新建 Config',
+    cloneEditHint: '克隆会原样复制已保存的内容。如需修改内容，请以此为模板新建 Config。',
+    replaceWithTemplate: '用 {template} 替换编辑器内容',
+    templateLoaded: '已加载 {template}。',
     copyReference: '复制引用',
     copyValue: '复制值',
     copyRequestID: '复制 Request ID',
@@ -513,6 +677,36 @@ const messages = {
     registerCertificate: '登记证书',
     revoke: '吊销',
     revoked: '已吊销',
+    replaceToken: '替换',
+    replaceTitle: '替换 {name}',
+    replaceExplanation: '将创建一个权限相同的新 Token。在您吊销之前，{name} 仍然有效，可先让使用方切换到新 Token。',
+    replaceScopesFixed: '替换会保留相同的 Environment 与范围；如需更改，请新建 Token。',
+    replaceLoadingGrants: '正在读取当前的 Environment…',
+    finishReplacement: '完成替换 {name}',
+    replacementStepDeploy: '将新 Token 下发给 {name} 的所有使用方（例如其 Kubernetes Secret），并确认它们已使用新 Token 读取。',
+    replacementStepRevoke: '随后吊销 {name}。访问记录页面可按 Token ID 查看最近的读取。',
+    replacementCascade: '吊销写入范围 Token 会同时吊销其签发的所有部署凭据。请使用新 Token 通过 configractl 重新签发。',
+    revokeOldToken: '吊销 {name}',
+    confirmRevokeOld: '确认吊销 {name}',
+    oldTokenRevoked: '{name} 已吊销。',
+    tokenExpired: '已过期',
+    expiringSoon: '即将过期',
+    statusExpiring: '{days} 天内过期',
+    expiringTokens: '即将过期的 API Token',
+    expiringTokensEmpty: '{days} 天内没有将过期的 API Token。',
+    viewAllExpiring: '查看全部 {count} 个',
+    sessionEnded: '会话已结束。请重新登录后继续；本页尚未保存的内容会保留。',
+    unauthenticated: '会话已结束。请重新登录后重试；本次未保存任何内容。',
+    unauthorized: '会话已结束。请重新登录后重试；本次未保存任何内容。',
+    session_revoked: '管理员已结束您的会话。请重新登录后重试；本次未保存任何内容。',
+    signInNewTab: '在新标签页登录',
+    sessionCheckAgain: '我已重新登录',
+    sessionIdleWarning: '由于长时间未操作，约两分钟后将退出登录。',
+    staySignedIn: '保持登录',
+    sessionLifetimeWarning: '会话将于 {time} 结束。重新登录可避免工作中断。',
+    signedInElsewhere: '已登录。请回到原来的 Configra 标签页继续，或关闭此页。',
+    openConfigra: '打开 Configra',
+    adminSessionLimits: '空闲 {idle} · 最长 {lifetime}',
     tokenOnlyAllowed: '允许仅 Token',
     tokenName: 'Token 名称',
     targetConfig: '目标 Config',
@@ -525,6 +719,8 @@ const messages = {
     textType: '文本',
     tokenOnce: '此 Token 不会再次显示。',
     noResources: '还没有托管资源。',
+    noMatchingResults: '没有符合当前搜索和状态筛选的结果。',
+    resourceKeyInUse: '此资源键已被使用。请换一个键名，或打开已有资源。',
     noFileSelected: '尚未选择文件',
     overview: '概览',
     overviewBody: '查看服务状态、最近变更和配置缺口。',
@@ -559,14 +755,14 @@ const messages = {
     savedRevision: '已保存为 v{revision}。',
     unsavedChanges: '有尚未保存的更改，确定放弃吗？',
     revision_conflict: '打开后资源已发生变化，请查看最新 Revision 后重试。',
-    validation_failed: '输入不合法，请检查标记的字段后重试。',
+    validation_failed: '服务端拒绝了这些输入，请检查填写内容，并使用 Request ID 定位原因。',
     request_too_large: '请求超过系统支持的大小限制。',
     service_unavailable: '服务暂时不可用，请稍后重试。',
     operation_id_reused: '此操作标识已用于其他内容。',
     unresolved_vault_reference: '此 Environment 中有 Vault 引用无法解析。',
     crypto_integrity_failure: 'Vault 完整性校验失败，请联系管理员。',
     not_found: '请求的资源已不存在。',
-    statusActive: '启用',
+    statusActive: '使用中',
     statusArchived: '已归档',
     secretType: 'Secret',
     sourceConfig: '源 Config',
@@ -742,24 +938,28 @@ function RevisionPagination({ history, t }) {
 }
 
 
-function EnvironmentSelect({ label, value, onChange, name, required = false, scope = '', includeArchived = false, emptyLabel, t }) {
+// `inline` puts the select and its search on one row; use it only where the picker has room.
+function EnvironmentSelect({ label, value, onChange, name, required = false, scope = '', includeArchived = false, emptyLabel, unavailable, unavailableLabel, inline = false, t }) {
   const [search, setSearch] = useState('');
   const collection = useInventory(`/v1/environments?include_archived=${includeArchived}&q=${encodeURIComponent(search)}${scope}`);
-  return <div className="environment-select">
+  return <div className={inline ? 'environment-select environment-select-inline' : 'environment-select'}>
     <label><span>{label}</span><select aria-label={label} name={name} required={required} value={value} onChange={event => onChange(event.target.value)}>
       <option value="">{emptyLabel || t.environment}</option>
       {value && !collection.items.some(item => item.key === value) && <option value={value}>{value}</option>}
-      {collection.items.map(item => <option key={item.key} value={item.key}>{item.display_name} · {item.key}</option>)}
+      {collection.items.map(item => {
+        const taken = unavailable?.has(item.key) && item.key !== value;
+        return <option key={item.key} value={item.key} disabled={taken}>{item.display_name} · {item.key}{taken ? ` · ${unavailableLabel}` : ''}</option>;
+      })}
     </select></label>
     <input type="search" aria-label={`${label} · ${t.search}`} placeholder={t.search} value={search} onChange={event => setSearch(event.target.value)} />
     <InventoryPagination collection={collection} t={t} hideSinglePage />
   </div>;
 }
 
-function EnvironmentChoices({ label, scope = '', checked, onChange, t }) {
+function EnvironmentChoices({ label, scope = '', checked, onChange, t, invalid = false, describedBy }) {
   const [search, setSearch] = useState('');
   const collection = useInventory(`/v1/environments?include_archived=true&q=${encodeURIComponent(search)}${scope}`);
-  return <fieldset className="vault-environment-picker"><legend>{label}</legend>
+  return <fieldset className="vault-environment-picker" aria-invalid={invalid || undefined} aria-describedby={describedBy}><legend>{label}</legend>
     <input type="search" aria-label={`${label} · ${t.search}`} placeholder={t.search} value={search} onChange={event => setSearch(event.target.value)} />
     <div className="choice-grid">{collection.items.map(environment => <label className={environment.archived ? 'choice-disabled' : ''} key={environment.key}>
       <input type="checkbox" checked={checked(environment)} disabled={environment.archived && !checked(environment)} aria-label={`${label} ${environment.display_name} ${environment.key}`} onChange={event => onChange(environment.key, event.target.checked)} />
@@ -842,7 +1042,7 @@ function replaceHashQuery(changes) {
   const [path, search = ''] = window.location.hash.slice(2).split('?');
   const query = new URLSearchParams(search);
   for (const [key, value] of Object.entries(changes)) {
-    if (value === '' || value == null || value === 1 || value === 'all') query.delete(key);
+    if (value === '' || value == null || value === 1 || (key === 'status' && value === 'active')) query.delete(key);
     else query.set(key, String(value));
   }
   const suffix = query.size ? `?${query}` : '';
@@ -888,6 +1088,89 @@ function ThemeButton({ theme, setTheme, t }) {
   );
 }
 
+const SESSION_IDLE_WARNING_MS = 2 * 60000;
+const SESSION_LIFETIME_WARNING_MS = 10 * 60000;
+
+function signInInNewTab() {
+  window.open(`/auth/login?${new URLSearchParams({ return_to: '/ui/?signed-in=1' })}`, 'configra-sign-in');
+}
+
+function sessionDuration(seconds, zh) {
+  if (seconds % 3600 === 0) return zh ? `${seconds / 3600} 小时` : `${seconds / 3600} h`;
+  return zh ? `${Math.round(seconds / 60)} 分钟` : `${Math.round(seconds / 60)} min`;
+}
+
+// Keeps the page when the Session ends: a 401 shows a banner instead of the sign-in page, sign-in
+// happens in another tab, and the identity is re-checked before the banner clears (ADR-0035).
+function SessionMonitor({ principal, t }) {
+  const [ended, setEnded] = useState(false);
+  const [lastActivity, setLastActivity] = useState(Date.now);
+  const [expiresAt, setExpiresAt] = useState(() => Date.parse(principal.session_expires_at) || 0);
+  const [now, setNow] = useState(Date.now);
+  const idleMs = (principal.session_idle_timeout_seconds || 0) * 1000;
+  const recheck = async () => {
+    try {
+      const me = await request('/v1/me');
+      if (me.issuer !== principal.issuer || me.subject !== principal.subject || me.role !== principal.role) {
+        window.location.reload();
+        return;
+      }
+      setExpiresAt(Date.parse(me.session_expires_at) || 0);
+      setLastActivity(Date.now());
+      setEnded(false);
+    } catch {
+      setEnded(true);
+    }
+  };
+  const recheckRef = useRef(recheck);
+  recheckRef.current = recheck;
+  useEffect(() => {
+    const end = () => setEnded(true);
+    const active = event => setLastActivity(current => Math.max(current, event.detail || Date.now()));
+    window.addEventListener('configra:session-ended', end);
+    window.addEventListener('configra:session-activity', active);
+    let channel = null;
+    try {
+      channel = new BroadcastChannel('configra-session');
+      channel.onmessage = event => { if (event.data === 'signed-in') recheckRef.current(); };
+    } catch { channel = null; }
+    const timer = window.setInterval(() => setNow(Date.now()), 15000);
+    return () => {
+      window.removeEventListener('configra:session-ended', end);
+      window.removeEventListener('configra:session-activity', active);
+      channel?.close();
+      window.clearInterval(timer);
+    };
+  }, []);
+  const idleDeadline = idleMs ? lastActivity + idleMs : 0;
+  const expired = (idleDeadline && now >= idleDeadline) || (expiresAt && now >= expiresAt);
+  if (ended || expired) {
+    return <div className="session-banner" role="alert"><p>{t.sessionEnded}</p><div className="row-actions">
+      <button className="primary-action compact-action" type="button" onClick={signInInNewTab}>{t.signInNewTab}</button>
+      <button type="button" onClick={recheck}>{t.sessionCheckAgain}</button>
+    </div></div>;
+  }
+  if (idleDeadline && now >= idleDeadline - SESSION_IDLE_WARNING_MS) {
+    return <div className="session-banner session-banner-notice" role="status"><p>{t.sessionIdleWarning}</p>
+      <button type="button" onClick={recheck}>{t.staySignedIn}</button></div>;
+  }
+  if (expiresAt && now >= expiresAt - SESSION_LIFETIME_WARNING_MS) {
+    const time = new Intl.DateTimeFormat(t.locale, { timeStyle: 'short' }).format(new Date(expiresAt));
+    return <div className="session-banner session-banner-notice" role="status"><p>{t.sessionLifetimeWarning.replace('{time}', time)}</p>
+      <button type="button" onClick={signInInNewTab}>{t.signInNewTab}</button></div>;
+  }
+  return null;
+}
+
+// The tab opened by "Sign in in a new tab" lands here: it tells the original tab and closes itself.
+function SignedInElsewhere({ t }) {
+  useEffect(() => {
+    try { const channel = new BroadcastChannel('configra-session'); channel.postMessage('signed-in'); channel.close(); } catch { /* the original tab can still re-check */ }
+    window.setTimeout(() => window.close(), 300);
+  }, []);
+  return <main className="signed-in-elsewhere"><Mark /><p>{t.signedInElsewhere}</p><a href="/ui/">{t.openConfigra}</a></main>;
+}
+
 function Login({ language, setLanguage, theme, setTheme, t }) {
   return (
     <main className="login-layout">
@@ -904,7 +1187,7 @@ function Login({ language, setLanguage, theme, setTheme, t }) {
           <h1>{t.loginTitle}</h1>
           <p>{t.loginBody}</p>
           <div className="login-action">
-            <a className="primary-action" href="/auth/login?return_to=/">{t.loginButton}<span aria-hidden="true">→</span></a>
+            <a className="primary-action" href="/auth/login?return_to=/" onClick={() => { try { if (window.location.hash.length > 2) sessionStorage.setItem('configra-return-hash', window.location.hash); } catch { /* optional */ } }}>{t.loginButton}<span aria-hidden="true">→</span></a>
             <small>{t.loginAuthHint}</small>
             <small><LicenseLink t={t} /></small>
           </div>
@@ -1040,7 +1323,8 @@ function Shell({ principal, language, setLanguage, theme, setTheme, t }) {
             <form action="/auth/logout" method="post"><button className="logout-button" type="submit">{t.signOut}</button></form>
           </div>
         </header>
-        {route === 'overview' && <Overview inventory={inventory} t={t} />}
+        <SessionMonitor principal={principal} t={t} />
+        {route === 'overview' && <Overview inventory={inventory} principal={principal} t={t} />}
         {route === 'environments' && currentRoute.segments.length >= 2
           ? <EnvironmentDetail environmentKey={currentRoute.segments[1]} t={t} />
           : route === 'environments' && <Environments principal={principal} t={t} />}
@@ -1052,7 +1336,7 @@ function Shell({ principal, language, setLanguage, theme, setTheme, t }) {
         {route === 'vault' && currentRoute.segments.length >= 3
           ? <div className="resource-explorer"><ResourceRail refresh={inventoryRevision} section="vault" selected={`${currentRoute.segments[1]}/${currentRoute.segments[2]}`} t={t} /><div className="resource-explorer-detail"><VaultDetail key={`${currentRoute.segments[1]}/${currentRoute.segments[2]}`} principal={principal} namespaceKey={currentRoute.segments[1]} itemKey={currentRoute.segments[2]} t={t} /></div></div>
           : route === 'vault' && <VaultItems principal={principal} filters={currentRoute.query} t={t} />}
-        {route === 'administration' && principal.role === 'admin' && <Administration t={t} />}
+        {route === 'administration' && principal.role === 'admin' && <Administration t={t} principal={principal} filters={currentRoute.query} />}
         {route === 'notifications' && principal.role === 'admin' && <Notifications t={t} />}
         {principal.role !== 'admin' && ['administration', 'notifications'].includes(route) && <Forbidden t={t} />}
         {route === 'access' && <AccessPage t={t} />}
@@ -1081,7 +1365,24 @@ function ResourceRail({ section, selected, refresh, t }) {
   </aside>;
 }
 
-function Overview({ inventory, t }) {
+function ExpiringTokens({ t }) {
+  const now = useCurrentTime();
+  const tokens = useInventory(`/v1/api-tokens?${new URLSearchParams({ status: 'active', expiring_within_days: String(TOKEN_EXPIRY_NOTICE_DAYS) })}`);
+  const soonest = [...tokens.items].sort((a, b) => Date.parse(a.expires_at) - Date.parse(b.expires_at)).slice(0, 5);
+  return <section className="panel overview-expiring" aria-labelledby="expiring-tokens-title">
+    <div className="section-heading"><h2 id="expiring-tokens-title">{t.expiringTokens}</h2>
+      {tokens.status === 'ready' && tokens.total > 0 && <a href="#/administration?tokens=expiring">{t.viewAllExpiring.replace('{count}', tokens.total)}</a>}</div>
+    {tokens.status === 'loading' && <p className="overview-empty">…</p>}
+    {tokens.status === 'failed' && <p className="overview-empty health-bad">{t.unavailable}</p>}
+    {tokens.status === 'ready' && tokens.total === 0 && <p className="overview-empty">{t.expiringTokensEmpty.replace('{days}', TOKEN_EXPIRY_NOTICE_DAYS)}</p>}
+    {soonest.length > 0 && <ul className="expiring-token-list">{soonest.map(token => <li key={token.public_id}>
+      <div><strong title={token.display_name}>{token.display_name}</strong><Expiration value={token.expires_at} now={now} t={t} /></div>
+      <a href={`#/administration?${new URLSearchParams({ replace: token.public_id })}`} aria-label={`${t.replaceToken} ${token.display_name}`}>{t.replaceToken}</a>
+    </li>)}</ul>}
+  </section>;
+}
+
+function Overview({ inventory, principal, t }) {
   const [operations, setOperations] = useState({ audit: 'loading', audits: [], ready: null });
   useEffect(() => {
     let live = true;
@@ -1132,6 +1433,7 @@ function Overview({ inventory, t }) {
           </section>
         </div>
         <aside className="overview-side">
+          {principal?.role === 'admin' && <ExpiringTokens t={t} />}
           <section className="panel overview-inventory">
             <div className="section-heading"><h2>{t.inventory}</h2></div>
             <nav aria-label={t.inventory}><a href="#/environments"><span>{t.environments}</span><strong>{inventory.status === 'ready' ? inventory.environments : '—'}</strong></a><a href="#/configs"><span>{t.configs}</span><strong>{inventory.status === 'ready' ? inventory.configs : '—'}</strong></a><a href="#/vault"><span>{t.vault}</span><strong>{inventory.status === 'ready' ? inventory.vault : '—'}</strong></a></nav>
@@ -1152,13 +1454,14 @@ function Environments({ principal, t }) {
   const [editing, setEditing] = useState('');
   const [confirming, setConfirming] = useState('');
   const [refresh, setRefresh] = useState(0);
-  const [mutationError, setMutationError] = useState('');
+  const [mutationError, setMutationError] = useState(null);
   const [search, setSearch] = useState('');
-  const state = useInventory(`/v1/environments?include_archived=true&q=${encodeURIComponent(search)}`, refresh);
+  const [statusFilter, setStatusFilter] = useState('active');
+  const state = useInventory(`/v1/environments?${new URLSearchParams({ status: statusFilter, q: search })}`, refresh);
 
   const create = async event => {
     event.preventDefault();
-    setMutationError('');
+    setMutationError(null);
     const data = new FormData(event.currentTarget);
     try {
       await request('/v1/environments', {
@@ -1168,8 +1471,8 @@ function Environments({ principal, t }) {
       });
       setCreating(false);
       setRefresh(value => value + 1);
-    } catch {
-      setMutationError(t.operationFailed);
+    } catch (error) {
+      setMutationError(createError(error, t, t.operationFailed));
     }
   };
   const rename = async event => {
@@ -1183,8 +1486,8 @@ function Environments({ principal, t }) {
       });
       setEditing('');
       setRefresh(value => value + 1);
-    } catch {
-      setMutationError(t.operationFailed);
+    } catch (error) {
+      setMutationError(managementError(error, t, t.operationFailed));
     }
   };
   const changeLifecycle = async (environment, action) => {
@@ -1192,24 +1495,27 @@ function Environments({ principal, t }) {
       await request(`/v1/environments/${encodeURIComponent(environment.key)}/${action}`, { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID() } });
       setConfirming('');
       setRefresh(value => value + 1);
-    } catch {
-      setMutationError(t.operationFailed);
+    } catch (error) {
+      setMutationError(managementError(error, t, t.operationFailed));
     }
   };
 
   return (
     <ResourcePage eyebrow="ENV / peer contexts" title={t.environments} body={t.environmentBody}
       action={principal.role === 'admin' && <button className="primary-action compact-action" type="button" onClick={() => setCreating(value => !value)}>{t.newEnvironment}</button>}>
-      <label>{t.search}<input type="search" value={search} onChange={event => setSearch(event.target.value)} /></label>
+      <div className="index-toolbar">
+        <label><span>{t.search}</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} /></label>
+        <StatusFilter value={statusFilter} onChange={setStatusFilter} t={t} />
+      </div>
       {creating && (
         <form className="create-panel" onSubmit={create}>
           <label>{t.resourceKey}<input name="key" required maxLength="63" pattern="[a-z][a-z0-9_-]{0,62}" autoComplete="off" /><small>{t.resourceKeyHint}</small></label>
           <label>{t.displayName}<input name="display_name" required maxLength="255" autoComplete="off" /></label>
           <button className="primary-action compact-action" type="submit">{t.createEnvironment}</button>
-          {mutationError && <span className="inline-error" role="alert">{mutationError}</span>}
+          <ActionError error={mutationError} t={t} />
         </form>
       )}
-      {(!creating || state.items.length > 0) && <CollectionState state={state} t={t}>
+      {(!creating || state.items.length > 0) && <CollectionState state={state} t={t} empty={search || statusFilter !== 'active' ? t.noMatchingResults : undefined}>
         <div className="table-frame environment-index-table"><table>
           <thead><tr><th>{t.environment}</th><th>{t.updated}</th><th>{t.status}</th>{principal.role === 'admin' && <th />}</tr></thead>
           <tbody>{state.items.map(environment => <tr key={environment.key}>
@@ -1230,7 +1536,7 @@ function Environments({ principal, t }) {
         </table></div>
       </CollectionState>}
       <InventoryPagination collection={state} t={t} />
-      {!creating && mutationError && <p className="inline-error" role="alert">{mutationError}</p>}
+      {!creating && mutationError && <p className="inline-error"><ActionError error={mutationError} t={t} /></p>}
     </ResourcePage>
   );
 }
@@ -1262,44 +1568,100 @@ function EnvironmentDetail({ environmentKey, t }) {
   </ResourcePage>;
 }
 
+// Searches every active Config (not the list's current page or filters). A template replaces the editor
+// only while the editor is empty or still holds an untouched template; otherwise the replacement is explicit.
+function ConfigTemplatePicker({ initialConfig = '', initialEnvironment = '', replaceable, onLoad, t }) {
+  const [search, setSearch] = useState('');
+  const [configKey, setConfigKey] = useState(initialConfig);
+  const [environmentKey, setEnvironmentKey] = useState(initialEnvironment);
+  const [fetched, setFetched] = useState({ status: 'idle' });
+  const configs = useInventory(`/v1/configs?${new URLSearchParams({ status: 'active', q: search })}`);
+  useEffect(() => {
+    if (!configKey || !environmentKey) { setFetched({ status: 'idle' }); return undefined; }
+    let live = true;
+    setFetched({ status: 'loading' });
+    request(`/v1/environments/${encodeURIComponent(environmentKey)}/configs/${encodeURIComponent(configKey)}`)
+      .then(template => live && setFetched({ status: 'ready', template, applied: false }))
+      .catch(failure => live && setFetched({ status: 'failed', error: managementError(failure, t, t.loadFailed) }));
+    return () => { live = false; };
+  }, [configKey, environmentKey]);
+  const apply = () => {
+    onLoad(fetched.template);
+    setFetched(current => ({ ...current, applied: true }));
+  };
+  useEffect(() => {
+    if (fetched.status === 'ready' && !fetched.applied && replaceable) apply();
+  }, [fetched, replaceable]);
+  const name = fetched.template ? `${fetched.template.environment_key}/${fetched.template.config_key}@v${fetched.template.revision}` : '';
+  return <div className="template-import-bar">
+    <div className="environment-select">
+      <label><span>{t.templateFromExisting}</span><select value={configKey} onChange={event => {
+        const nextKey = event.target.value;
+        setConfigKey(nextKey);
+        setEnvironmentKey(configs.items.find(candidate => candidate.key === nextKey)?.environments?.[0]?.key || '');
+      }}>
+        <option value="">—</option>
+        {configKey && !configs.items.some(item => item.key === configKey) && <option value={configKey}>{configKey}</option>}
+        {configs.items.filter(item => item.environments?.length > 0).map(item => <option key={item.key} value={item.key}>{item.display_name} · {item.key}</option>)}
+      </select></label>
+      <input type="search" aria-label={`${t.templateFromExisting} · ${t.search}`} placeholder={t.search} value={search} onChange={event => setSearch(event.target.value)} />
+      <InventoryPagination collection={configs} t={t} hideSinglePage />
+    </div>
+    {configKey && <EnvironmentSelect inline label={`${t.templateFromExisting} · ${t.environment}`} value={environmentKey} scope={`&config=${encodeURIComponent(configKey)}`} onChange={setEnvironmentKey} t={t} />}
+    <div className="template-import-status">
+      {fetched.status === 'loading' && <span className="loading-line" aria-busy="true" />}
+      {fetched.status === 'ready' && fetched.applied && <p className="muted-note" role="status">{t.templateLoaded.replace('{template}', name)}</p>}
+      {fetched.status === 'ready' && !fetched.applied && !replaceable && <button type="button" onClick={apply}>{t.replaceWithTemplate.replace('{template}', name)}</button>}
+      {fetched.status === 'failed' && <ActionError error={fetched.error} t={t} />}
+    </div>
+  </div>;
+}
+
 function Configs({ principal, filters = new URLSearchParams(), t }) {
-  const [creating, setCreating] = useState(false);
+  const templateLink = principal.role === 'admin' && filters.get('new') === '1' ? { config: filters.get('template') || '', environment: filters.get('template_environment') || '' } : null;
+  const [creating, setCreating] = useState(Boolean(templateLink));
+  const [createSession, setCreateSession] = useState(0);
+  const [templateSeed, setTemplateSeed] = useState(templateLink);
+  const [loadedTemplate, setLoadedTemplate] = useState(null);
+  const [createMutate, resetCreate] = useMutation(request);
   const [confirming, setConfirming] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState(null);
   const [warnings, setWarnings] = useState([]);
   const [refresh, setRefresh] = useState(0);
   const [query, setQuery] = useState(() => filters.get('q') || '');
-  const [statusFilter, setStatusFilter] = useState(() => filters.get('status') || 'all');
+  const [statusFilter, setStatusFilter] = useState(() => filters.get('status') || 'active');
   const [environmentFilter, setEnvironmentFilter] = useState(() => filters.get('environment') || '');
   const [initialPage, setInitialPage] = useState(() => Math.max(1, Number.parseInt(filters.get('page'), 10) || 1));
   const [createFormat, setCreateFormat] = useState('yaml');
   const [createContent, setCreateContent] = useState('');
-  const [createEnvironment, setCreateEnvironment] = useState('');
+  const [createEnvironment, setCreateEnvironment] = useState(templateLink?.environment || '');
   const state = useInventory(`/v1/configs?${new URLSearchParams({ status: statusFilter, environment: environmentFilter, q: query, unbound: String(filters.get('unbound') === 'true') })}`, refresh, initialPage);
   const filterKey = filters.toString();
   useEffect(() => {
+    if (templateLink) replaceHashQuery({ new: '', template: '', template_environment: '' });
+  }, []);
+  useEffect(() => {
     setQuery(filters.get('q') || '');
-    setStatusFilter(filters.get('status') || 'all');
+    setStatusFilter(filters.get('status') || 'active');
     setEnvironmentFilter(filters.get('environment') || '');
     setInitialPage(Math.max(1, Number.parseInt(filters.get('page'), 10) || 1));
   }, [filterKey]);
   const create = async event => {
     event.preventDefault();
-    setError('');
+    setError(null);
     const data = new FormData(event.currentTarget);
-    if (!createContent.trim()) return setError(t.saveFailed);
+    if (!createContent.trim()) return setError({ message: t.saveFailed });
     try {
-      const result = await request(`/v1/environments/${encodeURIComponent(data.get('environment'))}/configs/${encodeURIComponent(data.get('key'))}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify({ name: data.get('display_name'), expected_revision: 0, format: createFormat, content: createContent }),
-      });
+      // The same request keeps its operation ID, so a retry after a lost response replays instead of conflicting.
+      const result = await createMutate(`/v1/environments/${encodeURIComponent(data.get('environment'))}/configs/${encodeURIComponent(data.get('key'))}`,
+        { name: data.get('display_name'), expected_revision: 0, format: createFormat, content: createContent }, 'PUT');
       setWarnings(result.warnings || []);
       setCreating(false);
+      resetCreate();
       setCreateContent('');
       setRefresh(value => value + 1);
-    } catch {
-      setError(t.saveFailed);
+    } catch (error) {
+      setError(createError(error, t, t.saveFailed));
     }
   };
   const changeLifecycle = async (config, action) => {
@@ -1307,30 +1669,33 @@ function Configs({ principal, filters = new URLSearchParams(), t }) {
       await request(`/v1/configs/${encodeURIComponent(config.key)}/${action}`, { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID() } });
       setConfirming('');
       setRefresh(value => value + 1);
-    } catch {
-      setError(t.operationFailed);
+    } catch (error) {
+      setError(managementError(error, t, t.operationFailed));
     }
   };
   return (
     <ResourcePage className="config-index-page" eyebrow="CFG / canonical YAML + JSON" title={t.configs} body={t.configBody}
-      action={principal.role === 'admin' && <button className="primary-action compact-action" type="button" onClick={() => { setCreating(value => !value); setCreateFormat('yaml'); setCreateContent(''); setWarnings([]); }}>{t.newConfig}</button>}>
+      action={principal.role === 'admin' && <button className="primary-action compact-action" type="button" onClick={() => { setCreating(value => !value); setCreateSession(value => value + 1); setTemplateSeed(null); setLoadedTemplate(null); resetCreate(); setCreateFormat('yaml'); setCreateContent(''); setWarnings([]); }}>{t.newConfig}</button>}>
       {creating && <form className="config-create-form" onSubmit={create}>
         <EnvironmentSelect label={t.environment} name="environment" required value={createEnvironment} onChange={setCreateEnvironment} t={t} />
         <label>{t.resourceKey}<input name="key" required maxLength="63" pattern="[a-z][a-z0-9_-]{0,62}" autoComplete="off" /></label>
         <label>{t.displayName}<input name="display_name" required maxLength="255" autoComplete="off" /></label>
         <label>{t.format}<select name="format" value={createFormat} onChange={event => setCreateFormat(event.target.value)}><option value="yaml">YAML</option><option value="json">JSON</option></select></label>
+        <ConfigTemplatePicker key={createSession} initialConfig={templateSeed?.config} initialEnvironment={templateSeed?.environment}
+          replaceable={!createContent.trim() || createContent === loadedTemplate}
+          onLoad={template => { setCreateFormat(template.format); setCreateContent(template.content); setLoadedTemplate(template.content); }} t={t} />
         <div className="form-source"><span>{t.configurationSource}</span><ConfigCodeEditor label={t.configurationSource} value={createContent} format={createFormat} readOnly={false} onChange={setCreateContent} /></div>
-        <div className="form-actions"><span className="inline-error" role="alert">{error}</span><button className="primary-action compact-action" type="submit" disabled={!createContent.trim()}>{t.createConfig}</button></div>
+        <div className="form-actions"><ActionError error={error} t={t} /><button className="primary-action compact-action" type="submit" disabled={!createContent.trim()}>{t.createConfig}</button></div>
       </form>}
       <div className="config-index">
           {filters.get('unbound') === 'true' && <p>{t.noActiveConfigContext} · <a href="#/configs">{t.configs}</a></p>}
           <div className="config-index-toolbar">
             <label><span>{t.searchConfigs}</span><input type="search" value={query} placeholder={t.searchConfigsPlaceholder} onChange={event => { setQuery(event.target.value); setInitialPage(1); replaceHashQuery({ q: event.target.value, page: 1 }); }} /></label>
-            <EnvironmentSelect label={t.environmentFilter} emptyLabel={t.allEnvironments} value={environmentFilter} includeArchived onChange={value => { setEnvironmentFilter(value); setInitialPage(1); replaceHashQuery({ environment: value, page: 1 }); }} t={t} />
-            <label><span>{t.status}</span><select value={statusFilter} onChange={event => { setStatusFilter(event.target.value); setInitialPage(1); replaceHashQuery({ status: event.target.value, page: 1 }); }}><option value="all">{t.allStatuses}</option><option value="active">{t.statusActive}</option><option value="archived">{t.statusArchived}</option></select></label>
+            <EnvironmentSelect inline label={t.environmentFilter} emptyLabel={t.allEnvironments} value={environmentFilter} includeArchived onChange={value => { setEnvironmentFilter(value); setInitialPage(1); replaceHashQuery({ environment: value, page: 1 }); }} t={t} />
+            <StatusFilter value={statusFilter} onChange={value => { setStatusFilter(value); setInitialPage(1); replaceHashQuery({ status: value, page: 1 }); }} t={t} />
             <output>{state.status === 'ready' ? state.total : '…'} {t.configs}</output>
           </div>
-          <CollectionState state={state} t={t}><div className="table-frame config-index-frame">
+          <CollectionState state={state} t={t} empty={query || environmentFilter || statusFilter !== 'active' ? t.noMatchingConfigs : undefined}><div className="table-frame config-index-frame">
             <table className="config-index-table">
               <thead><tr><th>{t.configIdentity}</th><th>{t.environmentRevisions}</th><th>{t.updated}</th><th>{t.status}</th>{principal.role === 'admin' && <th />}</tr></thead>
               <tbody>{state.items.map(config => (
@@ -1357,7 +1722,7 @@ function Configs({ principal, filters = new URLSearchParams(), t }) {
           <InventoryPagination collection={state} t={t} onPageChange={page => replaceHashQuery({ page })} />
         </div>
       {warnings.length > 0 && <div className="config-warning-list" role="status"><ConfigWarningLines warnings={warnings} t={t} /></div>}
-      {!creating && error && <p className="inline-error" role="alert">{error}</p>}
+      {!creating && error && <p className="inline-error"><ActionError error={error} t={t} /></p>}
     </ResourcePage>
   );
 }
@@ -1604,15 +1969,17 @@ function VaultItems({ principal, filters = new URLSearchParams(), t }) {
   const [namespaceFilter, setNamespaceFilter] = useState(() => filters.get('namespace') || '');
   const [environmentFilter, setEnvironmentFilter] = useState(() => filters.get('environment') || '');
   const [search, setSearch] = useState(() => filters.get('q') || '');
+  const [statusFilter, setStatusFilter] = useState(() => filters.get('status') || 'active');
   const [confirming, setConfirming] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState(null);
   const [refresh, setRefresh] = useState(0);
-  const state = useInventory(`/v1/vault-items?${new URLSearchParams({ include_archived: 'true', namespace: namespaceFilter, environment: environmentFilter, q: search })}`, refresh);
+  const state = useInventory(`/v1/vault-items?${new URLSearchParams({ status: statusFilter, namespace: namespaceFilter, environment: environmentFilter, q: search })}`, refresh);
   const filterKey = filters.toString();
   useEffect(() => {
     setNamespaceFilter(filters.get('namespace') || '');
     setEnvironmentFilter(filters.get('environment') || '');
     setSearch(filters.get('q') || '');
+    setStatusFilter(filters.get('status') || 'active');
   }, [filterKey]);
   const toggleCreate = () => {
     if (!creating) {
@@ -1621,14 +1988,14 @@ function VaultItems({ principal, filters = new URLSearchParams(), t }) {
       setNewItemKey('');
     }
     setCreating(value => !value);
-    setError('');
+    setError(null);
   };
   const create = async event => {
     event.preventDefault();
-    setError('');
+    setError(null);
     const data = new FormData(event.currentTarget);
     const validationError = validateVaultDraft(draft, t);
-    if (validationError) return setError(validationError);
+    if (validationError) return setError({ message: validationError });
     const snapshot = serializeVaultDraft(draft);
     try {
       await request(`/v1/vault-items/${encodeURIComponent(newNamespaceKey)}/${encodeURIComponent(newItemKey)}`, {
@@ -1639,8 +2006,8 @@ function VaultItems({ principal, filters = new URLSearchParams(), t }) {
       setCreating(false);
       setDraft(null);
       setRefresh(value => value + 1);
-    } catch {
-      setError(t.operationFailed);
+    } catch (error) {
+      setError(createError(error, t, t.operationFailed));
     }
   };
   const changeLifecycle = async (item, action) => {
@@ -1648,8 +2015,8 @@ function VaultItems({ principal, filters = new URLSearchParams(), t }) {
       await request(`/v1/vault-items/${encodeURIComponent(item.namespace_key)}/${encodeURIComponent(item.key)}/${action}`, { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID() } });
       setConfirming('');
       setRefresh(value => value + 1);
-    } catch {
-      setError(t.operationFailed);
+    } catch (error) {
+      setError(managementError(error, t, t.operationFailed));
     }
   };
   return (
@@ -1658,14 +2025,15 @@ function VaultItems({ principal, filters = new URLSearchParams(), t }) {
       {creating && draft && <form className="vault-structured-form" onSubmit={create}>
         <section className="vault-item-basics"><div className="vault-editor-heading"><h2>{t.itemDetails}</h2></div><div className="vault-item-identity"><label>{t.namespace}<input required maxLength="63" pattern="[a-z][a-z0-9_-]{0,62}" autoComplete="off" value={newNamespaceKey} onChange={event => setNewNamespaceKey(event.target.value)} /><small>{t.namespaceHint}</small></label><label>{t.resourceKey}<input required maxLength="63" pattern="[a-z][a-z0-9_-]{0,62}" autoComplete="off" value={newItemKey} onChange={event => setNewItemKey(event.target.value)} /><small>{t.resourceKeyHint}</small></label><label>{t.displayName}<input name="display_name" required maxLength="255" autoComplete="off" /></label></div></section>
         <VaultSnapshotEditor draft={draft} onChange={setDraft} namespaceKey={newNamespaceKey} itemKey={newItemKey} t={t} />
-        <div className="vault-editor-footer"><span className="inline-error" role="alert">{error}</span><div className="row-actions"><button type="button" onClick={toggleCreate}>{t.cancel}</button><button className="primary-action compact-action" type="submit">{t.createVaultItem}</button></div></div>
+        <div className="vault-editor-footer"><ActionError error={error} t={t} /><div className="row-actions"><button type="button" onClick={toggleCreate}>{t.cancel}</button><button className="primary-action compact-action" type="submit">{t.createVaultItem}</button></div></div>
       </form>}
       <div className="vault-index-tools">
         <label><span>{t.searchVault}</span><input type="search" aria-label={t.searchVault} placeholder={t.searchVaultPlaceholder} value={search} onChange={event => { setSearch(event.target.value); replaceHashQuery({ q: event.target.value }); }} /></label>
-        <EnvironmentSelect label={t.environmentFilter} emptyLabel={t.allEnvironments} value={environmentFilter} includeArchived onChange={value => { setEnvironmentFilter(value); replaceHashQuery({ environment: value }); }} t={t} />
+        <EnvironmentSelect inline label={t.environmentFilter} emptyLabel={t.allEnvironments} value={environmentFilter} includeArchived onChange={value => { setEnvironmentFilter(value); replaceHashQuery({ environment: value }); }} t={t} />
         <label><span>{t.namespace}</span><input type="search" aria-label={t.namespaceFilter} placeholder={t.allNamespaces} value={namespaceFilter} onChange={event => { setNamespaceFilter(event.target.value); replaceHashQuery({ namespace: event.target.value }); }} /></label>
+        <StatusFilter value={statusFilter} onChange={value => { setStatusFilter(value); replaceHashQuery({ status: value }); }} t={t} />
       </div>
-      {(!creating || state.items.length > 0) && <CollectionState state={state} t={t}>
+      {(!creating || state.items.length > 0) && <CollectionState state={state} t={t} empty={search || namespaceFilter || environmentFilter || statusFilter !== 'active' ? t.noMatchingVaultItems : undefined}>
         <div className="table-frame vault-index-table"><table><thead><tr><th>{t.namespace}</th><th>{t.resource}</th><th>{t.displayName}</th><th>{t.boundEnvironments}</th><th>{t.revision}</th><th>{t.updated}</th><th>{t.status}</th>{principal.role === 'admin' && <th />}</tr></thead>
           <tbody>{state.items.map(item => <tr key={`${item.namespace_key}.${item.key}`}>
             <td><code>{item.namespace_key}</code></td><td><a href={`#/vault/${item.namespace_key}/${item.key}`} aria-label={`${item.namespace_key}.${item.key} · ${item.display_name} · v${item.revision}`}><code>{item.key}</code></a></td>
@@ -1680,7 +2048,7 @@ function VaultItems({ principal, filters = new URLSearchParams(), t }) {
         </table></div>
       </CollectionState>}
       <InventoryPagination collection={state} t={t} />
-      {!creating && error && <p className="inline-error" role="alert">{error}</p>}
+      {!creating && error && <p className="inline-error"><ActionError error={error} t={t} /></p>}
     </ResourcePage>
   );
 }
@@ -1933,7 +2301,7 @@ function downloadFile(file) {
   } catch {}
 }
 
-function Administration({ t }) {
+function Administration({ t, principal, filters = new URLSearchParams() }) {
   const [tab, setTab] = useState('tokens');
   return (
     <div className="page administration-page">
@@ -1942,51 +2310,172 @@ function Administration({ t }) {
         <button type="button" role="tab" aria-selected={tab === 'tokens'} onClick={() => setTab('tokens')}>{t.apiTokens}</button>
         <button type="button" role="tab" aria-selected={tab === 'certificates'} onClick={() => setTab('certificates')}>{t.clientCertificates}</button>
         <button type="button" role="tab" aria-selected={tab === 'authorities'} onClick={() => setTab('authorities')}>{authorityLabel(t)}</button>
+        <button type="button" role="tab" aria-selected={tab === 'sessions'} onClick={() => setTab('sessions')}>{sessionLabel(t)}</button>
         <button type="button" role="tab" aria-selected={tab === 'notifications'} onClick={() => setTab('notifications')}>{t.notifications}</button>
         <button type="button" role="tab" aria-selected={tab === 'deployment'} onClick={() => setTab('deployment')}>{t.deploymentStatus}</button>
       </div>
-      {tab === 'tokens' ? <TokensPanel t={t} /> : tab === 'certificates' ? <CertificateManagement t={t} onAuthorities={() => setTab('authorities')} /> : tab === 'authorities' ? <AuthorityManagement t={t} onCertificates={() => setTab('certificates')} /> : tab === 'notifications' ? <Notifications t={t} embedded /> : <DeploymentPanel t={t} />}
+      {tab === 'tokens' ? <TokensPanel t={t} principal={principal} filters={filters} /> : tab === 'certificates' ? <CertificateManagement t={t} onAuthorities={() => setTab('authorities')} /> : tab === 'authorities' ? <AuthorityManagement t={t} onCertificates={() => setTab('certificates')} /> : tab === 'sessions' ? <Sessions t={t} principal={principal} /> : tab === 'notifications' ? <Notifications t={t} embedded /> : <DeploymentPanel t={t} principal={principal} />}
     </div>
   );
 }
 
-function TokensPanel({ t }) {
+const TOKEN_EXPIRY_NOTICE_DAYS = 14;
+const DAY_MS = 86400000;
+
+function tokenStatus(token, now, t) {
+  if (token.revoked) return { label: t.revoked, className: 'status archived' };
+  const remaining = token.expires_at ? Date.parse(token.expires_at) - now : Infinity;
+  if (remaining <= 0) return { label: t.tokenExpired, className: 'status archived' };
+  if (remaining <= TOKEN_EXPIRY_NOTICE_DAYS * DAY_MS) return { label: t.expiringSoon, className: 'status warning' };
+  return { label: t.statusActive, className: 'status active' };
+}
+
+// The Token list previews at most three Environments; a replacement needs the complete active grant set.
+async function grantedEnvironments(publicID) {
+  const keys = [];
+  for (let offset = 0; ; offset += 100) {
+    const page = await request(`/v1/environments?${new URLSearchParams({ token: publicID, limit: '100', offset: String(offset) })}`);
+    keys.push(...page.items.filter(item => item.granted).map(item => item.key));
+    if (!page.items.length || offset + page.items.length >= page.total) return keys;
+  }
+}
+
+// Rotation is create-overlap-revoke (ADR-0019): the previous Token keeps working until it is revoked here.
+function ReplacementSteps({ previous, onRevoked, t }) {
+  const [step, setStep] = useState({ status: 'idle' });
+  const [mutate] = useMutation(request);
+  const name = `${previous.display_name} · ${previous.display_prefix}`;
+  const revoke = async () => {
+    setStep({ status: 'revoking' });
+    try {
+      await mutate(`/v1/api-tokens/${encodeURIComponent(previous.public_id)}/revoke`);
+      setStep({ status: 'revoked' });
+      onRevoked();
+    } catch (failure) {
+      setStep({ status: 'failed', error: managementError(failure, t, t.operationFailed) });
+    }
+  };
+  return <section className="replacement-steps" aria-labelledby="replacement-steps-title">
+    <h3 id="replacement-steps-title">{t.finishReplacement.replace('{name}', name)}</h3>
+    <ol>
+      <li>{t.replacementStepDeploy.replace('{name}', name)}</li>
+      <li>{t.replacementStepRevoke.replace('{name}', name)} <a href="#/access">{t.access}</a></li>
+    </ol>
+    {previous.kind === 'write-scoped' && <p className="replacement-cascade">{t.replacementCascade}</p>}
+    {step.status === 'revoked'
+      ? <p role="status">{t.oldTokenRevoked.replace('{name}', name)}</p>
+      : step.status === 'idle'
+        ? <button className="danger-link" type="button" onClick={() => setStep({ status: 'confirming' })}>{t.revokeOldToken.replace('{name}', name)}</button>
+        : <button className="danger-link" type="button" disabled={step.status === 'revoking'} onClick={revoke}>{t.confirmRevokeOld.replace('{name}', name)}</button>}
+    {step.status === 'failed' && <ActionError error={step.error} t={t} />}
+  </section>;
+}
+
+function TokensPanel({ t, principal, filters = new URLSearchParams() }) {
   const [creating, setCreating] = useState(false);
+  const [creatingToken, setCreatingToken] = useState(false);
+  const [mutate, resetMutation] = useMutation(request);
+  const now = useCurrentTime();
   const [neverExpires, setNeverExpires] = useState(false);
+  const [writeScoped, setWriteScoped] = useState(false);
   const [created, setCreated] = useState(null);
   const [editing, setEditing] = useState('');
   const [confirming, setConfirming] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState(null);
+  const configuredDays = principal.write_token_max_ttl_days;
+  const maxDays = Number.isInteger(configuredDays) && configuredDays >= 1 && configuredDays <= 90 ? configuredDays : 90;
+  const inputFeedback = field => ({ 'aria-invalid': error?.field === field || undefined, 'aria-describedby': error?.field === field ? 'token-create-error' : undefined });
   const [refresh, setRefresh] = useState(0);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState(() => filters.get('tokens') === 'expiring' ? 'expiring' : 'active');
+  const [replacing, setReplacing] = useState(null);
+  const [replaceGrants, setReplaceGrants] = useState({ status: 'idle' });
   const [environmentKeys, setEnvironmentKeys] = useState([]);
   const [grants, setGrants] = useState({});
   const [saving, setSaving] = useState(false);
   const confirmDiscard = useUnsavedChanges(Object.keys(grants).length > 0, t.unsavedChanges);
-  const state = useInventory(`/v1/api-tokens?include_revoked=true&q=${encodeURIComponent(search)}`, refresh);
+  const tokenFilter = statusFilter === 'expiring' ? { status: 'active', expiring_within_days: String(TOKEN_EXPIRY_NOTICE_DAYS) } : { status: statusFilter };
+  const state = useInventory(`/v1/api-tokens?${new URLSearchParams({ ...tokenFilter, q: search })}`, refresh);
+  const startReplace = async token => {
+    if (!confirmDiscard()) return;
+    resetMutation();
+    setEditing('');
+    setGrants({});
+    setCreated(null);
+    setError(null);
+    setReplacing(token);
+    setCreating(true);
+    setWriteScoped(token.kind === 'write-scoped');
+    setNeverExpires(token.kind !== 'write-scoped' && !token.expires_at);
+    setEnvironmentKeys([]);
+    setReplaceGrants({ status: 'loading' });
+    try {
+      const keys = await grantedEnvironments(token.public_id);
+      setEnvironmentKeys(keys);
+      setReplaceGrants({ status: 'ready' });
+    } catch (failure) {
+      setReplaceGrants({ status: 'failed', error: managementError(failure, t, t.loadFailed) });
+    }
+  };
+  // #/administration?replace=<public_id> (from the Overview) opens the replacement form once.
+  const replaceTarget = filters.get('replace') || '';
+  useEffect(() => {
+    if (!replaceTarget) return undefined;
+    let live = true;
+    replaceHashQuery({ replace: '' });
+    request(`/v1/api-tokens?${new URLSearchParams({ key: replaceTarget, status: 'active', limit: '1' })}`)
+      .then(page => { if (live && page.items?.[0]) startReplace(page.items[0]); })
+      .catch(failure => live && setError(managementError(failure, t, t.loadFailed)));
+    return () => { live = false; };
+  }, [replaceTarget]);
   const create = async event => {
     event.preventDefault();
-    setError('');
-    const data = new FormData(event.currentTarget);
+    if (creatingToken) return;
+    setError(null);
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const expiryInput = form.elements.namedItem('expires_at');
+    if (expiryInput?.validity.badInput) {
+      setError(tokenValidationMessage({ field: 'expires_at', reason: 'expiry_invalid' }, t, maxDays));
+      expiryInput.focus();
+      return;
+    }
     const body = {
       display_name: data.get('display_name'),
       environment_keys: environmentKeys,
-      allow_without_mtls: data.has('allow_without_mtls'),
-      never_expires: neverExpires,
+      allow_without_mtls: !writeScoped && data.has('allow_without_mtls'),
+      never_expires: !writeScoped && neverExpires,
     };
-    if (!neverExpires && data.get('expires_at')) body.expires_at = new Date(data.get('expires_at')).toISOString();
+    if (replacing?.kind === 'write-scoped') {
+      // Copy scopes exactly: an empty list denies everything, while an omitted scope allows everything.
+      body.kind = 'write-scoped';
+      if (replacing.config_keys != null) body.config_keys = replacing.config_keys;
+      if (replacing.namespace_keys != null) body.namespace_keys = replacing.namespace_keys;
+    } else if (writeScoped) {
+      body.kind = 'write-scoped';
+      for (const key of ['config_keys', 'namespace_keys']) {
+        if (data.get(key)?.trim()) body[key] = data.get(key).split(',').map(value => value.trim());
+      }
+    }
+    if ((!neverExpires || writeScoped) && data.get('expires_at')) body.expires_at = data.get('expires_at');
+    const invalid = validateTokenInput(body, maxDays);
+    if (invalid) {
+      setError(tokenValidationMessage(invalid, t, maxDays));
+      form.elements.namedItem(invalid.field)?.focus();
+      return;
+    }
+    if (body.expires_at) body.expires_at = new Date(body.expires_at).toISOString();
+    setCreatingToken(true);
     try {
-      const result = await request('/v1/api-tokens', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify(body),
-      });
-      setCreated(result.token);
+      const result = await mutate('/v1/api-tokens', body);
+      setCreated(replacing ? { ...result, replaces: replacing } : result);
+      setReplacing(null);
       setCreating(false);
       setRefresh(value => value + 1);
-    } catch {
-      setError(t.operationFailed);
-    }
+    } catch (error) {
+      setError(tokenValidationMessage(error, t, maxDays));
+      form.elements.namedItem(error.field)?.focus();
+    } finally { setCreatingToken(false); }
   };
   const saveGrants = async event => {
     event.preventDefault();
@@ -2001,8 +2490,8 @@ function TokensPanel({ t }) {
       setEditing('');
       setGrants({});
       setRefresh(value => value + 1);
-    } catch {
-      setError(t.operationFailed);
+    } catch (failure) {
+      setError(managementError(failure, t, t.operationFailed));
     } finally {
       setSaving(false);
     }
@@ -2012,23 +2501,36 @@ function TokensPanel({ t }) {
       await request(`/v1/api-tokens/${encodeURIComponent(publicID)}/revoke`, { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID() } });
       setConfirming('');
       setRefresh(value => value + 1);
-    } catch {
-      setError(t.operationFailed);
+    } catch (failure) {
+      setError(managementError(failure, t, t.operationFailed));
     }
   };
   return (
     <section className="admin-panel tokens-panel">
-      <div className="panel-actions"><span>{t.tokenEnvironmentGrant}</span><button className="primary-action compact-action" type="button" onClick={() => { setCreating(value => !value); setEnvironmentKeys([]); }}>{t.newAPIToken}</button></div>
-      <label>{t.search}<input type="search" value={search} onChange={event => setSearch(event.target.value)} /></label>
-      {created && <div className="one-time-secret" role="alert"><strong>{t.tokenOnce}</strong><code>{created}</code><button type="button" onClick={() => navigator.clipboard.writeText(created).catch(() => {})}>{t.copy}</button></div>}
+      <div className="panel-actions"><span>{t.tokenEnvironmentGrant}</span><button className="primary-action compact-action" type="button" disabled={creatingToken} onClick={() => { resetMutation(); setCreating(value => !value || Boolean(replacing)); setReplacing(null); setWriteScoped(false); setNeverExpires(false); setEnvironmentKeys([]); setError(null); setCreated(null); }}>{t.newAPIToken}</button></div>
+      <div className="index-toolbar">
+        <label><span>{t.search}</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} /></label>
+        <StatusFilter value={statusFilter} onChange={setStatusFilter} inactive="revoked" extra={[{ value: 'expiring', label: t.statusExpiring.replace('{days}', TOKEN_EXPIRY_NOTICE_DAYS) }]} t={t} />
+      </div>
+      {created && <div className="one-time-secret" role="alert"><strong>{created.token ? t.tokenOnce : (t.locale.startsWith('zh') ? '该操作已完成，令牌不会再次返回。如未保存，请按下方 Token ID 找到并吊销该令牌后重新签发。' : 'This operation already completed. The Token cannot be returned again. If it was not saved, find and revoke the Token ID below, then issue a replacement.')}</strong><CopyValue value={created.token || created.public_id} label={created.token ? 'API Token' : 'Token ID'} t={t} /></div>}
+      {created?.replaces && <ReplacementSteps key={created.public_id} previous={created.replaces} onRevoked={() => setRefresh(value => value + 1)} t={t} />}
       {creating && (
-        <form className="token-form" onSubmit={create}>
-          <label>{t.tokenName}<input name="display_name" required maxLength="255" autoComplete="off" /></label>
-          <EnvironmentChoices label={t.allowedEnvironments} checked={environment => environmentKeys.includes(environment.key)} onChange={(key, checked) => setEnvironmentKeys(current => checked ? [...current, key] : current.filter(value => value !== key))} t={t} />
-          <label className="check-line"><input type="checkbox" name="allow_without_mtls" />{t.allowWithoutMTLS}</label>
-          <label className="check-line"><input type="checkbox" checked={neverExpires} onChange={event => setNeverExpires(event.target.checked)} />{t.neverExpires}</label>
-          {!neverExpires && <label>{t.expiresAt}<input type="datetime-local" name="expires_at" /><small>{t.locale.startsWith('zh') ? '留空使用默认的 90 天有效期。' : 'Leave empty for the default 90-day lifetime.'}</small></label>}
-          <div className="form-actions"><span className="inline-error" role="alert">{error}</span><button className="primary-action compact-action" type="submit">{t.createAPIToken}</button></div>
+        <form key={replacing?.public_id || 'new'} className="token-form" noValidate onSubmit={create} onInput={() => setError(null)}>
+          {replacing && <div className="replace-intro"><h3>{t.replaceTitle.replace('{name}', `${replacing.display_name} · ${replacing.display_prefix}`)}</h3><p>{t.replaceExplanation.replace('{name}', replacing.display_name)}</p></div>}
+          <fieldset className="token-create-fields" disabled={creatingToken}>
+          <label>{t.tokenName}<input {...inputFeedback('display_name')} name="display_name" required maxLength="255" autoComplete="off" defaultValue={replacing?.display_name} /></label>
+          {replacing && replaceGrants.status === 'loading' && <p role="status">{t.replaceLoadingGrants}</p>}
+          {replacing && replaceGrants.status === 'failed' && <ActionError error={replaceGrants.error} t={t} />}
+          {replacing?.kind === 'write-scoped' ? <div className="replace-fixed"><strong>{t.allowedEnvironments}</strong><div className="environment-links">{environmentKeys.map(key => <code key={key}>{key}</code>)}</div><p>{t.configAllowlist}: {replacing.config_keys == null ? '*' : replacing.config_keys.join(', ') || '∅'}</p><p>{t.namespaceAllowlist}: {replacing.namespace_keys == null ? '*' : replacing.namespace_keys.join(', ') || '∅'}</p><p className="muted-note">{t.replaceScopesFixed}</p></div>
+            : <EnvironmentChoices invalid={error?.field === 'environment_keys'} describedBy={error?.field === 'environment_keys' ? 'token-create-error' : undefined} label={t.allowedEnvironments} checked={environment => environmentKeys.includes(environment.key)} onChange={(key, checked) => setEnvironmentKeys(current => checked ? [...current, key] : current.filter(value => value !== key))} t={t} />}
+          {!replacing && <label className="check-line"><input type="checkbox" checked={writeScoped} onChange={event => { setWriteScoped(event.target.checked); setNeverExpires(false); setError(null); }} />{t.writeScoped}</label>}
+          {writeScoped && replacing && <p className="scope-note">{t.writeTokenHint}</p>}
+          {writeScoped && !replacing && <><p className="scope-note">{t.writeTokenHint}</p><label>{t.configAllowlist}<input {...inputFeedback('config_keys')} name="config_keys" maxLength="16384" autoComplete="off" /><small>{t.scopeHint}</small></label><label>{t.namespaceAllowlist}<input {...inputFeedback('namespace_keys')} name="namespace_keys" maxLength="16384" autoComplete="off" /><small>{t.scopeHint}</small></label></>}
+          {!writeScoped && <label className="check-line"><input type="checkbox" name="allow_without_mtls" defaultChecked={replacing?.allow_without_mtls} />{t.allowWithoutMTLS}</label>}
+          {!writeScoped && <label className="check-line"><input type="checkbox" checked={neverExpires} onChange={event => setNeverExpires(event.target.checked)} />{t.neverExpires}</label>}
+          {!neverExpires && <ExpiryInput t={t} maxDays={writeScoped ? maxDays : undefined} feedback={inputFeedback('expires_at')} onEdit={() => setError(null)} />}
+          </fieldset>
+          <div className="form-actions"><div id="token-create-error"><ActionError error={error} t={t} /></div>{replacing && <button type="button" disabled={creatingToken} onClick={() => { setCreating(false); setReplacing(null); setError(null); }}>{t.cancel}</button>}<button className="primary-action compact-action" type="submit" disabled={creatingToken || Boolean(replacing && replaceGrants.status !== 'ready')}>{creatingToken ? (t.locale.startsWith('zh') ? '正在创建…' : 'Creating…') : t.createAPIToken}</button></div>
         </form>
       )}
       {editing && <form className="grant-form" onSubmit={saveGrants}><strong>{editing.display_name}</strong>
@@ -2036,10 +2538,10 @@ function TokensPanel({ t }) {
         <button className="primary-action compact-action" type="submit" disabled={saving || !Object.keys(grants).length}>{t.saveEnvironmentGrants}</button>
         <button type="button" disabled={saving} onClick={() => { if (confirmDiscard()) { setEditing(''); setGrants({}); } }}>{t.cancel}</button>
       </form>}
-      {!creating && error && <p className="inline-error" role="alert">{error}</p>}
-      <CollectionState state={state} t={t}>
+      {!creating && error && <ActionError error={error} t={t} />}
+      <CollectionState state={state} t={t} empty={search || statusFilter !== 'active' ? t.noMatchingResults : undefined}>
         <div className="table-frame"><table><thead><tr><th>{t.tokenName}</th><th>{t.prefix}</th><th>{t.environments}</th><th>mTLS</th><th>{t.expiresAt}</th><th>{t.status}</th><th /></tr></thead>
-          <tbody>{state.items.map(token => <tr key={token.public_id}><td><strong title={token.display_name}>{token.display_name}</strong><code className="row-subkey">{token.public_id}</code></td><td><code title={token.display_prefix}>{token.display_prefix}</code></td><td><div className="environment-links">{token.environment_keys.map(environment => <code key={environment}>{environment}</code>)}{token.environment_count > token.environment_keys.length && <span>+{token.environment_count - token.environment_keys.length}</span>}</div></td><td>{token.allow_without_mtls ? t.tokenOnlyAllowed : t.mtlsRequired}</td><td><time>{token.expires_at ? formatDate(token.expires_at, t.locale) : t.neverExpires}</time></td><td><span className={token.revoked ? 'status archived' : 'status active'}>{token.revoked ? t.revoked : t.statusActive}</span></td><td>{!token.revoked && <div className="row-actions"><button type="button" disabled={saving} aria-label={`${t.editEnvironments} ${token.display_name}`} onClick={() => { if (confirmDiscard()) { setEditing(token); setGrants({}); } }}>{t.editEnvironments}</button>{confirming === token.public_id ? <button className="danger-link" type="button" aria-label={`${t.confirmRevoke} ${token.display_name}`} onClick={() => revoke(token.public_id)}>{t.confirmRevoke}</button> : <button className="danger-link" type="button" aria-label={`${t.revoke} ${token.display_name}`} onClick={() => setConfirming(token.public_id)}>{t.revoke}</button>}</div>}</td></tr>)}</tbody>
+          <tbody>{state.items.map(token => <tr key={token.public_id}><td><strong title={token.display_name}>{token.display_name}</strong><CopyValue value={token.public_id} label="Token ID" t={t} /><small>{token.kind || 'read-only'}</small>{(token.kind === 'write-scoped' || token.parent_public_id) && <details><summary>{t.allowedEnvironments}</summary><p>{t.configAllowlist}: {token.config_keys == null ? '*' : token.config_keys.join(', ') || '∅'}</p><p>{t.namespaceAllowlist}: {token.namespace_keys == null ? '*' : token.namespace_keys.join(', ') || '∅'}</p></details>}</td><td><code title={token.display_prefix}>{token.display_prefix}</code></td><td><div className="environment-links">{token.environment_keys.map(environment => <code key={environment}>{environment}</code>)}{token.environment_count > token.environment_keys.length && <span>+{token.environment_count - token.environment_keys.length}</span>}</div></td><td>{token.allow_without_mtls ? t.tokenOnlyAllowed : t.mtlsRequired}</td><td><Expiration value={token.expires_at} now={now} revoked={token.revoked} t={t} /></td><td><span className={tokenStatus(token, now, t).className}>{tokenStatus(token, now, t).label}</span></td><td>{!token.revoked && <div className="row-actions">{!token.parent_public_id && <button type="button" disabled={saving || creatingToken} aria-label={`${t.replaceToken} ${token.display_name}`} onClick={() => startReplace(token)}>{t.replaceToken}</button>}{token.kind !== 'write-scoped' && !token.parent_public_id && <button type="button" disabled={saving} aria-label={`${t.editEnvironments} ${token.display_name}`} onClick={() => { if (confirmDiscard()) { setEditing(token); setGrants({}); } }}>{t.editEnvironments}</button>}{confirming === token.public_id ? <button className="danger-link" type="button" aria-label={`${t.confirmRevoke} ${token.display_name}`} onClick={() => revoke(token.public_id)}>{t.confirmRevoke}</button> : <button className="danger-link" type="button" aria-label={`${t.revoke} ${token.display_name}`} onClick={() => setConfirming(token.public_id)}>{t.revoke}</button>}</div>}</td></tr>)}</tbody>
         </table></div>
       </CollectionState>
       <InventoryPagination collection={state} t={t} />
@@ -2048,7 +2550,7 @@ function TokensPanel({ t }) {
 }
 
 
-function DeploymentPanel({ t }) {
+function DeploymentPanel({ t, principal }) {
   const [ready, setReady] = useState(null);
   useEffect(() => {
     let live = true;
@@ -2065,6 +2567,7 @@ function DeploymentPanel({ t }) {
         <article><span>EVT</span><strong>NATS</strong><small>{t.nonBlockingAccessEvents}</small></article>
         <article><span>CFG</span><strong>{t.coldStartYAML}</strong><small>{t.restartToApply}</small></article>
         <article><span>API</span><strong>{t.apiScalesIndependently}</strong><small>{t.managementSingleReplica}</small></article>
+        {principal?.session_idle_timeout_seconds > 0 && <article><span>SSN</span><strong>{t.adminSessionLimits.replace('{idle}', sessionDuration(principal.session_idle_timeout_seconds, t.locale.startsWith('zh'))).replace('{lifetime}', sessionDuration(principal.session_lifetime_seconds, t.locale.startsWith('zh')))}</strong><small>{sessionLabel(t)} · {t.restartToApply}</small></article>}
       </div>
     </section>
   );
@@ -2180,7 +2683,7 @@ function AccessPage({ t }) {
       <div className="log-summary"><article><span>{t.observedResponses}</span><strong>{state.status === 'ready' ? state.items.length : '—'}</strong></article><article><span>mTLS</span><strong>{accessItems.filter(item => item.authentication === 'mtls').length}</strong></article><article><span>OIDC</span><strong>{accessItems.filter(item => item.authentication === 'oidc').length}</strong></article></div>
       <p className="scope-note">{t.accessIncomplete}</p>
       <CollectionState state={state} t={t}>
-        <div className="table-frame log-table"><table><thead><tr><th>{t.time}</th><th>{t.principal}</th><th>{t.authentication}</th><th>{t.environments}</th><th>{t.resource}</th><th>{t.revision}</th><th>{t.vaultRevisions}</th></tr></thead><tbody>{state.items.map((record, index) => <tr key={`${record.time}-${record.principal}-${index}`}><td><time>{formatDate(record.time, t.locale)}</time></td><td><code title={record.principal}>{record.principal}</code></td><td>{record.authentication}</td><td><code>{record.environment || '—'}</code></td><td><span>{record.resource_type}</span><strong title={record.namespace ? `${record.namespace}/${record.resource}` : record.resource}>{record.namespace ? `${record.namespace}/${record.resource}` : record.resource}</strong></td><td>{record.config_revision ? `v${record.config_revision}` : '—'}</td><td><div className="environment-links">{Object.entries(record.vault_revisions).map(([item, revision]) => <code key={item}>{item} @ v{revision}</code>)}</div></td></tr>)}</tbody></table></div>
+        <div className="table-frame log-table"><table><thead><tr><th>{t.time}</th><th>{t.principal}</th><th>{t.authentication}</th><th>{t.environments}</th><th>{t.resource}</th><th>{t.revision}</th><th>{t.vaultRevisions}</th></tr></thead><tbody>{state.items.map((record, index) => <tr key={`${record.time}-${record.principal}-${index}`}><td><time>{formatDate(record.time, t.locale)}</time></td><td><code title={record.principal}>{record.principal}</code></td><td>{record.authentication}</td><td><code>{record.environment || '—'}</code></td><td><span>{record.resource_type}</span><strong title={record.namespace ? `${record.namespace}/${record.resource}${record.field_key ? '.' + record.field_key : ''}` : record.resource}>{record.namespace ? `${record.namespace}/${record.resource}${record.field_key ? '.' + record.field_key : ''}` : record.resource}</strong></td><td>{record.config_revision ? `v${record.config_revision}` : '—'}</td><td><div className="environment-links">{Object.entries(record.vault_revisions).map(([item, revision]) => <code key={item}>{item} @ v{revision}</code>)}</div></td></tr>)}</tbody></table></div>
       </CollectionState>
     </ResourcePage>
   );
@@ -2217,7 +2720,7 @@ function AuditPage({ principal, t }) {
       {state.status === 'failed' && <div className="collection-state"><p>{t.loadFailed}</p></div>}
       {state.status === 'ready' && state.items.length === 0 && <div className="collection-state"><p>{search ? t.noMatchingAudits : t.noResources}</p></div>}
       {state.status === 'ready' && state.items.length > 0 && <>
-        <div className="table-frame log-table"><table><thead><tr><th>{t.time}</th><th>{t.auditIdentifier}</th><th>{t.actor}</th><th>{t.action}</th><th>{t.outcome}</th><th>{t.resource}</th><th>{t.revision}</th><th>{t.delivery}</th></tr></thead><tbody>{state.items.map(record => <tr key={record.id}><td><time>{formatDate(record.time, t.locale)}</time></td><td><code title={record.operation_id || record.request_id}>{record.operation_id || record.request_id || '—'}</code></td><td><ActorIdentity actorID={record.actor_id} principal={principal} /></td><td><code>{record.action}</code></td><td><span className={record.outcome === 'success' ? 'status active' : 'status archived'}>{record.outcome}</span>{record.error_code && <code className="row-subkey">{record.error_code}</code>}</td><td><span>{record.resource_type}</span><strong title={record.namespace ? `${record.namespace}/${record.resource}` : record.resource}>{record.namespace ? `${record.namespace}/${record.resource}` : record.resource}</strong></td><td>{record.revision ? `v${record.revision}` : '—'}</td><td>#{record.delivery_attempt}</td></tr>)}</tbody></table></div>
+        <div className="table-frame log-table"><table><thead><tr><th>{t.time}</th><th>{t.auditIdentifier}</th><th>{t.actor}</th><th>{t.action}</th><th>{t.outcome}</th><th>{t.resource}</th><th>{t.revision}</th><th>{t.delivery}</th></tr></thead><tbody>{state.items.map(record => <tr key={record.id}><td><time>{formatDate(record.time, t.locale)}</time></td><td><code title={record.operation_id || record.request_id}>{record.operation_id || record.request_id || '—'}</code></td><td><ActorIdentity actorID={record.actor_id} principal={principal} />{record.source_ip && <code className="row-subkey">IP: {record.source_ip}</code>}</td><td><code>{record.action}</code></td><td><span className={record.outcome === 'success' ? 'status active' : 'status archived'}>{record.outcome}</span>{record.error_code && <code className="row-subkey">{record.error_code}</code>}</td><td><span>{record.resource_type}</span><strong title={record.namespace ? `${record.namespace}/${record.resource}${record.field_key ? '.' + record.field_key : ''}` : record.resource}>{record.namespace ? `${record.namespace}/${record.resource}${record.field_key ? '.' + record.field_key : ''}` : record.resource}</strong></td><td>{record.revision ? `v${record.revision}` : '—'}</td><td>#{record.delivery_attempt}</td></tr>)}</tbody></table></div>
         <nav className="config-pagination" aria-label={t.auditPagination}><span>{first}–{first + state.items.length - 1}</span><div><button type="button" disabled={page === 0} onClick={() => setPage(value => value - 1)}>{t.previous}</button><code>{t.pageNumber.replace('{page}', page + 1)}</code><button type="button" disabled={!state.hasMore} onClick={() => setPage(value => value + 1)}>{t.next}</button></div></nav>
       </>}
     </ResourcePage>
@@ -2237,6 +2740,8 @@ function ConfigDetail({ principal, configKey, environmentKey, t }) {
   const [viewedRevision, setViewedRevision] = useState(0);
   const [inspection, setInspection] = useState({ status: 'idle' });
   const [restoring, setRestoring] = useState(0);
+  const [restoreBusy, setRestoreBusy] = useState(false);
+  const [restoreMutation] = useMutation(request);
   const path = `/v1/environments/${encodeURIComponent(environmentKey)}/configs/${encodeURIComponent(configKey)}`;
   const history = useRevisionHistory(`${path}/revisions`, refresh);
   const dirty = state.status === 'ready' && source !== state.config.content;
@@ -2323,20 +2828,22 @@ function ConfigDetail({ principal, configKey, environmentKey, t }) {
     setTab('transfer');
   };
   const restore = async revision => {
+    if (restoreBusy) return;
+    setRestoreBusy(true);
     setSaveError(null);
     try {
-      const result = await request(`${path}/restore`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify({ source_revision: revision, expected_revision: state.config.revision }),
-      });
+      const result = await restoreMutation(`${path}/restore`, { source_revision: revision, expected_revision: state.config.revision });
       setValidation({ status: 'saved', warnings: result.warnings || [] });
-      setState(current => ({ ...current, config: { ...current.config, revision: result.revision } }));
+      // A revision number alone is not a snapshot. Keep copy/transfer actions
+      // unavailable until the reload returns that revision's content and format.
+      setState({ status: 'loading' });
       setCompareSeed(null);
       setRestoring(0);
       setRefresh(value => value + 1);
     } catch (error) {
       setSaveError(managementError(error, t, t.operationFailed));
+    } finally {
+      setRestoreBusy(false);
     }
   };
 
@@ -2350,7 +2857,9 @@ function ConfigDetail({ principal, configKey, environmentKey, t }) {
     ? t.compareRevisions
     : tab === 'transfer'
       ? `${t[transferMode]} · ${t.source} → ${t.target}`
-      : tab === 'clone'
+      : tab === 'copy'
+        ? t.copyToEnvironment
+        : tab === 'clone'
         ? t.cloneConfig
         : '';
   return (
@@ -2361,15 +2870,16 @@ function ConfigDetail({ principal, configKey, environmentKey, t }) {
           <div className="config-title-line"><h1 title={state.config.config_name}>{state.config.config_name}</h1><code title={configKey}>{configKey}</code><span>{t.current} v{state.config.revision}</span></div>
         </div>
         <div className="detail-heading-actions">
-          <EnvironmentSelect label={t.environment} value={environmentKey} scope={`&config=${encodeURIComponent(configKey)}`} onChange={value => { if (value && confirmDiscard()) window.location.hash = `/configs/${configKey}/${value}`; }} t={t} />
+          <EnvironmentSelect inline label={t.environment} value={environmentKey} scope={`&config=${encodeURIComponent(configKey)}`} onChange={value => { if (value && confirmDiscard()) window.location.hash = `/configs/${configKey}/${value}`; }} t={t} />
           <div className="detail-action-group">
             <div className="config-operation-switch">
               <button type="button" aria-pressed={tab === 'compare'} onClick={() => { setCompareSeed(null); setTab('compare'); }}>{t.compare}</button>
               {principal.role === 'admin' && <button type="button" aria-pressed={tab === 'transfer' && transferMode === 'merge'} onClick={() => openTransfer('merge')}>{t.merge}</button>}
               {principal.role === 'admin' && <button type="button" aria-pressed={tab === 'transfer' && transferMode === 'replace'} onClick={() => openTransfer('replace')}>{t.replace}</button>}
             </div>
+            {principal.role === 'admin' && <button type="button" aria-pressed={tab === 'copy'} onClick={() => setTab('copy')}>{t.copyToEnvironment}</button>}
             {principal.role === 'admin' && <button className="config-edit-action" type="button" aria-pressed={tab === 'raw' && viewingCurrent} onClick={() => showCurrent('raw')}>{t.editConfig}</button>}
-            {principal.role === 'admin' && <details className="detail-more-actions"><summary aria-label={t.moreActions}>•••</summary><button type="button" onClick={event => { event.currentTarget.closest('details').removeAttribute('open'); setTab('clone'); }}>{t.clone}</button></details>}
+            {principal.role === 'admin' && <details className="detail-more-actions"><summary aria-label={t.moreActions}>•••</summary><div className="detail-more-menu"><button type="button" onClick={event => { event.currentTarget.closest('details').removeAttribute('open'); setTab('clone'); }}>{t.clone}</button><a href={`#/configs?${new URLSearchParams({ new: '1', template: configKey, template_environment: environmentKey })}`}>{t.newFromTemplate}</a></div></details>}
           </div>
         </div>
       </div>
@@ -2389,7 +2899,7 @@ function ConfigDetail({ principal, configKey, environmentKey, t }) {
             inspection.status === 'loading' ? <div className="collection-state"><span className="loading-line" /></div>
               : inspection.status === 'failed' ? <p className="inline-error" role="alert">{t.operationFailed}</p>
                 : <section className="editor-panel">
-                  <div className="editor-toolbar"><span>{viewedFormat.toUpperCase()}</span><code>{t.revision} {viewedRevision}</code></div>
+                  <div className="editor-toolbar"><span>{viewedFormat.toUpperCase()}</span><div className="editor-toolbar-actions"><code>{t.revision} {viewedRevision}</code><CopyValue value={viewedContent} label={t.copyConfiguration} display={t.copyContent} t={t} /></div></div>
                   <ConfigCodeEditor label={viewingCurrent ? t.configurationSource : t.revisionLabel.replace('{revision}', viewedRevision)} value={viewedContent} format={viewedFormat} readOnly={!viewingCurrent || principal.role !== 'admin'} onChange={value => { setSource(value); setSaveError(null); setValidation({ status: 'idle', warnings: [] }); }} />
                   {principal.role === 'admin' && viewingCurrent && <div className="editor-actions">
                     <div className="editor-feedback" role="status">
@@ -2406,8 +2916,8 @@ function ConfigDetail({ principal, configKey, environmentKey, t }) {
             <section className="history-view">
               <div className="table-frame history-table"><table><thead><tr><th>{t.revision}</th><th>{t.format}</th><th>{t.actor}</th><th>{t.created}</th><th>{t.action}</th></tr></thead>
                 <tbody>{history.items.map(revision => <tr className={revision.revision === viewedRevision ? 'selected-history-row' : ''} key={revision.revision}><td><button className="revision-link" type="button" aria-label={t.viewRevision.replace('{revision}', revision.revision)} onClick={() => inspectRevision(revision.revision)}>v{revision.revision}</button></td><td><code>{revision.format}</code></td><td><ActorIdentity actorID={revision.actor_id} principal={principal} /></td><td><time>{formatDate(revision.created_at, t.locale)}</time></td><td><div className="row-actions"><button type="button" aria-label={t.compareRevision.replace('{revision}', revision.revision)} onClick={() => compare(revision.revision)}>{t.compare}</button>{principal.role === 'admin' && revision.revision !== state.config.revision && (restoring === revision.revision
-                  ? <button className="danger-link" type="button" aria-label={t.confirmRestore.replace('{revision}', revision.revision)} onClick={() => restore(revision.revision)}>{t.confirmRestore.replace('{revision}', revision.revision)}</button>
-                  : <button type="button" aria-label={t.restoreRevision.replace('{revision}', revision.revision)} onClick={() => setRestoring(revision.revision)}>{t.restore}</button>)}</div></td></tr>)}</tbody>
+                  ? <button className="danger-link" type="button" disabled={restoreBusy} aria-label={t.confirmRestore.replace('{revision}', revision.revision)} onClick={() => restore(revision.revision)}>{t.confirmRestore.replace('{revision}', revision.revision)}</button>
+                  : <button type="button" disabled={restoreBusy} aria-label={t.restoreRevision.replace('{revision}', revision.revision)} onClick={() => setRestoring(revision.revision)}>{t.restore}</button>)}</div></td></tr>)}</tbody>
               </table></div>
               <RevisionPagination history={history} t={t} />
               <ActionError error={saveError} t={t} />
@@ -2436,7 +2946,7 @@ function ConfigDetail({ principal, configKey, environmentKey, t }) {
                 else window.location.hash = `/configs/${configKey}/${targetEnvironment}`;
               }} />
           ) : (
-            <ConfigClone path={path} t={t} />
+            <ConfigCopy key={`${path}/${tab}`} path={path} config={state.config} newConfig={tab === 'clone'} existingEnvironments={new Set(contexts.items.map(environment => environment.key))} t={t} />
           )}
         </div>
         {!operationMode && <aside className="config-meta-panel">
@@ -2488,7 +2998,10 @@ function ConfigRevisionWorkbench({ mode, configKey, currentEnvironment, currentR
   const [source, setSource] = useState(initialSource || null);
   const [target, setTarget] = useState(null);
   const [comparison, setComparison] = useState({ status: 'idle' });
-  const [actionError, setActionError] = useState('');
+  const [actionError, setActionError] = useState(null);
+  const [previewEpoch, setPreviewEpoch] = useState(0);
+  const [mutate, resetMutation] = useMutation(request);
+  const selectionKey = JSON.stringify([source, target]);
   const environmentOptions = environments.length > 0 ? environments : [{ key: currentEnvironment }];
   const declaredCurrent = Object.fromEntries(environmentOptions.map(environment => [environment.key, environment.key === currentEnvironment ? currentRevision : environment.revision]));
 
@@ -2513,20 +3026,21 @@ function ConfigRevisionWorkbench({ mode, configKey, currentEnvironment, currentR
         read(target),
       ]).then(([preview, targetConfig]) => ({ target: targetConfig.content, result: preview.content, targetFormat: targetConfig.format, resultFormat: preview.format, expectedTargetRevision: preview.expected_target_revision }));
     operation
-      .then(result => live && setComparison({ status: 'ready', ...result }))
-      .catch(error => live && setComparison({ status: 'failed', code: error.code }));
+      .then(result => live && setComparison({ status: 'ready', selectionKey, ...result }))
+      .catch(error => live && setComparison({ status: 'failed', error }));
     return () => { live = false; };
-  }, [configKey, currentContent, currentEnvironment, currentFormat, currentRevision, mode, source, target]);
+  }, [configKey, currentContent, currentEnvironment, currentFormat, currentRevision, mode, source, target, selectionKey, previewEpoch]);
 
   const sameRevision = (left, right) => left && right && left.environment === right.environment && left.revision === right.revision;
   const choose = (slot, selection) => {
+    if (comparison.saving) return;
     if (!selection) {
       if (slot === 'source') setSource(null);
       else setTarget(null);
-      setActionError('');
+      setActionError(null);
       return;
     }
-    setActionError('');
+    setActionError(null);
     if (slot === 'source') {
       setSource(selection);
       if (sameRevision(selection, target)) setTarget(null);
@@ -2549,24 +3063,22 @@ function ConfigRevisionWorkbench({ mode, configKey, currentEnvironment, currentR
   const identity = selection => selection ? `${selection.environment}/${configKey}@v${selection.revision}` : '—';
   const selectedFormat = selection => selection?.format || (selection?.environment === currentEnvironment && selection.revision === currentRevision ? currentFormat : '');
   const commit = async () => {
-    setActionError('');
+    if (comparison.saving || comparison.status !== 'ready' || comparison.selectionKey !== selectionKey) return;
+    setActionError(null);
     setComparison(current => ({ ...current, saving: true }));
     try {
-      const result = await request(`/v1/environments/${encodeURIComponent(target.environment)}/configs/${encodeURIComponent(configKey)}/${mode}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify({ source_environment: source.environment, source_config: configKey, source_revision: source.revision, target_revision: target.revision, expected_target_revision: comparison.expectedTargetRevision }),
-      });
+      const result = await mutate(`/v1/environments/${encodeURIComponent(target.environment)}/configs/${encodeURIComponent(configKey)}/${mode}`,
+        { source_environment: source.environment, source_config: configKey, source_revision: source.revision, target_revision: target.revision, expected_target_revision: comparison.expectedTargetRevision });
       onCommitted(result, target.environment);
     } catch (error) {
       setComparison(current => ({ ...current, saving: false }));
-      setActionError(error.status === 409 ? t.saveConflict : t.saveFailed);
+      setActionError(managementError(error, t, t.saveFailed));
     }
   };
 
   return <section className="config-compare-workbench">
     <p className="compare-drag-hint">{mode === 'compare' ? t.compareDragHint : t.transferDragHint}</p>
-    <div className="compare-picker">
+    <fieldset className="compare-picker" disabled={comparison.saving}>
       <CompareRevisionLane side="left" configKey={configKey} environment={leftEnvironment} currentRevision={declaredCurrent[leftEnvironment]} source={source} target={target} onEnvironmentChange={setLeftEnvironment} onChoose={choose} t={t} />
       <div className="compare-drop-stack">
         {['source', 'target'].map(slot => {
@@ -2578,17 +3090,17 @@ function ConfigRevisionWorkbench({ mode, configKey, currentEnvironment, currentR
         })}
       </div>
       <CompareRevisionLane side="right" configKey={configKey} environment={rightEnvironment} currentRevision={declaredCurrent[rightEnvironment]} source={source} target={target} onEnvironmentChange={setRightEnvironment} onChoose={choose} t={t} />
-    </div>
-    {actionError && <p className="inline-error compare-action-error" role="alert">{actionError}</p>}
+    </fieldset>
+    <ActionError error={actionError} t={t} />
+    {source && target && mode !== 'compare' && <button type="button" disabled={comparison.saving || comparison.status === 'loading'} onClick={() => { setActionError(null); resetMutation(); setPreviewEpoch(value => value + 1); }}>{t.refreshTransferPreview}</button>}
     {comparison.status === 'loading' && <div className="collection-state compare-loading"><span className="loading-line" /></div>}
-    {comparison.status === 'ready' && (mode === 'compare' ? <ConfigDiffEditor source={comparison.source} target={comparison.target} sourceFormat={comparison.sourceFormat} targetFormat={comparison.targetFormat} sourceLabel={identity(source)} targetLabel={identity(target)} t={t} /> : <div className="transfer-result">
+    {comparison.status === 'ready' && comparison.selectionKey === selectionKey && (mode === 'compare' ? <ConfigDiffEditor source={comparison.source} target={comparison.target} sourceFormat={comparison.sourceFormat} targetFormat={comparison.targetFormat} sourceLabel={identity(source)} targetLabel={identity(target)} t={t} /> : <div className="transfer-result">
       <div className="transfer-direction"><code>{identity(source)}</code><span aria-hidden="true">→</span><code>{identity(target)}</code></div>
       <ConfigDiffEditor source={comparison.target} target={comparison.result} sourceFormat={comparison.targetFormat} targetFormat={comparison.resultFormat} sourceLabel={t.targetBefore} targetLabel={t.resultAfter} t={t} />
       <div className="editor-actions"><span className="transfer-conflict-hint">{t.targetConflictHint.replace('{revision}', comparison.expectedTargetRevision)}</span><button className="primary-action compact-action" type="button" disabled={comparison.saving} onClick={commit}>{(mode === 'merge' ? t.mergeInto : t.replaceInto).replace('{environment}', target.environment)}</button></div>
     </div>)}
-    {comparison.status === 'failed' && <p className="inline-error" role="alert">{comparison.code === 'format_mismatch'
-      ? t.mergeFormatMismatch.replace('{source}', selectedFormat(source).toUpperCase()).replace('{target}', selectedFormat(target).toUpperCase())
-      : t.operationFailed}</p>}
+    {comparison.status === 'failed' && <ActionError error={{ ...managementError(comparison.error, t, t.operationFailed),
+      ...(comparison.error?.code === 'format_mismatch' ? { message: t.mergeFormatMismatch.replace('{source}', selectedFormat(source).toUpperCase()).replace('{target}', selectedFormat(target).toUpperCase()) } : {}) }} t={t} />}
   </section>;
 }
 
@@ -2618,30 +3130,90 @@ function ResolvedPreview({ path, t }) {
   );
 }
 
-function ConfigClone({ path, t }) {
-  const [state, setState] = useState({ status: 'idle', error: '' });
-  const clone = async event => {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    setState({ status: 'loading', error: '' });
-    try {
-      const result = await request(`${path}/clone`, {
+function ConfigCopy({ path, config, newConfig, existingEnvironments, t }) {
+  const [environment, setEnvironment] = useState('');
+  const [state, setState] = useState({ status: 'idle' });
+  const [mutate, resetMutation] = useMutation(request);
+  // Clone keeps the server-side clone so its globally-new-key check still applies; only Copy to environment may edit.
+  const [content, setContent] = useState(config.content);
+  const edited = !newConfig && content !== config.content;
+  const [showChanges, setShowChanges] = useState(false);
+  const diffTarget = useDeferredValue(content);
+  // Check the content against the chosen target before anything is written: syntax errors block the
+  // write, and Vault references without a value in that Environment are shown as warnings.
+  const [preflight, setPreflight] = useState({ status: 'idle' });
+  useEffect(() => {
+    if (!environment || !content.trim()) { setPreflight({ status: 'idle' }); return undefined; }
+    let live = true;
+    setPreflight({ status: 'checking', environment });
+    const timer = window.setTimeout(() => {
+      request('/v1/configs/validate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify({ target_environment: data.get('target_environment'), target_config: data.get('target_config'), target_name: data.get('target_name') }),
-      });
-      setState({ status: 'ready', error: '', warnings: result.warnings || [] });
-    } catch {
-      setState({ status: 'failed', error: t.operationFailed });
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ environment, format: config.format, content }),
+      })
+        .then(result => live && setPreflight({ status: 'ready', environment, warnings: result.warnings || [] }))
+        .catch(error => live && setPreflight(error.status === 422
+          ? { status: 'invalid', environment, error: managementError(error, t, t.config_document_invalid) }
+          : { status: 'failed', environment }));
+    }, 350);
+    return () => { live = false; window.clearTimeout(timer); };
+  }, [environment, content]);
+  const submit = async event => {
+    event.preventDefault();
+    if (state.status === 'loading' || state.status === 'ready') return;
+    const data = new FormData(event.currentTarget);
+    const targetConfig = newConfig ? data.get('target_config') : config.config_key;
+    setState({ status: 'loading' });
+    try {
+      const result = edited
+        ? await mutate(`/v1/environments/${encodeURIComponent(environment)}/configs/${encodeURIComponent(targetConfig)}`,
+          { name: config.config_name, expected_revision: 0, format: config.format, content }, 'PUT')
+        : await mutate(newConfig ? `${path}/clone` : `/v1/environments/${encodeURIComponent(environment)}/configs/${encodeURIComponent(targetConfig)}/replace`, newConfig
+        ? { target_environment: environment, target_config: targetConfig, target_name: data.get('target_name'), source_revision: config.revision }
+        : { source_environment: config.environment_key, source_config: config.config_key, source_revision: config.revision, target_revision: 0, expected_target_revision: 0 });
+      setState({ status: 'ready', result, environment, targetConfig });
+    } catch (error) {
+      setState({ status: 'failed', error: managementError(error, t, t.operationFailed), reason: error.reason, environment, targetConfig });
     }
   };
-  return <section className="transfer-panel"><form className="clone-form" onSubmit={clone}>
-    <label>{t.targetEnvironment}<input name="target_environment" required pattern="[a-z][a-z0-9_-]{0,62}" /></label>
-    <label>{t.targetConfig}<input name="target_config" required pattern="[a-z][a-z0-9_-]{0,62}" /></label>
-    <label>{t.targetName}<input name="target_name" required maxLength="255" /></label>
-    <div className="form-actions"><span className={state.status === 'ready' ? 'success-note' : 'inline-error'} role="status">{state.status === 'ready' ? t.cloneComplete : state.error}</span><button className="primary-action compact-action" type="submit" disabled={state.status === 'loading'}>{t.cloneConfig}</button></div>
-    {state.warnings?.length > 0 && <div className="config-warning-list" role="status"><ConfigWarningLines warnings={state.warnings} t={t} /></div>}
-  </form></section>;
+  const change = () => {
+    // A completed copy is a new intent after edits. Failed identical requests
+    // retain their operation ID so a lost response cannot create a second write.
+    if (state.status === 'ready') { resetMutation(); setState({ status: 'idle' }); }
+    else if (state.status === 'failed') setState({ status: 'idle' });
+  };
+  return <section className="transfer-panel config-copy-panel">
+    <p>{newConfig ? t.cloneExplanation : t.copyExplanation}</p>
+    {newConfig && <p className="muted-note"><a href={`#/configs?${new URLSearchParams({ new: '1', template: config.config_key, template_environment: config.environment_key })}`}>{t.cloneEditHint}</a></p>}
+    <p><code>{`${config.environment_key}/${config.config_key}@v${config.revision}`}</code></p>
+    <p className="muted-note">{t.copySavedRevision.replace('{revision}', config.revision)}</p>
+    <form onSubmit={submit} onChange={change}>
+      <fieldset className="clone-form" disabled={state.status === 'loading'}>
+        <EnvironmentSelect label={t.targetEnvironment} name="target_environment" required value={environment} onChange={setEnvironment}
+          unavailable={newConfig ? undefined : existingEnvironments} unavailableLabel={t.alreadyHasConfig} t={t} />
+        {newConfig && <><label>{t.targetConfig}<input name="target_config" required pattern="[a-z][a-z0-9_-]{0,62}" /></label>
+          <label>{t.targetName}<input name="target_name" required maxLength="255" defaultValue={config.config_name} /></label></>}
+        <div className="form-actions">
+          <button className="primary-action compact-action" type="submit" disabled={!environment || !content.trim() || preflight.status === 'invalid' || state.status === 'loading' || state.status === 'ready'}>{newConfig ? t.cloneConfig : t.copyFirstVersion.replace('{environment}', environment || '…')}</button>
+        </div>
+      </fieldset>
+    </form>
+    <ActionError error={state.error} t={t} />
+    {state.status !== 'ready' && preflight.status === 'checking' && <p className="muted-note" role="status">{t.preflightChecking.replace('{environment}', preflight.environment)}</p>}
+    {state.status !== 'ready' && preflight.status === 'ready' && preflight.environment === environment && (preflight.warnings.length
+      ? <div className="config-warning-list" role="status"><strong>{t.preflightWarnings.replace('{environment}', environment)}</strong><ConfigWarningLines warnings={preflight.warnings} t={t} /></div>
+      : <p className="muted-note" role="status">{t.preflightClear.replace('{environment}', environment)}</p>)}
+    {state.status !== 'ready' && preflight.status === 'invalid' && <ActionError error={preflight.error} t={t} />}
+    {state.status === 'ready' && <p className="success-note" role="status">{t.copyComplete.replace('{target}', `${state.environment}/${state.targetConfig}`).replace('{revision}', state.result.revision)}</p>}
+    {(state.status === 'ready' || state.reason === 'target_config_exists') && <p><a href={`#/configs/${encodeURIComponent(state.targetConfig)}/${encodeURIComponent(state.environment)}`}>{t.openTargetConfig}</a></p>}
+    {state.result?.warnings?.length > 0 && <div className="config-warning-list" role="status"><ConfigWarningLines warnings={state.result.warnings} t={t} /></div>}
+    <div className="editor-toolbar"><span>{config.format.toUpperCase()}</span><div className="editor-toolbar-actions">{edited && <button type="button" aria-pressed={showChanges} onClick={() => setShowChanges(value => !value)}>{showChanges ? t.hideChanges : t.showChanges}</button>}{edited && <button type="button" onClick={() => { setContent(config.content); setShowChanges(false); change(); }}>{t.resetToSource}</button>}<CopyValue value={content} label={t.copyConfiguration} display={t.copyContent} t={t} /></div></div>
+    {edited && <p className="muted-note" role="status">{t.editedCopyNote}</p>}
+    {edited && showChanges && <ConfigDiffEditor source={config.content} target={diffTarget} sourceFormat={config.format} targetFormat={config.format}
+      sourceLabel={`${config.environment_key}/${config.config_key}@v${config.revision}`} targetLabel={t.editedCopy} t={t} />}
+    <ConfigCodeEditor label={t.source} readOnly={newConfig} value={content} format={config.format} onChange={value => { setContent(value); change(); }} />
+  </section>;
 }
 
 function ConfigWarningLines({ warnings, t }) {
@@ -2652,11 +3224,24 @@ function ResourcePage({ eyebrow, title, body, action, children, className = '' }
   return <div className={`page ${className}`.trim()}><div className="resource-heading"><div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p>{body}</p></div>{action}</div>{children}</div>;
 }
 
-function CollectionState({ state, t, children }) {
+function CollectionState({ state, t, empty, children }) {
   if (state.status === 'loading') return <div className="collection-state"><span className="loading-line" /></div>;
   if (state.status === 'failed') return <div className="collection-state"><p>{t.loadFailed}</p></div>;
-  if (state.items.length === 0) return <div className="collection-state"><p>{t.noResources}</p></div>;
+  if (state.items.length === 0) return <div className="collection-state"><p>{empty || t.noResources}</p></div>;
   return children;
+}
+
+function StatusFilter({ value, onChange, inactive = 'archived', extra = [], t }) {
+  return <label><span>{t.status}</span><select value={value} onChange={event => onChange(event.target.value)}>
+    <option value="active">{t.statusActive}</option>
+    {extra.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+    <option value={inactive}>{inactive === 'revoked' ? t.revoked : t.statusArchived}</option>
+    <option value="all">{t.allStatuses}</option>
+  </select></label>;
+}
+
+function createError(error, t, fallback) {
+  return error?.status === 409 ? { message: t.resourceKeyInUse, requestID: error.requestID || '' } : managementError(error, t, fallback);
 }
 
 function formatDate(value, locale) {
@@ -2714,15 +3299,24 @@ function App() {
     document.documentElement.dataset.theme = value;
     setThemeState(value);
   };
+  const signedInElsewhere = new URLSearchParams(window.location.search).get('signed-in') === '1';
   const load = () => {
     setSession({ status: 'loading' });
     request('/v1/me')
-      .then(principal => setSession({ status: 'ready', principal }))
+      .then(principal => {
+        try {
+          const returnHash = sessionStorage.getItem('configra-return-hash');
+          sessionStorage.removeItem('configra-return-hash');
+          if (returnHash && window.location.hash.length <= 2) window.location.hash = returnHash;
+        } catch { /* optional convenience */ }
+        setSession({ status: 'ready', principal });
+      })
       .catch(error => setSession({ status: error.status === 401 ? 'anonymous' : 'failed' }));
   };
-  useEffect(load, []);
+  useEffect(() => { if (!signedInElsewhere) load(); }, []);
   useEffect(() => { document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en'; }, [language]);
 
+  if (signedInElsewhere) return <SignedInElsewhere t={t} />;
   if (session.status === 'loading') return <Loading />;
   if (session.status === 'anonymous') return <Login language={language} setLanguage={setLanguage} theme={theme} setTheme={setTheme} t={t} />;
   if (session.status === 'failed') return <Failure retry={load} t={t} />;

@@ -30,8 +30,11 @@ import (
 const maxManagementRequestBytes = 32 << 20
 
 type ConfigRepository interface {
+	WriteTokenLifetime() time.Duration
 	AuthorityRepository
 	RecordRejectedMutation(context.Context, mysqlstore.RejectedMutation) error
+	ChangeSessions(context.Context, mysqlstore.SessionChange) (mysqlstore.SessionChangeResult, error)
+	ListSessionPolicies(context.Context, mysqlstore.InventoryQuery) (mysqlstore.InventoryPage[mysqlstore.SessionPolicySummary], error)
 	ListEnvironments(context.Context, mysqlstore.EnvironmentQuery) (mysqlstore.InventoryPage[mysqlstore.Environment], error)
 	ApplyEnvironmentChange(context.Context, mysqlstore.EnvironmentChange) (mysqlstore.EnvironmentChangeResult, error)
 	ListConfigs(context.Context, mysqlstore.ConfigQuery) (mysqlstore.InventoryPage[mysqlstore.ConfigSummary], error)
@@ -53,7 +56,7 @@ type ConfigRepository interface {
 	CommitVault(context.Context, mysqlstore.VaultCommit) (mysqlstore.VaultCommitResult, error)
 	RestoreVault(context.Context, mysqlstore.VaultRestore) (mysqlstore.VaultCommitResult, error)
 	ApplyVaultLifecycleChange(context.Context, mysqlstore.VaultLifecycleChange) (mysqlstore.VaultLifecycleResult, error)
-	ListTokens(context.Context, mysqlstore.InventoryQuery) (mysqlstore.InventoryPage[mysqlstore.TokenSummary], error)
+	ListTokens(context.Context, mysqlstore.TokenQuery) (mysqlstore.InventoryPage[mysqlstore.TokenSummary], error)
 	CreateToken(context.Context, mysqlstore.TokenCreate) (mysqlstore.TokenCreateResult, error)
 	SetTokenEnvironments(context.Context, mysqlstore.TokenEnvironmentChange) (mysqlstore.TokenEnvironmentResult, error)
 	RevokeToken(context.Context, mysqlstore.TokenRevoke) (mysqlstore.TokenRevokeResult, error)
@@ -94,6 +97,8 @@ func NewHandler(configs ConfigRepository, publisher machine.AccessPublisher, cli
 	mux.Handle("GET /{$}", interfaceHandler)
 	mux.Handle("GET /ui/", interfaceHandler)
 	mux.HandleFunc("GET /v1/me", server.readMe)
+	mux.HandleFunc("GET /v1/session-policies", server.listSessionPolicies)
+	mux.HandleFunc("POST /v1/session-policies", server.changeSessions)
 	mux.HandleFunc("GET /v1/environments", server.listEnvironments)
 	mux.HandleFunc("POST /v1/environments", server.createEnvironment)
 	mux.HandleFunc("PATCH /v1/environments/{environment}", server.renameEnvironment)
@@ -159,12 +164,21 @@ func (server *server) readMe(response http.ResponseWriter, request *http.Request
 	if !ok {
 		return
 	}
+	var sessionExpiresAt *time.Time
+	if !principal.SessionExpiresAt.IsZero() {
+		sessionExpiresAt = &principal.SessionExpiresAt
+	}
 	writeJSON(response, struct {
-		Issuer  string         `json:"issuer"`
-		Subject string         `json:"subject"`
-		Email   string         `json:"email"`
-		Role    humanauth.Role `json:"role"`
-	}{principal.Issuer, principal.Subject, principal.Email, principal.Role})
+		Issuer                    string         `json:"issuer"`
+		Subject                   string         `json:"subject"`
+		Email                     string         `json:"email"`
+		Role                      humanauth.Role `json:"role"`
+		WriteTokenMaxTTLDays      int            `json:"write_token_max_ttl_days"`
+		SessionExpiresAt          *time.Time     `json:"session_expires_at,omitempty"`
+		SessionIdleTimeoutSeconds int            `json:"session_idle_timeout_seconds,omitempty"`
+		SessionLifetimeSeconds    int            `json:"session_lifetime_seconds,omitempty"`
+	}{principal.Issuer, principal.Subject, principal.Email, principal.Role, int(server.configs.WriteTokenLifetime() / (24 * time.Hour)),
+		sessionExpiresAt, int(principal.SessionIdleTimeout / time.Second), int(principal.SessionLifetime / time.Second)})
 }
 
 func (server *server) listEnvironments(response http.ResponseWriter, request *http.Request) {
@@ -479,7 +493,7 @@ func (server *server) readRawConfig(response http.ResponseWriter, request *http.
 }
 
 func (server *server) commitConfig(response http.ResponseWriter, request *http.Request) {
-	principal, ok := requireAdmin(response, request)
+	actor, ok := mutationActor(response, request)
 	if !ok {
 		return
 	}
@@ -494,7 +508,7 @@ func (server *server) commitConfig(response http.ResponseWriter, request *http.R
 	}
 	result, err := server.configs.CommitConfig(request.Context(), mysqlstore.ConfigCommit{
 		OperationID:      request.Header.Get("Idempotency-Key"),
-		Actor:            mysqlstore.Actor{Type: "user", ID: principal.ActorID()},
+		Actor:            actor,
 		EnvironmentKey:   request.PathValue("environment"),
 		ConfigKey:        request.PathValue("config"),
 		ConfigName:       body.Name,
@@ -627,13 +641,17 @@ func (server *server) transferConfig(response http.ResponseWriter, request *http
 		return
 	}
 	var body struct {
-		SourceEnvironment      string `json:"source_environment"`
-		SourceConfig           string `json:"source_config"`
-		SourceRevision         uint64 `json:"source_revision"`
-		TargetRevision         uint64 `json:"target_revision"`
-		ExpectedTargetRevision uint64 `json:"expected_target_revision"`
+		SourceEnvironment      string  `json:"source_environment"`
+		SourceConfig           string  `json:"source_config"`
+		SourceRevision         uint64  `json:"source_revision"`
+		TargetRevision         *uint64 `json:"target_revision"`
+		ExpectedTargetRevision *uint64 `json:"expected_target_revision"`
 	}
 	if !decodeJSON(response, request, &body) {
+		return
+	}
+	if body.TargetRevision == nil || body.ExpectedTargetRevision == nil {
+		writeMutationResult(response, nil, &mysqlstore.ConfigMutationError{Field: "target_revision", Reason: "target_revision_required"})
 		return
 	}
 	transfer := mysqlstore.ConfigTransfer{
@@ -644,8 +662,8 @@ func (server *server) transferConfig(response http.ResponseWriter, request *http
 		SourceRevision:         body.SourceRevision,
 		TargetEnvironmentKey:   request.PathValue("environment"),
 		TargetConfigKey:        request.PathValue("config"),
-		TargetRevision:         body.TargetRevision,
-		ExpectedTargetRevision: body.ExpectedTargetRevision,
+		TargetRevision:         *body.TargetRevision,
+		ExpectedTargetRevision: *body.ExpectedTargetRevision,
 	}
 	var result mysqlstore.ConfigCommitResult
 	var err error
@@ -689,6 +707,7 @@ func (server *server) cloneConfig(response http.ResponseWriter, request *http.Re
 		TargetEnvironment string `json:"target_environment"`
 		TargetConfig      string `json:"target_config"`
 		TargetName        string `json:"target_name"`
+		SourceRevision    uint64 `json:"source_revision"`
 	}
 	if !decodeJSON(response, request, &body) {
 		return
@@ -701,6 +720,7 @@ func (server *server) cloneConfig(response http.ResponseWriter, request *http.Re
 		TargetEnvironmentKey: body.TargetEnvironment,
 		TargetConfigKey:      body.TargetConfig,
 		TargetConfigName:     body.TargetName,
+		SourceRevision:       body.SourceRevision,
 	})
 	writeMutationResult(response, result, err)
 }
@@ -844,11 +864,20 @@ func (server *server) listTokens(response http.ResponseWriter, request *http.Req
 	if _, ok := requireAdmin(response, request); !ok {
 		return
 	}
-	query, _, ok := parseInventoryQuery(response, request, "include_revoked")
+	query, values, ok := parseInventoryQuery(response, request, "include_revoked", "expiring_within_days")
 	if !ok {
 		return
 	}
-	tokens, err := server.configs.ListTokens(request.Context(), query)
+	tokenQuery := mysqlstore.TokenQuery{InventoryQuery: query}
+	if values.Has("expiring_within_days") {
+		days, err := strconv.Atoi(values.Get("expiring_within_days"))
+		if err != nil || days < 1 || days > mysqlstore.MaxTokenExpiryWindowDays {
+			writeError(response, http.StatusBadRequest, "invalid_request")
+			return
+		}
+		tokenQuery.ExpiringWithinDays = days
+	}
+	tokens, err := server.configs.ListTokens(request.Context(), tokenQuery)
 	if err != nil {
 		writeReadError(response, err)
 		return
@@ -863,6 +892,9 @@ func (server *server) createToken(response http.ResponseWriter, request *http.Re
 	}
 	var body struct {
 		DisplayName      string     `json:"display_name"`
+		Kind             string     `json:"kind"`
+		ConfigKeys       []string   `json:"config_keys"`
+		NamespaceKeys    []string   `json:"namespace_keys"`
 		EnvironmentKeys  []string   `json:"environment_keys"`
 		AllowWithoutMTLS bool       `json:"allow_without_mtls"`
 		ExpiresAt        *time.Time `json:"expires_at"`
@@ -871,11 +903,16 @@ func (server *server) createToken(response http.ResponseWriter, request *http.Re
 	if !decodeJSON(response, request, &body) {
 		return
 	}
+	if body.Kind == machine.TokenWriteScoped && !principal.MFAVerified {
+		writeError(response, http.StatusForbidden, "mfa_required")
+		return
+	}
 	var expiresAt time.Time
 	if body.ExpiresAt != nil {
 		expiresAt = body.ExpiresAt.UTC()
 	}
 	result, err := server.configs.CreateToken(request.Context(), mysqlstore.TokenCreate{
+		Kind: body.Kind, ConfigKeys: body.ConfigKeys, NamespaceKeys: body.NamespaceKeys,
 		OperationID:      request.Header.Get("Idempotency-Key"),
 		Actor:            mysqlstore.Actor{Type: "user", ID: principal.ActorID()},
 		DisplayName:      body.DisplayName,
@@ -1273,6 +1310,8 @@ func parseRevisionQuery(response http.ResponseWriter, request *http.Request) (my
 
 func writeReadError(response http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, machine.ErrForbidden):
+		writeError(response, http.StatusForbidden, "scope_forbidden")
 	case errors.Is(err, mysqlstore.ErrValidation):
 		writeError(response, http.StatusBadRequest, "invalid_request")
 	case errors.Is(err, mysqlstore.ErrNotFound), errors.Is(err, machine.ErrNotFound):
@@ -1291,7 +1330,29 @@ func writeMutationResult(response http.ResponseWriter, result any, err error) {
 		if writer, ok := response.(*auditResponseWriter); ok && mysqlstore.AuditWasCommitted(err) {
 			writer.committed = true
 		}
+		var issue *mysqlstore.TokenValidationError
+		if errors.As(err, &issue) {
+			writeError(response, http.StatusUnprocessableEntity, "validation_failed", issue)
+			return
+		}
+		var configIssue *mysqlstore.ConfigMutationError
+		if errors.As(err, &configIssue) {
+			status, code := http.StatusUnprocessableEntity, "validation_failed"
+			if errors.Is(err, mysqlstore.ErrConflict) {
+				status, code = http.StatusConflict, "revision_conflict"
+			}
+			writeError(response, status, code, configIssue)
+			return
+		}
 		switch {
+		case errors.Is(err, machine.ErrForbidden):
+			writeError(response, http.StatusForbidden, "scope_forbidden")
+		case errors.Is(err, mysqlstore.ErrUnauthorized):
+			writeError(response, http.StatusUnauthorized, "unauthorized")
+		case errors.Is(err, machine.ErrUnresolved):
+			writeError(response, http.StatusUnprocessableEntity, "unresolved_vault_reference")
+		case errors.Is(err, mysqlstore.ErrNotFound), errors.Is(err, machine.ErrNotFound):
+			writeError(response, http.StatusNotFound, "not_found")
 		case errors.Is(err, mysqlstore.ErrOperationReuse):
 			writeError(response, http.StatusConflict, "operation_id_reused")
 		case errors.Is(err, mysqlstore.ErrConflict):
@@ -1324,19 +1385,30 @@ func writeJSONResponse(response http.ResponseWriter, value any) bool {
 	return err == nil && written == len(payload)
 }
 
-func writeError(response http.ResponseWriter, status int, code string) {
+func writeError(response http.ResponseWriter, status int, code string, validation ...error) {
 	requestID := newErrorRequestID()
 	if writer, ok := response.(*auditResponseWriter); ok {
 		requestID, writer.errorCode = writer.requestID, code
 	}
 	body := struct {
 		Error struct {
-			Code      string `json:"code"`
-			RequestID string `json:"request_id"`
+			Code       string `json:"code"`
+			RequestID  string `json:"request_id"`
+			Field      string `json:"field,omitempty"`
+			Reason     string `json:"reason,omitempty"`
+			MaxTTLDays int    `json:"max_ttl_days,omitempty"`
 		} `json:"error"`
 	}{}
 	body.Error.Code = code
 	body.Error.RequestID = requestID
+	if len(validation) > 0 {
+		switch issue := validation[0].(type) {
+		case *mysqlstore.TokenValidationError:
+			body.Error.Field, body.Error.Reason, body.Error.MaxTTLDays = issue.Field, issue.Reason, issue.MaxTTLDays
+		case *mysqlstore.ConfigMutationError:
+			body.Error.Field, body.Error.Reason = issue.Field, issue.Reason
+		}
+	}
 	response.Header().Set("Cache-Control", "no-store")
 	response.Header().Set("Content-Type", "application/json")
 	response.WriteHeader(status)

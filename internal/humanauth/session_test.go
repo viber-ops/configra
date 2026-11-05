@@ -26,3 +26,21 @@ func TestNewSessionManagerUsesProductionSecurityDefaults(t *testing.T) {
 		t.Fatalf("Session Cookie security = %#v", sessions.Cookie)
 	}
 }
+
+func TestSessionLimitsComeFromConfigurationAndLongLifetimesPersist(t *testing.T) {
+	defaults := humanauth.NewSessionManagerWithLimits(memstore.New(), humanauth.SessionLimits{})
+	if defaults.IdleTimeout != 30*time.Minute || defaults.Lifetime != 8*time.Hour || defaults.Cookie.Persist {
+		t.Fatalf("zero limits = idle %s, lifetime %s, persist %v", defaults.IdleTimeout, defaults.Lifetime, defaults.Cookie.Persist)
+	}
+	shorter := humanauth.NewSessionManagerWithLimits(memstore.New(), humanauth.SessionLimits{IdleTimeout: 10 * time.Minute, Lifetime: 4 * time.Hour})
+	if shorter.IdleTimeout != 10*time.Minute || shorter.Lifetime != 4*time.Hour || shorter.Cookie.Persist {
+		t.Fatalf("shorter limits = idle %s, lifetime %s, persist %v", shorter.IdleTimeout, shorter.Lifetime, shorter.Cookie.Persist)
+	}
+	longer := humanauth.NewSessionManagerWithLimits(memstore.New(), humanauth.SessionLimits{IdleTimeout: 2 * time.Hour, Lifetime: 72 * time.Hour})
+	if longer.IdleTimeout != 2*time.Hour || longer.Lifetime != 72*time.Hour || !longer.Cookie.Persist {
+		t.Fatalf("longer limits = idle %s, lifetime %s, persist %v", longer.IdleTimeout, longer.Lifetime, longer.Cookie.Persist)
+	}
+	if !longer.Cookie.Secure || !longer.Cookie.HttpOnly || longer.Cookie.Name != "__Host-configra_session" {
+		t.Fatalf("longer limits weakened the Cookie: %#v", longer.Cookie)
+	}
+}

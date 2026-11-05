@@ -78,7 +78,7 @@ spec:
                     properties:
                       type:
                         type: string
-                        enum: [config, file]
+                        enum: [config, file, release]
                         default: config
                       environment:
                         type: string

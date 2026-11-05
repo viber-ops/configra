@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: configra-api
+spec:
+  replicas: 2
+  template:
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          minDomains: 2
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: configra
+              app.kubernetes.io/component: api
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: configra
+              app.kubernetes.io/component: api
+      containers:
+        - name: configra
+          ports:
+            - name: metrics
+              containerPort: 9090
+          env:
+            - name: CONFIGRA_MYSQL_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: configra-api-db
+                  key: mysql-dsn
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: configra-management
+spec:
+  replicas: 2
+  template:
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          minDomains: 2
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: configra
+              app.kubernetes.io/component: management
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: configra
+              app.kubernetes.io/component: management
+      containers:
+        - name: configra
+          ports:
+            - name: metrics
+              containerPort: 9090
+          env:
+            - name: CONFIGRA_MYSQL_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: configra-management-db
+                  key: mysql-dsn

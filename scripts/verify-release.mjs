@@ -15,6 +15,9 @@ assert.match(version, /^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/, 'Pass a release di
 const expectedSDK = readFileSync(join(root, 'kubernetes/go.mod'), 'utf8')
   .match(/^\s*github\.com\/viber-ops\/configra-go\s+(\S+)$/m)?.[1];
 assert.ok(expectedSDK, 'Kubernetes declares its SDK version');
+const expectedClientSDK = readFileSync(join(root, 'go.mod'), 'utf8')
+  .match(/^\s*github\.com\/viber-ops\/configra-go\s+(\S+)$/m)?.[1];
+assert.ok(expectedClientSDK, 'CLI declares its SDK version');
 const checksums = new Map(
   readFileSync(join(directory, 'SHA256SUMS'), 'utf8').trim().split('\n').map((line) => {
     const match = /^([a-f0-9]{64})  (configra_[A-Za-z0-9_.-]+\.tar\.gz)$/.exec(line);
@@ -48,14 +51,14 @@ for (const platform of ['darwin', 'linux']) {
     assert.match(read('NOTICE'), /Copyright 2026 The Configra Authors/);
     assert.match(read('kubernetes/LICENSE'), /Apache License\s+Version 2\.0, January 2004/);
     assert.match(read('kubernetes/NOTICE'), /Copyright 2026 The Configra Authors/);
-    assert.match(read('licenses/go1.26.7/LICENSE'), /The Go Authors/);
+    assert.match(read('licenses/go1.26.10/LICENSE'), /The Go Authors/);
     for (const file of readFileSync(join(root, 'scripts/go-notices/files.txt'), 'utf8').trim().split('\n')) {
       const stored = /\.(?:go|s|h)$/.test(file) ? `${file}.txt` : file;
-      assert.ok(entries.includes(`${name}/licenses/go1.26.7/${stored}`), `${name}: missing Go notice ${file}`);
+      assert.ok(entries.includes(`${name}/licenses/go1.26.10/${stored}`), `${name}: missing Go notice ${file}`);
     }
-    assert.match(read('licenses/go1.26.7/src/runtime/memmove_amd64.s.txt'), /Lucent/);
-    assert.match(read('licenses/go1.26.7/src/crypto/internal/fips140/edwards25519/scalar.go.txt'), /fiat-crypto/);
-    assert.match(read('licenses/go1.26.7/SOURCE.md'), /0ed24eac755105085b89fe9cabc2742b91a0ad7b94b59d3ad364918ebc8956ad/);
+    assert.match(read('licenses/go1.26.10/src/runtime/memmove_amd64.s.txt'), /Lucent/);
+    assert.match(read('licenses/go1.26.10/src/crypto/internal/fips140/edwards25519/scalar.go.txt'), /fiat-crypto/);
+    assert.match(read('licenses/go1.26.10/SOURCE.md'), /fd63e883ba2f2bfca93c1646b31ebef63e2b1e4d2b317c9789d976a68d81f36f/);
     const uiNotices = read('licenses/ui/THIRD_PARTY_NOTICES.txt');
     const uiBOMText = read('licenses/ui/sbom.cdx.json');
     assert.match(uiNotices, /react@19\.2\.8/);
@@ -66,7 +69,7 @@ for (const platform of ['darwin', 'linux']) {
     assert.equal(build.arch, arch);
     assert.match(build.commit, /^[a-f0-9]{40}$/);
     assert.equal(build.cgo, false);
-    for (const binary of ['configra', 'configra-kubernetes']) {
+    for (const binary of ['configra', 'configractl', 'configra-kubernetes']) {
       assert.ok(entries.includes(`${name}/${binary}`), `${name}: missing ${binary}`);
       const temporary = mkdtempSync(join(tmpdir(), 'configra-release-check-'));
       try {
@@ -75,7 +78,7 @@ for (const platform of ['darwin', 'linux']) {
           maxBuffer: 200 * 1024 * 1024,
         }), { mode: 0o600 });
         const info = JSON.parse(execFileSync('go', ['version', '-m', '-json', path], {
-          encoding: 'utf8', env: { ...process.env, GOTOOLCHAIN: 'go1.26.7' },
+          encoding: 'utf8', env: { ...process.env, GOTOOLCHAIN: 'go1.26.10' },
         }));
         const settings = Object.fromEntries(info.Settings.map(({ Key, Value }) => [Key, Value]));
         assert.equal(settings.GOOS, platform, `${name}/${binary}: actual binary platform`);
@@ -118,9 +121,9 @@ for (const platform of ['darwin', 'linux']) {
           assert.equal(createHash('sha256').update(zip).digest('hex'),
             'dc93f5770556406e82bf750a980d2316f882a19d883a3689eadb820708c2b651', 'Exact upstream MPL source is delivered');
         }
-        if (binary === 'configra-kubernetes') {
+        if (binary === 'configra-kubernetes' || binary === 'configractl') {
           const sdk = info.Deps.find((dep) => dep.Path === 'github.com/viber-ops/configra-go');
-          assert.equal(sdk?.Version, expectedSDK, `${name}: SDK matches the published module pin`);
+          assert.equal(sdk?.Version, binary === 'configractl' ? expectedClientSDK : expectedSDK, `${name}: SDK matches the published module pin`);
           assert.match(sdk.Sum, /^h1:[A-Za-z0-9+/]+=*$/, `${name}: SDK source checksum is recorded`);
         }
       } finally {

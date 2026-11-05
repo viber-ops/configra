@@ -121,6 +121,34 @@ func TestSenderBlocksLoopbackByDefaultBeforeRequest(t *testing.T) {
 	}
 }
 
+func TestSenderDeliversScopedTokenReleaseMetadata(t *testing.T) {
+	var hits atomic.Int32
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var received Event
+		if json.NewDecoder(r.Body).Decode(&received) != nil || received.Actor.Type != "token" || received.Resource != strings.Repeat("a", 63)+"."+strings.Repeat("b", 63) {
+			t.Error("release metadata did not survive delivery")
+		}
+		hits.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	sender := newTestSender(t, server)
+	event := testEvent()
+	event.Type = "release.activate"
+	event.Action = "release.activate"
+	event.Actor = mysqlstore.Actor{Type: "token", ID: "0011223344556677"}
+	event.ResourceType = "release"
+	event.Resource = strings.Repeat("a", 63) + "." + strings.Repeat("b", 63)
+	result := sender.Send(context.Background(), mysqlstore.NotificationTarget{Provider: mysqlstore.NotificationGenericWebhook, URL: server.URL, Active: true, Attempt: 1}, event)
+	if result.Status != mysqlstore.NotificationDeliverySucceeded || hits.Load() != 1 {
+		t.Fatalf("Token notification was rejected: %s", result.ErrorCode)
+	}
+	event.Actor.ID = "private-invalid-token-value"
+	if result := sender.Send(context.Background(), mysqlstore.NotificationTarget{Provider: mysqlstore.NotificationGenericWebhook, URL: server.URL, Active: true, Attempt: 1}, event); result.Status != mysqlstore.NotificationDeliveryDead || hits.Load() != 1 {
+		t.Fatal("invalid Token identity reached a destination")
+	}
+}
+
 func TestFeishuUsesOfficialSignatureAndValidatesProviderResponse(t *testing.T) {
 	const (
 		secret    = "demo"

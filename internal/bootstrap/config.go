@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"go.yaml.in/yaml/v3"
 
@@ -27,16 +29,79 @@ const (
 )
 
 type Config struct {
-	Version       int                  `yaml:"version"`
-	Listen        string               `yaml:"listen"`
-	TLS           TLSConfig            `yaml:"tls"`
-	MySQL         MySQLConfig          `yaml:"mysql"`
-	KeyProvider   KeyProviderConfig    `yaml:"key_provider"`
-	OIDC          *OIDCConfig          `yaml:"oidc,omitempty"`
-	NATS          *NATSConfig          `yaml:"nats,omitempty"`
-	ClickHouse    *ClickHouseConfig    `yaml:"clickhouse,omitempty"`
-	Notifications *NotificationsConfig `yaml:"notifications,omitempty"`
-	Logging       LoggingConfig        `yaml:"logging,omitempty"`
+	Version        int                  `yaml:"version"`
+	Listen         string               `yaml:"listen"`
+	TLS            TLSConfig            `yaml:"tls"`
+	MySQL          MySQLConfig          `yaml:"mysql"`
+	KeyProvider    KeyProviderConfig    `yaml:"key_provider"`
+	OIDC           *OIDCConfig          `yaml:"oidc,omitempty"`
+	NATS           *NATSConfig          `yaml:"nats,omitempty"`
+	ClickHouse     *ClickHouseConfig    `yaml:"clickhouse,omitempty"`
+	Notifications  *NotificationsConfig `yaml:"notifications,omitempty"`
+	Logging        LoggingConfig        `yaml:"logging,omitempty"`
+	WriteTokens    WriteTokenConfig     `yaml:"write_tokens,omitempty"`
+	Observability  ObservabilityConfig  `yaml:"observability,omitempty"`
+	APIWriteLimits APIWriteLimitsConfig `yaml:"api_write_limits,omitempty"`
+	Sessions       *SessionsConfig      `yaml:"sessions,omitempty"`
+}
+
+// SessionsConfig bounds administrator sessions on the Management Server. The
+// values are read once at startup so every replica applies the same limits.
+type SessionsConfig struct {
+	IdleTimeoutMinutes int `yaml:"idle_timeout_minutes,omitempty"`
+	LifetimeHours      int `yaml:"lifetime_hours,omitempty"`
+}
+
+const (
+	DefaultSessionIdleTimeoutMinutes = 30
+	DefaultSessionLifetimeHours      = 8
+	MinSessionIdleTimeoutMinutes     = 5
+	MaxSessionIdleTimeoutMinutes     = 24 * 60
+	MaxSessionLifetimeHours          = 7 * 24
+)
+
+func (sessions *SessionsConfig) validate() error {
+	if sessions.IdleTimeoutMinutes == 0 {
+		sessions.IdleTimeoutMinutes = DefaultSessionIdleTimeoutMinutes
+	}
+	if sessions.LifetimeHours == 0 {
+		sessions.LifetimeHours = DefaultSessionLifetimeHours
+	}
+	if sessions.IdleTimeoutMinutes < MinSessionIdleTimeoutMinutes || sessions.IdleTimeoutMinutes > MaxSessionIdleTimeoutMinutes {
+		return errors.New("session idle timeout must be between 5 and 1440 minutes")
+	}
+	if sessions.LifetimeHours < 1 || sessions.LifetimeHours > MaxSessionLifetimeHours {
+		return errors.New("session lifetime must be between 1 and 168 hours")
+	}
+	if sessions.IdleTimeoutMinutes > sessions.LifetimeHours*60 {
+		return errors.New("session idle timeout must not exceed the session lifetime")
+	}
+	return nil
+}
+
+// SessionLimits returns the configured administrator session limits, or the defaults.
+func (config Config) SessionLimits() (idle, lifetime time.Duration) {
+	idle, lifetime = DefaultSessionIdleTimeoutMinutes*time.Minute, DefaultSessionLifetimeHours*time.Hour
+	if config.Sessions != nil {
+		idle = time.Duration(config.Sessions.IdleTimeoutMinutes) * time.Minute
+		lifetime = time.Duration(config.Sessions.LifetimeHours) * time.Hour
+	}
+	return idle, lifetime
+}
+
+type APIWriteLimitsConfig struct {
+	Concurrent                int     `yaml:"concurrent,omitempty"`
+	RequestsPerSecond         float64 `yaml:"requests_per_second,omitempty"`
+	Burst                     int     `yaml:"burst,omitempty"`
+	PerTokenRequestsPerSecond float64 `yaml:"per_token_requests_per_second,omitempty"`
+}
+
+type ObservabilityConfig struct {
+	Listen string `yaml:"listen,omitempty"`
+}
+
+type WriteTokenConfig struct {
+	MaxTTLDays int `yaml:"max_ttl_days,omitempty"`
 }
 
 type TLSConfig struct {
@@ -113,6 +178,19 @@ func LoadForMaintenance(path string) (Config, error) {
 	return config, nil
 }
 
+// LoadForMetadataMaintenance needs database settings only; it neither loads nor
+// grants access to a Master Key. Use only with narrowly scoped metadata tools.
+func LoadForMetadataMaintenance(path string) (Config, error) {
+	config, err := readConfig(path)
+	if err != nil {
+		return Config{}, err
+	}
+	if err := config.validateDatabase(); err != nil {
+		return Config{}, err
+	}
+	return config, nil
+}
+
 func readConfig(path string) (Config, error) {
 	document, err := readLimitedFile(path, maxConfigBytes)
 	if err != nil {
@@ -136,11 +214,45 @@ func readConfig(path string) (Config, error) {
 }
 
 func (config *Config) validate(mode Mode) error {
+	if config.APIWriteLimits.Concurrent == 0 {
+		config.APIWriteLimits.Concurrent = 4
+	}
+	if config.APIWriteLimits.RequestsPerSecond == 0 {
+		config.APIWriteLimits.RequestsPerSecond = 50
+	}
+	if config.APIWriteLimits.Burst == 0 {
+		config.APIWriteLimits.Burst = 100
+	}
+	if config.APIWriteLimits.PerTokenRequestsPerSecond == 0 {
+		config.APIWriteLimits.PerTokenRequestsPerSecond = config.APIWriteLimits.RequestsPerSecond / 2
+	}
+	if config.APIWriteLimits.Concurrent < 1 || config.APIWriteLimits.Concurrent > 8 || config.APIWriteLimits.Burst < 1 || config.APIWriteLimits.Burst > 10000 {
+		return errors.New("API write concurrency must be 1..8 and burst 1..10000")
+	}
+	for _, value := range []float64{config.APIWriteLimits.RequestsPerSecond, config.APIWriteLimits.PerTokenRequestsPerSecond} {
+		if math.IsNaN(value) || math.IsInf(value, 0) || value < 0.1 || value > 10000 {
+			return errors.New("API write rates must be finite, between 0.1 and 10000 per second")
+		}
+	}
+	if config.WriteTokens.MaxTTLDays == 0 {
+		config.WriteTokens.MaxTTLDays = 90
+	}
+	if config.WriteTokens.MaxTTLDays < 1 || config.WriteTokens.MaxTTLDays > 90 {
+		return errors.New("write Token maximum TTL must be between 1 and 90 days")
+	}
 	if err := config.validateStorage(); err != nil {
 		return err
 	}
 	if err := validateListen(config.Listen); err != nil {
 		return err
+	}
+	if config.Observability.Listen != "" {
+		if err := validateListen(config.Observability.Listen); err != nil {
+			return errors.New("invalid internal metrics listen address")
+		}
+		if config.Observability.Listen == config.Listen {
+			return errors.New("metrics and public HTTPS require separate listeners")
+		}
 	}
 	if config.TLS.CertificateFile == "" || config.TLS.PrivateKeyFile == "" {
 		return errors.New("TLS Certificate and Private Key files are required")
@@ -164,6 +276,9 @@ func (config *Config) validate(mode Mode) error {
 		if config.Notifications != nil {
 			return errors.New("Notifications configuration is not valid for API Server")
 		}
+		if config.Sessions != nil {
+			return errors.New("Sessions configuration is not valid for API Server")
+		}
 		if config.NATS == nil {
 			return errors.New("API Server NATS configuration is required")
 		}
@@ -176,6 +291,11 @@ func (config *Config) validate(mode Mode) error {
 		}
 		if err := config.OIDC.validate(); err != nil {
 			return err
+		}
+		if config.Sessions != nil {
+			if err := config.Sessions.validate(); err != nil {
+				return err
+			}
 		}
 		if !validEnvironmentVariable(config.ClickHouse.DSNEnv) {
 			return errors.New("ClickHouse DSN environment variable name is invalid")
@@ -211,14 +331,21 @@ func (config *Config) validate(mode Mode) error {
 }
 
 func (config Config) validateStorage() error {
+	if err := config.validateDatabase(); err != nil {
+		return err
+	}
+	if config.KeyProvider.MasterKeyFile == "" {
+		return errors.New("Master Key file is required")
+	}
+	return nil
+}
+
+func (config Config) validateDatabase() error {
 	if config.Version != 1 {
 		return errors.New("bootstrap Config version must be 1")
 	}
 	if !validEnvironmentVariable(config.MySQL.DSNEnv) {
 		return errors.New("MySQL DSN environment variable name is invalid")
-	}
-	if config.KeyProvider.MasterKeyFile == "" {
-		return errors.New("Master Key file is required")
 	}
 	if os.Getenv(config.MySQL.DSNEnv) == "" {
 		return fmt.Errorf("environment variable %s is required", config.MySQL.DSNEnv)

@@ -1,5 +1,8 @@
+import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import { inventoryPage } from './inventory.js';
+
+const bundledReact = JSON.parse(readFileSync(new URL('../node_modules/react/package.json', import.meta.url), 'utf8')).version;
 
 test('readers can open original open-source license notices from either sign-in locale', async ({ page }) => {
   const backgroundDownloads = [];
@@ -15,7 +18,7 @@ test('readers can open original open-source license notices from either sign-in 
   const response = await page.request.get(href);
   expect(response.status()).toBe(200);
   expect(response.headers()['content-type']).toContain('text/plain');
-  expect(await response.text()).toContain('react@19.2.8');
+  expect(await response.text()).toContain(`react@${bundledReact}`);
   await page.getByRole('button', { name: /中文/ }).click();
   await expect(page.getByRole('link', { name: '开源许可' })).toHaveAttribute('href', href);
 });

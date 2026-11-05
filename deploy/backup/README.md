@@ -266,3 +266,71 @@ storage; the SHA-256 manifest detects accidental corruption but is not an
 authenticity signature. Never place the Master Key in the same backup artifact or
 storage credential scope. A killed restore job can leave an isolated new target;
 the next drill must detect and remove it before retrying.
+
+## Scheduled remote backups / 定时异地备份
+
+The optional `kubectl kustomize deploy/backup` reference runs an hourly UTC MySQL
+CronJob. Customize its S3 prefix, database, public image digest/key escrow
+reference and Pushgateway endpoint before applying. Provision these external
+Secrets without committing values:
+
+| Secret | Contents |
+| --- | --- |
+| `configra-backup-db` | `mysql.cnf`, using the SELECT-only backup role |
+| `configra-backup-s3` | AWS CLI `config` and `credentials`, restricted to Put/Get under the backup prefix, without object deletion |
+
+The job does not mount a Master Key. Its MySQL init container creates the existing
+transactional dump and records a conservative recovery-point timestamp **before**
+the dump starts. DDL must remain excluded while dumping. The AWS CLI container
+uploads each artifact, downloads it again and compares SHA-256; only after every
+comparison succeeds does it publish the recovery-point and last-success metrics.
+Failures POST only attempt/failure metrics, preserving prior success in a
+persistent Pushgateway. Local temporary files never count as an off-site backup.
+
+`concurrencyPolicy: Forbid`, a 20-minute deadline, explicit volume bounds and no
+Job retry prevent an unbounded local queue. They do not prevent another CronJob
+or operator from running DDL. Size the workspace for the uncompressed dump plus
+compressed output, and verification space for the downloaded archive. A Pod UID
+provides each archive's unique prefix. Configure private storage encryption,
+versioning/retention and a genuinely separate fault domain; the sample does not
+configure a cloud bucket or retention policy for you. Replace static AWS files
+with your platform's workload identity when available.
+
+Load [backup alerts](../monitoring/backup-alerts.yaml) after enabling the workflow.
+The sample hourly schedule uses a two-hour recovery-point age threshold. Persist
+Pushgateway data and alert on missing metrics, failed Jobs and stale points;
+`kube_job_status_failed` needs the platform's kube-state-metrics. A failed init
+container cannot report through the archive container, so Job/age alerts are
+both necessary. Set RPO/RTO with the service owner and change thresholds to match.
+
+备份脚本、调度和上传校验由仓库提供；实际桶、跨故障域、保留、加密及监控地址由部署
+方配置。S3 流程的故障注入测试覆盖远端字节损坏与失败不推进恢复点；真实 MySQL/
+ClickHouse 的备份和恢复由 `make backup-test` 覆盖。不得把脚本测试写成现网异地存储
+或灾备切换已通过。
+
+ClickHouse remains an independent native-backup stream. Schedule
+`clickhouse-backup.sh` using the pinned 26.7.3.19 client and a server-configured
+backup disk whose durability/fault domain is explicit. A local server disk alone
+is not off-site storage. The native restore drill verifies its artifacts; do not
+copy the MySQL success metric onto this stream without verifying its own remote
+completion and recovery point. Core NATS remains transient.
+
+## Periodic recovery and revocations / 定期恢复与撤权
+
+The repository's scheduled CI runs the real dependency recovery tests weekly.
+For production, run the same documented restore procedure at least at the agreed
+drill interval against a **new isolated database** using a separate restore
+identity. Check the archive's image/schema/key escrow references, use the matching
+key and binary, run doctor, and verify representative Config/File reads, scoped
+credential issue/revoke and audit delivery with isolated test consumers. Record
+the recovery point, actual elapsed recovery time and outcome in the existing
+incident/backup monitoring system; update a restore-success timestamp only after
+these checks. A checksum or green readiness endpoint is insufficient evidence.
+
+Before exposing a recovered service, reconcile every Token/CA revocation and
+subject/SID session policy changed after the backup. A restored old database can
+otherwise re-enable an identity that was subsequently revoked. Invalidate/block
+uncertain human identities and replace/revoke uncertain machine credentials
+before opening traffic. Keep recovery notifications pointed at test receivers.
+Repeat with both a previously loaded client and a cold client during a real host
+or primary-database failure; same-host Docker/kind tests do not prove physical HA.

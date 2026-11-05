@@ -135,7 +135,7 @@ func collect(ctx context.Context, binary, output string) error {
 		}
 	}
 	command := path.Base(info.Path)
-	if (command != "configra" && command != "configra-kubernetes") || info.Path != info.Main.Path+"/cmd/"+command {
+	if (command != "configra" && command != "configra-kubernetes" && command != "configractl") || info.Path != info.Main.Path+"/cmd/"+command {
 		return errors.New("binary is not one of the reviewed Configra commands")
 	}
 	target := command + "/" + settings["GOOS"] + "/" + settings["GOARCH"]
@@ -149,7 +149,7 @@ func collect(ctx context.Context, binary, output string) error {
 		return fmt.Errorf("target/CPU profile requires review: %s", target)
 	}
 	targetBit := 0
-	for i := 0; i < 8; i++ {
+	for i := 0; i < len(approved.TargetBits); i++ {
 		if approved.TargetBits[fmt.Sprint(i)] == target {
 			targetBit = 1 << i
 		}
@@ -258,7 +258,7 @@ func collect(ctx context.Context, binary, output string) error {
 			}
 			from := filepath.Join(download.Dir, filepath.FromSlash(file.Path))
 			if file.External {
-				if file.Source != "https://github.com/golang/go/blob/go1.26.7/LICENSE" {
+				if file.Source != "https://github.com/golang/go/blob/go1.26.10/LICENSE" {
 					return errors.New("unreviewed external notice source")
 				}
 				from = filepath.Join(goRoot, "LICENSE")

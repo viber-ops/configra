@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-FROM --platform=$BUILDPLATFORM golang:1.26.7-bookworm@sha256:e8c859f5632dcfde7b32d2012b4351728f6437930887c2f6a91ea242459e5514 AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.10-bookworm@sha256:23ce71337b726608afb1bc00986e630a05034a87a87ea1fc2cd1ae5cf33387eb AS build
 ARG TARGETOS
 ARG TARGETARCH
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOFLAGS=-mod=readonly GOWORK=off
@@ -12,10 +12,11 @@ COPY kubernetes/LICENSE kubernetes/NOTICE /out/licenses/
 COPY scripts/go-notices ./scripts/go-notices
 COPY scripts/go-licenses ./scripts/go-licenses
 COPY scripts/ca-notices ./scripts/ca-notices
-ADD --checksum=sha256:b2a431cbab9a0ece921cffacbe238dc27a3e382ad4a1806dc8968c5eff30471d https://security.debian.org/debian-security/pool/updates/main/c/ca-certificates/ca-certificates_20250419~deb12u1.tar.xz /tmp/ca-certificates-source.tar.xz
+# Use the immutable snapshot: the live security archive removes superseded sources.
+ADD --checksum=sha256:934942a985b2efd7a8c122cb1d42cd87911cf6ac365c545938619fcf268ea8f4 https://snapshot-cloudflare.debian.org/file/fde2c52fcb2eca9b91939d726dcce3cc6b6def90 /tmp/ca-certificates-source.tar.xz
 RUN --mount=type=cache,target=/root/.cache/go-build go run ./scripts/ca-notices -rootfs / -source /tmp/ca-certificates-source.tar.xz -out /out/licenses/ca-certificates
 RUN --mount=type=cache,target=/root/.cache/go-build go build -trimpath -buildvcs=false -o /tmp/configra-go-licenses ./scripts/go-licenses
-RUN GOOS=$TARGETOS GOARCH=$TARGETARCH sh scripts/go-notices/collect.sh /out/licenses/go1.26.7
+RUN GOOS=$TARGETOS GOARCH=$TARGETARCH sh scripts/go-notices/collect.sh /out/licenses/go1.26.10
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     GOOS=$TARGETOS GOARCH=$TARGETARCH go build -buildvcs=false -trimpath -ldflags="-s -w" -o /out/configra-kubernetes ./cmd/configra-kubernetes
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \

@@ -2,6 +2,39 @@
 
 Reviewed 2026-09-12. This report inventories **93 distinct application-module/version pairs** in the eight `v0.1.0-rc.2-review.2` executables under `.cache/release-license-check-20260912/dist/v0.1.0-rc.2-review.2/`. It covers the server and Kubernetes command on Darwin/Linux and amd64/arm64. The Go runtime, UI/npm dependencies, and container CA bundle have separate scope; see [distribution requirements](distribution-license-requirements.md).
 
+## Follow-up — 2026-10-03 (v1.2.0)
+
+The current manifest covers **12 program/target combinations**: `configra`,
+`configra-kubernetes` and the Cobra-based `configractl` on Darwin/Linux,
+amd64/arm64. It contains 95 module/version records and 181 retained notice
+records. The original eight target bits remain stable; CLI targets use four new
+bits. Collection still rejects unreviewed package selections, module identities,
+notice changes, toolchains and build profiles.
+
+Newly selected module/version pairs are listed below. Their canonical module ZIP
+entries were compared byte-for-byte with the installed source; all 11 standalone
+LICENSE/NOTICE/PATENTS/libyaml texts match the earlier reviewed versions. Selected
+source headers (236 files across these five pairs) were also checked. YAML retains
+its file-specific Apache/libyaml MIT qualification; Go text/protobuf retain BSD
+and patent texts. Generated protobuf files carry a separate Google 2008 BSD block,
+which is now retained as `.go.txt` source-notice material for both protobuf versions.
+
+| Module | Version | Canonical source commit |
+| --- | --- | --- |
+| `github.com/prometheus/procfs` | v0.16.1 | `cff69b9d9aa77a0793276da74310e38422864e28` |
+| `github.com/viber-ops/configra-go` | v1.2.0 | `15c85cd1cf51bc00b823783de465f7fe6a6f4326` |
+| `go.yaml.in/yaml/v2` | v2.4.2 | `246a95c22c57f15ef6d3305a1f1b8a0b05e4d560` |
+| `golang.org/x/text` | v0.40.0 | `724af9c35838492dcaacc1ac51a8a0187c994c54` |
+| `google.golang.org/protobuf` | v1.36.8 | `0833cf304e6344e895e819f769afa28107fe8892` |
+
+Prometheus/Cobra and the remaining CLI dependencies already have reviewed versions
+in the manifest; their target masks now reflect actual selection. The old SDK
+v1.0.0 and pflag v1.0.9 records are no longer selected. Classifier runs on all 12
+combinations reported no new Unknown result: the same Segmentio MIT-0 gap remains
+explicitly bound to its known archive/license rather than granted a general
+exception. Source/binary agreement, four-platform archive and actual-image
+verification remain required after this source review.
+
 ## Follow-up — 2026-09-22
 
 The current manifest has 92 module/version records. The server no longer imports

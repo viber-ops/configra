@@ -22,11 +22,14 @@ type Config struct {
 	URLs            []string
 	CredentialsFile string
 	RootCAFile      string
+	OnDrop          func(uint64)
+	OnConnection    func(bool)
 }
 
 type Publisher struct {
 	connection *nats.Conn
 	closed     atomic.Bool
+	onDrop     func(uint64)
 }
 
 func Connect(config Config, logger *zap.Logger) (*Publisher, error) {
@@ -34,7 +37,7 @@ func Connect(config Config, logger *zap.Logger) (*Publisher, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Publisher{connection: connection}, nil
+	return &Publisher{connection: connection, onDrop: config.OnDrop}, nil
 }
 
 func connect(config Config, name string, logger *zap.Logger, extra ...nats.Option) (*nats.Conn, error) {
@@ -50,12 +53,21 @@ func connect(config Config, name string, logger *zap.Logger, extra ...nats.Optio
 		nats.ReconnectBufSize(8 << 20),
 		nats.NoCallbacksAfterClientClose(),
 		nats.DisconnectErrHandler(func(_ *nats.Conn, _ error) {
+			if config.OnConnection != nil {
+				config.OnConnection(false)
+			}
 			logger.Warn("NATS disconnected")
 		}),
 		nats.ReconnectHandler(func(_ *nats.Conn) {
+			if config.OnConnection != nil {
+				config.OnConnection(true)
+			}
 			logger.Info("NATS reconnected")
 		}),
 		nats.ClosedHandler(func(_ *nats.Conn) {
+			if config.OnConnection != nil {
+				config.OnConnection(false)
+			}
 			logger.Error("NATS connection closed")
 		}),
 	}
@@ -70,29 +82,52 @@ func connect(config Config, name string, logger *zap.Logger, extra ...nats.Optio
 	if err != nil {
 		return nil, errors.New("initialize NATS connection")
 	}
+	if config.OnConnection != nil {
+		config.OnConnection(connection.IsConnected())
+	}
 	return connection, nil
 }
 
 func (publisher *Publisher) TryPublish(event machine.AccessEvent) bool {
 	if publisher == nil || publisher.closed.Load() {
+		if publisher != nil && publisher.onDrop != nil {
+			publisher.onDrop(1)
+		}
 		return false
 	}
 	payload, err := marshalAccessEvent(event)
 	if err != nil {
+		if publisher.onDrop != nil {
+			publisher.onDrop(1)
+		}
 		return false
 	}
-	return publisher.connection.Publish(Subject, payload) == nil
+	ok := publisher.connection.Publish(Subject, payload) == nil
+	if !ok && publisher.onDrop != nil {
+		publisher.onDrop(1)
+	}
+	return ok
 }
 
 func (consumer *Consumer) TryPublish(event machine.AccessEvent) bool {
 	if consumer == nil || consumer.connection.IsClosed() {
+		if consumer != nil && consumer.onDrop != nil {
+			consumer.onDrop(1)
+		}
 		return false
 	}
 	payload, err := marshalAccessEvent(event)
 	if err != nil {
+		if consumer.onDrop != nil {
+			consumer.onDrop(1)
+		}
 		return false
 	}
-	return consumer.connection.Publish(Subject, payload) == nil
+	ok := consumer.connection.Publish(Subject, payload) == nil
+	if !ok && consumer.onDrop != nil {
+		consumer.onDrop(1)
+	}
+	return ok
 }
 
 func (publisher *Publisher) Close(ctx context.Context) error {
@@ -158,9 +193,9 @@ func decodeAccessEvent(payload []byte) (machine.AccessEvent, error) {
 		len(envelope.Environment) > 63 || len(envelope.Namespace) > 63 || envelope.Resource == "" || len(envelope.Resource) > 127 ||
 		(envelope.Authentication != machine.AuthenticationMTLS && envelope.Authentication != machine.AuthenticationTokenOnly && envelope.Authentication != machine.AuthenticationOIDC) ||
 		(envelope.Authentication != machine.AuthenticationOIDC && envelope.Environment == "") ||
-		(envelope.ResourceType != "config" && envelope.ResourceType != "vault_file" && envelope.ResourceType != "vault_item") ||
-		(envelope.ResourceType == "config" && envelope.ConfigRevision == 0) ||
-		(envelope.ResourceType == "config" && envelope.Namespace != "") ||
+		(envelope.ResourceType != "config" && envelope.ResourceType != "vault_file" && envelope.ResourceType != "vault_item" && envelope.ResourceType != "release") ||
+		((envelope.ResourceType == "config" || envelope.ResourceType == "release") && envelope.ConfigRevision == 0) ||
+		((envelope.ResourceType == "config" || envelope.ResourceType == "release") && envelope.Namespace != "") ||
 		((envelope.ResourceType == "vault_file" || envelope.ResourceType == "vault_item") && envelope.Namespace == "") ||
 		((envelope.ResourceType == "vault_file" || envelope.ResourceType == "vault_item") && len(envelope.VaultRevisions) != 1) {
 		return machine.AccessEvent{}, errors.New("invalid Access Event")

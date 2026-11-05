@@ -453,6 +453,8 @@ type signingOIDCProvider struct {
 	challenge        string
 	audience         jwt.Audience
 	groups           []string
+	amr              []string
+	sid              string
 	userInfoSubject  string
 	userInfoGroups   []string
 	omitIDToken      bool
@@ -524,6 +526,8 @@ func (provider *signingOIDCProvider) serveHTTP(response http.ResponseWriter, req
 			Expiry:   jwt.NewNumericDate(now.Add(time.Hour)),
 			IssuedAt: jwt.NewNumericDate(now),
 		}).Claims(map[string]any{
+			"sid":    provider.sid,
+			"amr":    provider.amr,
 			"nonce":  provider.nonce,
 			"groups": provider.groups,
 			"email":  "admin@example.com",
@@ -551,10 +555,101 @@ func (provider *signingOIDCProvider) serveHTTP(response http.ResponseWriter, req
 		}
 		_ = json.NewEncoder(response).Encode(map[string]any{
 			"sub":    provider.userInfoSubject,
+			"amr":    []string{"mfa"}, // UserInfo is not authentication evidence.
 			"groups": provider.userInfoGroups,
 			"email":  "admin@example.com",
 		})
 	default:
 		http.NotFound(response, request)
+	}
+}
+
+func TestMFAEvidenceSurvivesVerifiedOIDCSessionAndIgnoresUserInfo(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		amr  []string
+		want bool
+	}{
+		{"absent", nil, false}, {"password", []string{"pwd"}, false}, {"otp-alone", []string{"otp"}, false},
+		{"mfa", []string{"mfa"}, true}, {"password-otp", []string{"pwd", "otp"}, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			provider := newSigningOIDCProvider(t)
+			provider.amr = test.amr
+			auth := newTestOIDC(t, provider, humanauth.RoleSourceUserInfo)
+			handler := auth.Handler(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+				principal, ok := humanauth.PrincipalFromContext(request.Context())
+				if !ok || principal.MFAVerified != test.want {
+					t.Error("incorrect session MFA evidence")
+				}
+				response.WriteHeader(200)
+			}))
+			location, cookie := beginOIDCLogin(t, handler)
+			provider.nonce, provider.challenge = location.Query().Get("nonce"), location.Query().Get("code_challenge")
+			callback := httptest.NewRequest(http.MethodGet, "https://configra.test/auth/callback?code=valid-code&state="+url.QueryEscape(location.Query().Get("state")), nil)
+			callback.AddCookie(cookie)
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, callback)
+			if response.Code != http.StatusSeeOther {
+				t.Fatalf("callback HTTP %d", response.Code)
+			}
+			request := httptest.NewRequest(http.MethodGet, "https://configra.test/v1/me", nil)
+			request.AddCookie(response.Result().Cookies()[0])
+			request.Header.Set("X-MFA-Verified", "true")
+			handler.ServeHTTP(httptest.NewRecorder(), request)
+		})
+	}
+}
+
+func TestAuthenticatedPrincipalCarriesTheSessionLimits(t *testing.T) {
+	provider := newSigningOIDCProvider(t)
+	sessions := humanauth.NewSessionManagerWithLimits(memstore.New(), humanauth.SessionLimits{IdleTimeout: 2 * time.Hour, Lifetime: 72 * time.Hour})
+	authentication, err := humanauth.NewOIDC(context.Background(), humanauth.OIDCConfig{
+		Issuer:                provider.server.URL,
+		ClientID:              "configra-client",
+		ClientSecret:          "oidc-client-secret-sentinel",
+		RedirectURL:           "https://configra.test/auth/callback",
+		AllowInsecureLoopback: true,
+		RoleSource:            humanauth.RoleSourceIDToken,
+		RoleClaim:             "groups",
+		ViewerValues:          []string{"developers"},
+		AdminValues:           []string{"configra-admins"},
+	}, sessions)
+	if err != nil {
+		t.Fatalf("NewOIDC: %v", err)
+	}
+	var seen humanauth.Principal
+	handler := authentication.Handler(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		seen, _ = humanauth.PrincipalFromContext(request.Context())
+	}))
+	loginResponse := httptest.NewRecorder()
+	handler.ServeHTTP(loginResponse, httptest.NewRequest(http.MethodGet, "https://configra.test/auth/login?return_to=/", nil))
+	location, err := url.Parse(loginResponse.Header().Get("Location"))
+	if err != nil {
+		t.Fatalf("parse login Location: %v", err)
+	}
+	provider.nonce = location.Query().Get("nonce")
+	provider.challenge = location.Query().Get("code_challenge")
+	callbackRequest := httptest.NewRequest(http.MethodGet, "https://configra.test/auth/callback?code=valid-code&state="+url.QueryEscape(location.Query().Get("state")), nil)
+	callbackRequest.AddCookie(loginResponse.Result().Cookies()[0])
+	callbackResponse := httptest.NewRecorder()
+	signedIn := time.Now()
+	handler.ServeHTTP(callbackResponse, callbackRequest)
+	cookies := callbackResponse.Result().Cookies()
+	if callbackResponse.Code != http.StatusSeeOther || len(cookies) != 1 {
+		t.Fatalf("callback = %d, cookies %#v", callbackResponse.Code, cookies)
+	}
+	// A configured lifetime beyond the default keeps the Cookie across browser restarts.
+	if cookies[0].Expires.IsZero() && cookies[0].MaxAge <= 0 {
+		t.Fatalf("long-lived session Cookie is not persistent: %#v", cookies[0])
+	}
+	request := httptest.NewRequest(http.MethodGet, "https://configra.test/v1/me", nil)
+	request.AddCookie(cookies[0])
+	handler.ServeHTTP(httptest.NewRecorder(), request)
+	if seen.Subject != "user-1" || seen.SessionIdleTimeout != 2*time.Hour || seen.SessionLifetime != 72*time.Hour {
+		t.Fatalf("principal session limits = %#v", seen)
+	}
+	if deadline := seen.SessionExpiresAt.Sub(signedIn); deadline < 72*time.Hour-time.Minute || deadline > 72*time.Hour+time.Minute {
+		t.Fatalf("session deadline %s is not 72 hours after sign-in", seen.SessionExpiresAt)
 	}
 }

@@ -42,6 +42,7 @@ type AuthorityRevoke struct {
 }
 
 type ClientCertificateIssue struct {
+	notAfter    time.Time
 	OperationID string
 	Actor       Actor
 	AuthorityID string
@@ -203,6 +204,9 @@ func (store *Store) IssueClientCertificate(ctx context.Context, request ClientCe
 		return ClientCertificateIssueResult{}, errors.New("begin Client Certificate issuance")
 	}
 	defer transaction.Rollback()
+	if err := store.lockMasterKey(ctx, transaction, false); err != nil {
+		return ClientCertificateIssueResult{}, err
+	}
 	replayed, replay, err := beginOperation(ctx, transaction, request.OperationID, pkiDigest("certificate.issue", request), request.Actor)
 	if err != nil {
 		return ClientCertificateIssueResult{}, err
@@ -214,57 +218,17 @@ func (store *Store) IssueClientCertificate(ctx context.Context, request ClientCe
 		}
 		return previous, outcomeError(previous.Outcome)
 	}
-	authorityID, err := parseAuthorityID(request.AuthorityID)
-	if err != nil {
+	result, err := store.issueClientCertificateRecord(ctx, transaction, request)
+	if errors.Is(err, ErrValidation) {
 		return ClientCertificateIssueResult{}, finishPKIFailure(ctx, transaction, request.OperationID, request.Actor, "client_certificate.issue", request.AuthorityID, err)
 	}
-	var der []byte
-	var revoked sql.NullTime
-	var encrypted vaultcrypto.EncryptedSecret
-	err = transaction.QueryRowContext(ctx, `SELECT certificate_der, revoked_at, algorithm, key_version, nonce, ciphertext, encrypted_dek
-		FROM certificate_authorities WHERE id = ? FOR UPDATE`, authorityID).Scan(&der, &revoked,
-		&encrypted.Algorithm, &encrypted.KeyVersion, &encrypted.Nonce, &encrypted.Ciphertext, &encrypted.EncryptedDEK)
-	if errors.Is(err, sql.ErrNoRows) || revoked.Valid {
-		return ClientCertificateIssueResult{}, finishPKIFailure(ctx, transaction, request.OperationID, request.Actor, "client_certificate.issue", request.AuthorityID, errors.New("Authority is unavailable"))
-	}
-	if err != nil {
-		return ClientCertificateIssueResult{}, errors.New("read Authority for issuance")
-	}
-	authority, err := x509.ParseCertificate(der)
-	if err != nil {
-		return ClientCertificateIssueResult{}, vaultcrypto.ErrIntegrity
-	}
-	private, err := store.provider.DecryptSecret(authorityKeyIdentity(request.AuthorityID, der), encrypted)
-	if err != nil {
-		return ClientCertificateIssueResult{}, vaultcrypto.ErrIntegrity
-	}
-	defer clear(private)
-	generated, err := clientcert.GenerateClient(authority, private, request.DisplayName, request.ValidDays, time.Now())
-	if err != nil {
-		return ClientCertificateIssueResult{}, finishPKIFailure(ctx, transaction, request.OperationID, request.Actor, "client_certificate.issue", request.AuthorityID, err)
-	}
-	defer clear(generated.PrivateKeyDER)
-	bundle, err := clientcert.ExportBundle(generated, authority)
 	if err != nil {
 		return ClientCertificateIssueResult{}, err
 	}
-	fingerprint := sha256.Sum256(generated.Certificate.Raw)
-	certificate := ClientCertificateResult{Outcome: OutcomeSuccess, FingerprintSHA256: hex.EncodeToString(fingerprint[:]),
-		DisplayName: request.DisplayName, Subject: generated.Certificate.Subject.String(), SerialHex: strings.ToUpper(generated.Certificate.SerialNumber.Text(16)),
-		NotBefore: generated.Certificate.NotBefore.UTC(), NotAfter: generated.Certificate.NotAfter.UTC()}
-	id, err := randomID()
-	if err != nil {
-		return ClientCertificateIssueResult{}, err
-	}
-	if _, err := transaction.ExecContext(ctx, `INSERT INTO client_certificates
-		(id, fingerprint_sha256, display_name, certificate_der, subject, serial_hex, not_before, not_after, authority_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, fingerprint[:], certificate.DisplayName, generated.Certificate.Raw,
-		certificate.Subject, certificate.SerialHex, certificate.NotBefore, certificate.NotAfter, authorityID); err != nil {
-		return ClientCertificateIssueResult{}, errors.New("register issued Client Certificate")
-	}
-	result := ClientCertificateIssueResult{Outcome: OutcomeSuccess, Certificate: certificate, AuthorityID: request.AuthorityID}
+	bundle := result.ExportBundle
+	result.ExportBundle = ""
 	if err := finishOperation(ctx, transaction, request.OperationID, request.Actor, result.Outcome, 0, result, mutationEvent{
-		Type: "client_certificate.issued", Action: "client_certificate.issue", ResourceType: "client_certificate", ResourceKey: certificate.FingerprintSHA256,
+		Type: "client_certificate.issued", Action: "client_certificate.issue", ResourceType: "client_certificate", ResourceKey: result.Certificate.FingerprintSHA256,
 	}, false); err != nil {
 		return ClientCertificateIssueResult{}, err
 	}
@@ -422,4 +386,63 @@ func finishPKIFailure(ctx context.Context, transaction *sql.Tx, operationID stri
 		return errors.New("commit certificate validation Audit")
 	}
 	return withCommittedAudit(fmt.Errorf("%w: %v", ErrValidation, cause))
+}
+
+// The caller owns the transaction and persists only metadata, never the export.
+func (store *Store) issueClientCertificateRecord(ctx context.Context, transaction *sql.Tx, request ClientCertificateIssue) (ClientCertificateIssueResult, error) {
+	authorityID, err := parseAuthorityID(request.AuthorityID)
+	if err != nil {
+		return ClientCertificateIssueResult{}, ErrValidation
+	}
+	var der []byte
+	var revoked sql.NullTime
+	var encrypted vaultcrypto.EncryptedSecret
+	err = transaction.QueryRowContext(ctx, `SELECT certificate_der, revoked_at, algorithm, key_version, nonce, ciphertext, encrypted_dek
+		FROM certificate_authorities WHERE id = ? FOR UPDATE`, authorityID).Scan(&der, &revoked,
+		&encrypted.Algorithm, &encrypted.KeyVersion, &encrypted.Nonce, &encrypted.Ciphertext, &encrypted.EncryptedDEK)
+	if errors.Is(err, sql.ErrNoRows) || revoked.Valid {
+		return ClientCertificateIssueResult{}, ErrValidation
+	}
+	if err != nil {
+		return ClientCertificateIssueResult{}, errors.New("read Authority for issuance")
+	}
+	authority, err := x509.ParseCertificate(der)
+	if err != nil {
+		return ClientCertificateIssueResult{}, vaultcrypto.ErrIntegrity
+	}
+	private, err := store.provider.DecryptSecret(authorityKeyIdentity(request.AuthorityID, der), encrypted)
+	if err != nil {
+		return ClientCertificateIssueResult{}, vaultcrypto.ErrIntegrity
+	}
+	defer clear(private)
+	var generated clientcert.GeneratedCertificate
+	if request.notAfter.IsZero() {
+		generated, err = clientcert.GenerateClient(authority, private, request.DisplayName, request.ValidDays, time.Now())
+	} else {
+		generated, err = clientcert.GenerateClientUntil(authority, private, request.DisplayName, request.notAfter, time.Now())
+	}
+	if err != nil {
+		return ClientCertificateIssueResult{}, ErrValidation
+	}
+	defer clear(generated.PrivateKeyDER)
+	bundle, err := clientcert.ExportBundle(generated, authority)
+	if err != nil {
+		return ClientCertificateIssueResult{}, err
+	}
+	fingerprint := sha256.Sum256(generated.Certificate.Raw)
+	certificate := ClientCertificateResult{Outcome: OutcomeSuccess, FingerprintSHA256: hex.EncodeToString(fingerprint[:]),
+		DisplayName: request.DisplayName, Subject: generated.Certificate.Subject.String(), SerialHex: strings.ToUpper(generated.Certificate.SerialNumber.Text(16)),
+		NotBefore: generated.Certificate.NotBefore.UTC(), NotAfter: generated.Certificate.NotAfter.UTC()}
+	id, err := randomID()
+	if err != nil {
+		return ClientCertificateIssueResult{}, err
+	}
+	if _, err := transaction.ExecContext(ctx, `INSERT INTO client_certificates
+		(id, fingerprint_sha256, display_name, certificate_der, subject, serial_hex, not_before, not_after, authority_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, fingerprint[:], certificate.DisplayName, generated.Certificate.Raw,
+		certificate.Subject, certificate.SerialHex, certificate.NotBefore, certificate.NotAfter, authorityID); err != nil {
+		return ClientCertificateIssueResult{}, errors.New("register issued Client Certificate")
+	}
+	result := ClientCertificateIssueResult{Outcome: OutcomeSuccess, Certificate: certificate, AuthorityID: request.AuthorityID, ExportBundle: bundle}
+	return result, nil
 }

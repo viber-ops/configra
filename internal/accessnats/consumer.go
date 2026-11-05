@@ -3,6 +3,7 @@ package accessnats
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -22,13 +23,23 @@ type Consumer struct {
 	subscription *nats.Subscription
 	messages     chan *nats.Msg
 	logger       *zap.Logger
+	onDrop       func(uint64)
 }
 
 func ConnectConsumer(config Config, logger *zap.Logger) (*Consumer, error) {
 	messages := make(chan *nats.Msg, 8192)
+	var recordedDrops atomic.Int64
 	connection, err := connect(config, "configra-management-v1", logger,
-		nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) {
+		nats.ErrorHandler(func(_ *nats.Conn, subscription *nats.Subscription, err error) {
 			if errors.Is(err, nats.ErrSlowConsumer) {
+				if subscription != nil && config.OnDrop != nil {
+					if count, readErr := subscription.Dropped(); readErr == nil {
+						previous := recordedDrops.Swap(int64(count))
+						if int64(count) > previous {
+							config.OnDrop(uint64(int64(count) - previous))
+						}
+					}
+				}
 				logger.Warn("Access Event dropped by bounded NATS Consumer")
 				return
 			}
@@ -55,6 +66,7 @@ func ConnectConsumer(config Config, logger *zap.Logger) (*Consumer, error) {
 		subscription: subscription,
 		messages:     messages,
 		logger:       logger,
+		onDrop:       config.OnDrop,
 	}, nil
 }
 
@@ -71,6 +83,9 @@ func (consumer *Consumer) Run(ctx context.Context, store *logstore.Store) error 
 			return
 		}
 		if err := store.AppendAccess(flushContext, events); err != nil {
+			if consumer.onDrop != nil {
+				consumer.onDrop(uint64(len(events)))
+			}
 			consumer.logger.Warn("Access Event batch dropped", zap.Int("count", len(events)))
 			if ctx.Err() == nil {
 				initializeContext, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -91,6 +106,9 @@ func (consumer *Consumer) Run(ctx context.Context, store *logstore.Store) error 
 			}
 			event, err := decodeAccessEvent(message.Data)
 			if err != nil {
+				if consumer.onDrop != nil {
+					consumer.onDrop(1)
+				}
 				consumer.logger.Warn("Invalid Access Event dropped")
 				continue
 			}

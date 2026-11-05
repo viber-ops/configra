@@ -9,8 +9,16 @@ A peer context that selects Config and Vault values. It is neither a lifecycle s
 _Avoid_: Stage, tenant
 
 **API Token**:
-A machine credential formatted as `cfg_<public-id>_<secret>` whose editable, possibly empty allowlist explicitly names every Environment it may access and includes all Config and Vault values in those Environments. Its plaintext 256-bit random Secret is shown once and only its hash is stored; at creation its immutable `allow_without_mtls` flag defaults to false but may explicitly permit Token-only Authentication. Allowlist changes take effect immediately and are audited, the Token defaults to 90-day expiry, may explicitly be non-expiring in either authentication mode, and cannot be restored after revocation.
+A machine credential selecting read-only or scoped write access to explicit Environments, optionally narrowed by Config and Vault Namespace allowlists. It is delivered once and can be revoked; its grants never confer a human administrator identity.
 _Avoid_: Global token
+
+**Scoped Write Token**:
+An expiring, revocable machine credential issued by an MFA-verified Administrator for bounded Config, Vault and deployment-credential mutations. It always requires an accepted Client Certificate and cannot delegate write or administrator permissions.
+_Avoid_: Admin token, MFA bypass
+
+**Deployment Credential**:
+A read-only Token and its bound Client Certificate issued together by a Scoped Write Token for one granted Environment. It inherits the issuer's Config and Namespace restrictions and expires no later than the issuer; revoking the issuer revokes its Deployment Credentials.
+_Avoid_: Child write token, recoverable credential export
 
 **Management Server**:
 The human-facing Configra deployment that serves OIDC-authenticated management and mutations.
@@ -21,16 +29,16 @@ The English-and-Chinese human console for Environments, Configs, Vault, Notifica
 _Avoid_: Cold-start configuration editor, stage pipeline
 
 **API Server**:
-The HTTPS-facing Configra deployment that serves exact-key reads of Resolved Configs and File Fields to Machine Clients. It supports Client Certificate authentication and explicitly permitted Token-only Authentication, but does not serve raw Configs, generic Vault Field reads, or resource listing and search.
+The HTTPS-facing Configra deployment that serves exact-key content reads and authorized scoped writes to Machine Clients. Human administration and resource discovery remain on the Management Server.
 _Avoid_: Machine API, Client API
 
 **Resource Key**:
-An immutable lowercase machine identifier for an Environment, Config, Vault Namespace, Vault Item, or Field. It matches `[a-z][a-z0-9_-]{0,62}`; `.` is reserved as the Vault Reference separator. Environment Keys participate in authorization; Vault Namespace and Item Keys identify values but do not grant access.
+An immutable machine identifier for an Environment, Config, Vault Namespace, Vault Item, or Field. It identifies resources in client contracts and allowlists rather than using mutable Display Names.
 _Avoid_: Display name, mutable name
 
 **Vault Namespace**:
-The first immutable identity segment of a Vault Item, used only to organize and disambiguate Items. It has no separate record, Display Name, permissions, Revision history, Archive lifecycle, or management page; access remains determined exclusively by the requested Environment and API Token grant.
-_Avoid_: Tenant, permission scope, folder resource
+The first immutable identity segment of a Vault Item, used to organize and disambiguate Items rather than represent a tenant or separately managed resource. Scoped credentials may narrow Environment grants with a Namespace allowlist.
+_Avoid_: Tenant, folder resource
 
 **Display Name**:
 A mutable human-readable label that never identifies a resource in a client contract.
@@ -47,6 +55,14 @@ _Avoid_: Raw submission
 **Revision**:
 An immutable snapshot of a Config in one Environment or of an entire Vault Item. An operation that produces no state change produces no Revision.
 _Avoid_: Mutable version
+
+**Release Set**:
+An immutable combination of one Config Revision and its pinned Vault dependencies and File members in one Environment. Its identity belongs to that Config's release stream; activating or rolling back a Release Set changes the stream's active selection without changing the retained resource Revisions.
+_Avoid_: Environment stage, latest-value bundle
+
+**Release Stream**:
+The active Release Set and monotonic activation generation for one Config in one Environment. Independent Configs have independent release streams, and consumers opt into the release contract explicitly.
+_Avoid_: Global Environment release, implicit promotion
 
 **Target Revision**:
 The immutable Target snapshot selected for a Merge or Replace; it may be current or historical. The resulting snapshot becomes the Target Environment's new current Revision.
@@ -85,7 +101,7 @@ A directional operation that creates a new Target Revision equal to the read-onl
 _Avoid_: Merge
 
 **Machine Client**:
-A configuration consumer authenticated with an API Token authorized for the requested Environment and, unless that Token explicitly permits Token-only Authentication, an accepted mTLS Client Certificate.
+A configuration consumer or authorized automation authenticated with an API Token and, unless its read-only Token explicitly permits otherwise, an accepted Client Certificate.
 _Avoid_: Human session
 
 **Client Certificate**:
@@ -113,8 +129,12 @@ A small binary value stored in a Vault Item and retrieved as bytes through the C
 _Avoid_: Base64 Secret Field
 
 **Last-known-good**:
-The most recent Config successfully fetched by a running Machine Client and retained only in that process for fallback.
+The most recent Config successfully fetched and accepted by any application Snapshot Validation, retained only in the running Machine Client process for fallback.
 _Avoid_: Persistent cache
+
+**Snapshot Validation**:
+An optional application check that accepts or rejects a fetched Config before it becomes the Machine Client's current Snapshot. Rejection preserves the previously accepted Snapshot and does not trigger a Change Callback.
+_Avoid_: Change Callback, post-install check
 
 **Config Watch**:
 The single explicitly started Client loop for one Handler, stopped by its Context, that conditionally checks the API Server with the current composite ETag and atomically installs only a successfully parsed changed Resolved Config. It defaults to a 30-second interval with jitter, rejects intervals below 5 seconds, backs repeated failures off to at most 5 minutes, may skip intermediate Revisions, and retains the Last-known-good on failure.

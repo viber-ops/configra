@@ -30,19 +30,19 @@ try {
     assert.deepEqual(readFileSync(join(temporary, file)), readFileSync(join(source, file)),
       `${binary}: image ${file} matches reviewed source`);
   }
-  const goEnv = { ...process.env, GOTOOLCHAIN: 'go1.26.7' };
+  const goEnv = { ...process.env, GOTOOLCHAIN: 'go1.26.10' };
   const goRoot = execFileSync('go', ['env', 'GOROOT'], { encoding: 'utf8', env: goEnv }).trim();
-  run(['cp', `${container}:/licenses/${binary}/go1.26.7`, join(temporary, 'go1.26.7')]);
+  run(['cp', `${container}:/licenses/${binary}/go1.26.10`, join(temporary, 'go1.26.10')]);
   for (const file of readFileSync(join(root, 'scripts/go-notices/files.txt'), 'utf8').trim().split('\n')) {
     const stored = /\.(?:go|s|h)$/.test(file) ? `${file}.txt` : file;
-    assert.deepEqual(readFileSync(join(temporary, 'go1.26.7', stored)), readFileSync(join(goRoot, file)),
+    assert.deepEqual(readFileSync(join(temporary, 'go1.26.10', stored)), readFileSync(join(goRoot, file)),
       `${binary}: image preserves original Go notice ${file}`);
   }
-  assert.deepEqual(readFileSync(join(temporary, 'go1.26.7/SOURCE.md')),
+  assert.deepEqual(readFileSync(join(temporary, 'go1.26.10/SOURCE.md')),
     readFileSync(join(root, 'scripts/go-notices/SOURCE.md')));
   run(['cp', `${container}:/${binary}`, join(temporary, binary)]);
   const info = JSON.parse(execFileSync('go', ['version', '-m', '-json', join(temporary, binary)], {
-    encoding: 'utf8', timeout: 30_000, env: { ...process.env, GOTOOLCHAIN: 'go1.26.7' },
+    encoding: 'utf8', timeout: 30_000, env: { ...process.env, GOTOOLCHAIN: 'go1.26.10' },
   }));
   const settings = Object.fromEntries(info.Settings.map(({ Key, Value }) => [Key, Value]));
   assert.equal(settings.GOOS, metadata.os);
@@ -60,10 +60,10 @@ try {
   run(['cp', `${container}:/etc/ssl/certs/ca-certificates.crt`, join(temporary, 'system-ca.crt')]);
   const caMetadata = JSON.parse(readFileSync(join(caDirectory, 'metadata.json'), 'utf8'));
   assert.equal(caMetadata.package, 'ca-certificates');
-  assert.equal(caMetadata.version, '20250419~deb12u1');
+  assert.equal(caMetadata.version, '20250419~deb12u2');
   assert.equal(caMetadata.bundle.sha256, hash(readFileSync(join(temporary, 'system-ca.crt'))));
   assert.equal(hash(readFileSync(join(caDirectory, 'source.tar.xz'))),
-    'b2a431cbab9a0ece921cffacbe238dc27a3e382ad4a1806dc8968c5eff30471d');
+    '934942a985b2efd7a8c122cb1d42cd87911cf6ac365c545938619fcf268ea8f4');
   assert.match(readFileSync(join(caDirectory, 'MPL-2.0.txt'), 'utf8'), /Mozilla Public License Version 2.0/);
   assert.match(readFileSync(join(caDirectory, 'GPL-2.0.txt'), 'utf8'), /GNU GENERAL PUBLIC LICENSE/);
   for (const file of caMetadata.files) {

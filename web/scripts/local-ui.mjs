@@ -322,15 +322,15 @@ async function screenshots() {
   await shot('23-audit.png', 'audit');
   await shot('24-administration-tokens.png', 'administration');
   await shot('25-administration-certificates.png', 'administration', async current => { await current.locator('.administration-page > .tabbar [role="tab"]').nth(1).click(); await current.locator('.admin-panel').waitFor(); });
-  await shot('26-administration-notifications.png', 'administration', async current => { await current.locator('.administration-page > .tabbar [role="tab"]').nth(2).click(); await current.locator('.embedded-notifications').waitFor(); });
-  await shot('27-administration-deployment.png', 'administration', async current => { await current.locator('.administration-page > .tabbar [role="tab"]').nth(3).click(); await current.locator('.deployment-panel').waitFor(); });
+  await shot('26-administration-notifications.png', 'administration', async current => { await current.locator('.administration-page > .tabbar [role="tab"]').nth(4).click(); await current.locator('.embedded-notifications').waitFor(); });
+  await shot('27-administration-deployment.png', 'administration', async current => { await current.locator('.administration-page > .tabbar [role="tab"]').nth(5).click(); await current.locator('.deployment-panel').waitFor(); });
   await shot('29-environment-create.png', 'environments', async current => { await current.locator('.resource-heading .primary-action').click(); await current.locator('.create-panel').waitFor(); });
   await shot('30-config-create.png', 'configs', async current => { await current.locator('.resource-heading .primary-action').click(); await current.locator('.config-create-form').waitFor(); });
   await shot('31-vault-create.png', 'vault', async current => { await current.locator('.resource-heading .primary-action').click(); await current.locator('.vault-structured-form').waitFor(); });
   await shot('32-notification-create.png', 'notifications', async current => { await current.locator('.resource-heading .primary-action').click(); await current.locator('.destination-form').waitFor(); });
   await shot('33-administration-token-create.png', 'administration', async current => { await current.locator('.tokens-panel .panel-actions .primary-action').click(); await current.locator('.token-form').waitFor(); });
   await shot('34-administration-token-grants.png', 'administration', async current => { await current.locator('.tokens-panel tbody tr', { hasText: 'Production edge readers' }).locator('.row-actions button').first().click(); await current.locator('.grant-form').waitFor(); });
-  await shot('35-administration-certificate-import.png', 'administration', async current => { await current.locator('.administration-page > .tabbar [role="tab"]').nth(1).click(); await current.locator('.certificates-panel .panel-actions .primary-action').click(); await current.locator('.certificate-form').waitFor(); });
+  await shot('35-administration-certificate-import.png', 'administration', async current => { await current.locator('.administration-page > .tabbar [role="tab"]').nth(1).click(); await current.locator('.certificates-panel .security-panel-heading .secondary-action').click(); await current.locator('.certificates-panel form').waitFor(); });
   await shot('36-not-found.png', 'configs/not-a-real-config');
   await page.getByRole('button', { name: /使用暗色主题|Use dark theme/ }).click();
   await shot('37-dark-overview.png', 'overview');

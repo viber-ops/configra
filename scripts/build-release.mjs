@@ -38,7 +38,7 @@ if (existsSync(output))
   );
 const env = {
   ...process.env,
-  GOTOOLCHAIN: process.env.GOTOOLCHAIN || 'go1.26.7',
+  GOTOOLCHAIN: process.env.GOTOOLCHAIN || 'go1.26.10',
   GOWORK: 'off',
   GOFLAGS: '-mod=readonly',
   CGO_ENABLED: '0',
@@ -67,11 +67,9 @@ for (const platform of ['darwin', 'linux']) {
       '-ldflags',
       `-s -w -X main.version=${version} -X main.commit=${commit}`,
     ];
-    run(
-      'go',
-      ['build', ...flags, '-o', join(stage, 'configra'), './cmd/configra'],
-      { env: buildEnv },
-    );
+    for (const command of ['configra', 'configractl']) {
+      run('go', ['build', ...flags, '-o', join(stage, command), `./cmd/${command}`], { env: buildEnv });
+    }
     run(
       'go',
       [
@@ -115,11 +113,11 @@ for (const platform of ['darwin', 'linux']) {
       cpSync(join(root, file), join(stage, file));
       cpSync(join(root, 'kubernetes', file), join(stage, 'kubernetes', file));
     }
-    run('sh', [join(root, 'scripts/go-notices/collect.sh'), join(stage, 'licenses/go1.26.7')], { env: buildEnv });
+    run('sh', [join(root, 'scripts/go-notices/collect.sh'), join(stage, 'licenses/go1.26.10')], { env: buildEnv });
     run(process.execPath, [join(root, 'web/scripts/export-licenses.mjs'), join(root, 'web/dist'), join(stage, 'licenses/ui')]);
-    for (const binary of ['configra', 'configra-kubernetes']) {
+    for (const binary of ['configra', 'configractl', 'configra-kubernetes']) {
       run(licenseTool, ['-binary', join(stage, binary), '-out', join(stage, 'licenses', `${binary}-modules`)], {
-        cwd: binary === 'configra' ? root : join(root, 'kubernetes'), env,
+        cwd: binary === 'configra-kubernetes' ? join(root, 'kubernetes') : root, env,
       });
     }
     writeFileSync(

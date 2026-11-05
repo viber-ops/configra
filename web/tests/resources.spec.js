@@ -37,8 +37,10 @@ test('administrator creates a peer Environment with an immutable resource key', 
 
   await expect(page.getByRole('heading', { name: 'Environments' })).toBeVisible();
   await expect(page.getByText('production', { exact: true })).toBeVisible();
+  await expect(page.getByText('Recovery room')).toHaveCount(0);
+  await page.getByLabel('Status').selectOption('all');
   await expect(page.getByText('Recovery room')).toBeVisible();
-  await expect(page.getByText('Archived', { exact: true })).toBeVisible();
+  await expect(page.locator('tbody').getByText('Archived', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'New environment' }).click();
   await page.getByLabel('Resource key').fill('staging');
@@ -48,6 +50,34 @@ test('administrator creates a peer Environment with an immutable resource key', 
   await expect(page.getByText('staging', { exact: true })).toBeVisible();
   expect(mutation.body).toEqual({ key: 'staging', display_name: 'Staging' });
   expect(mutation.operation).toMatch(/^[0-9a-f-]{36}$/);
+});
+
+test('creating an Environment with a used key explains the conflict and filters archived rows by default', async ({ page }) => {
+  await mockIdentity(page);
+  const items = [
+    { key: 'production', display_name: 'Production', archived: false, updated_at: '2026-08-27T01:00:00Z' },
+    { key: 'legacy', display_name: 'Legacy datacenter', archived: true, updated_at: '2026-08-26T01:00:00Z' },
+  ];
+  await page.route('**/v1/environments*', async route => {
+    if (route.request().method() === 'POST') {
+      await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: { code: 'revision_conflict', request_id: 'req-duplicate-env' } }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: inventoryPage(route, items) });
+  });
+  await page.goto('/ui/#/environments');
+
+  await expect(page.getByText('Legacy datacenter')).toHaveCount(0);
+  await page.getByRole('searchbox', { name: 'Search' }).fill('nothing-here');
+  await expect(page.getByText('Nothing matches the current search and status filter.')).toBeVisible();
+  await page.getByRole('searchbox', { name: 'Search' }).fill('');
+
+  await page.getByRole('button', { name: 'New environment' }).click();
+  await page.getByLabel('Resource key').fill('production');
+  await page.getByLabel('Display name').fill('Duplicate production');
+  await page.getByRole('button', { name: 'Create environment' }).click();
+  await expect(page.getByRole('alert')).toContainText('This resource key is already in use.');
+  await expect(page.getByRole('alert')).toContainText('req-duplicate-env');
 });
 
 test('administrator renames, archives, and restores a peer Environment', async ({ page }) => {
@@ -78,7 +108,9 @@ test('administrator renames, archives, and restores a peer Environment', async (
   await expect(page.getByRole('heading', { name: 'Primary runtime' })).toBeVisible();
   await page.getByRole('button', { name: 'Archive Primary runtime' }).click();
   await page.getByRole('button', { name: 'Confirm archive Primary runtime' }).click();
-  await expect(page.getByText('Archived', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Primary runtime' })).toHaveCount(0);
+  await page.getByLabel('Status').selectOption('archived');
+  await expect(page.locator('tbody').getByText('Archived', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Unarchive Primary runtime' }).click();
 
   expect(mutations.map(item => item.method)).toEqual(['PATCH', 'archive', 'unarchive']);
@@ -165,13 +197,15 @@ test('Config index searches and paginates a thousand-scale resource list', async
 
   await expect(page.locator('.config-index-table tbody tr')).toHaveCount(50);
   await expect(page.getByRole('link', { name: 'Open Config Service 0001' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Open Config Service 0051' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Open Config Service 0050' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Open Config Service 0056' })).toHaveCount(0);
   if (process.env.CONFIGRA_CONFIG_SCALE_SCREENSHOT) await page.screenshot({ path: process.env.CONFIGRA_CONFIG_SCALE_SCREENSHOT, fullPage: true });
   await page.getByRole('button', { name: 'Next' }).click();
-  await expect(page.getByRole('link', { name: 'Open Config Service 0051' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Open Config Service 0056' })).toBeVisible();
   await page.getByRole('searchbox', { name: 'Search configs' }).fill('service_0100');
-  await expect(page.getByRole('link', { name: 'Open Config Service 0100' })).toBeVisible();
+  await expect(page.getByText('No Config matches the current search and status filter.')).toBeVisible();
   await page.getByLabel('Status').selectOption('archived');
+  await expect(page.getByRole('link', { name: 'Open Config Service 0100' })).toBeVisible();
   await expect(page.locator('.config-index-table tbody tr')).toHaveCount(1);
 });
 
@@ -282,6 +316,7 @@ test('administrator creates, archives, and restores a Config identity', async ({
   await expect(page.getByText(/Vault field does not exist.*vault\.platform\.redis\.username/)).toBeVisible();
   await page.getByRole('button', { name: 'Archive Payment service' }).click();
   await page.getByRole('button', { name: 'Confirm archive Payment service' }).click();
+  await page.getByLabel('Status').selectOption('all');
   await expect(page.getByRole('link', { name: 'production v1' })).toHaveCount(0);
   await expect(page.getByLabel('production v1')).toBeVisible();
   await page.getByRole('button', { name: 'Unarchive Payment service' }).click();
@@ -487,6 +522,7 @@ test('Config editor protects dirty source and keeps it after an actionable Revis
 
 test('administrator compares, restores, and clones an immutable Config Revision', async ({ page }) => {
   await mockIdentity(page);
+  await page.route(/\/v1\/environments\?/, route => route.fulfill({ body: inventoryPage(route, [{ key: 'production', display_name: 'Production', revision: 3 }, { key: 'recovery', display_name: 'Recovery' }]) }));
   let current = { environment_key: 'production', config_key: 'payment', config_name: 'Payment service', format: 'yaml', content: 'port: 6380\n', revision: 3 };
   const revisions = [
     { revision: 3, format: 'yaml', actor_id: 'admin@example.com', created_at: '2026-08-27T03:00:00Z' },
@@ -549,11 +585,11 @@ test('administrator compares, restores, and clones an immutable Config Revision'
 
   await page.locator('summary[aria-label="More actions"]').click();
   await page.getByRole('button', { name: 'Clone', exact: true }).click();
-  await page.getByLabel('Target environment').fill('recovery');
+  await page.getByLabel('Target environment', { exact: true }).selectOption('recovery');
   await page.getByLabel('Target config').fill('payment_recovery');
   await page.getByLabel('Target name').fill('Recovery payment');
   await page.getByRole('button', { name: 'Clone config' }).click();
-  expect(clone.body).toEqual({ target_environment: 'recovery', target_config: 'payment_recovery', target_name: 'Recovery payment' });
+  expect(clone.body).toEqual({ target_environment: 'recovery', target_config: 'payment_recovery', target_name: 'Recovery payment', source_revision: 4 });
   expect(clone.operation).toMatch(/^[0-9a-f-]{36}$/);
 });
 
@@ -799,8 +835,10 @@ test('viewer browses versioned Vault Item metadata without value controls', asyn
   await expect(page.getByRole('heading', { name: 'Vault' })).toBeVisible();
   await expect(page.getByRole('link', { name: /Redis connection.*v4/ })).toHaveAttribute('href', '#/vault/platform/redis');
   await expect(page.getByRole('row', { name: /platform.*redis.*Redis connection/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /legacy.*redis.*Legacy key/ })).toHaveCount(0);
+  await page.getByLabel('Status').selectOption('all');
   await expect(page.getByRole('row', { name: /legacy.*redis.*Legacy key/ })).toBeVisible();
-  await expect(page.getByText('Archived', { exact: true })).toBeVisible();
+  await expect(page.locator('tbody').getByText('Archived', { exact: true })).toBeVisible();
   await page.getByLabel('Filter by namespace').fill('platform');
   await expect(page.getByRole('row', { name: /legacy.*redis.*Legacy key/ })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /new vault/i })).toHaveCount(0);
@@ -952,6 +990,7 @@ test('administrator creates and controls the soft lifecycle of a Vault Item snap
   expect(commit.operation).toMatch(/^[0-9a-f-]{36}$/);
   await page.getByRole('button', { name: 'Archive Redis connection' }).click();
   await page.getByRole('button', { name: 'Confirm archive Redis connection' }).click();
+  await page.getByLabel('Status').selectOption('archived');
   await page.getByRole('button', { name: 'Unarchive Redis connection' }).click();
   expect(lifecycle.map(item => item.action)).toEqual(['archive', 'unarchive']);
 });

@@ -1,0 +1,72 @@
+groups:
+  - name: configra
+    rules:
+      - alert: ConfigraMetricsUnavailable
+        expr: up{job=~"configra-(api|management|sync|provider)"} == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: Configra metrics endpoint is unavailable
+          description: Check process, metrics listener and scrape connectivity; run the authorized configractl check probe.
+      - alert: ConfigraOperationalSamplerFailed
+        expr: configra_operational_sample_success == 0 or (time() - configra_operational_sample_timestamp_seconds > 60)
+        for: 1m
+        labels: {severity: warning}
+        annotations:
+          summary: Configra operational metadata is stale
+          description: Check MySQL reachability, SELECT grants and connection-pool pressure.
+      - alert: ConfigraAuditDelayed
+        expr: configra_outbox_oldest_age_seconds{kind="audit",status=~"pending|processing"} > 60
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: Durable Audit delivery is delayed
+          description: Check ClickHouse and audit worker health. Preserve pending receipts; do not delete them to clear this alert.
+      - alert: ConfigraDeadDelivery
+        expr: configra_outbox_events{status="dead"} > 0
+        for: 1m
+        labels: {severity: warning}
+        annotations:
+          summary: Configra has terminal delivery failures
+          description: Inspect value-free audit/notification diagnostics, correct the cause, and use the supported recovery or redelivery procedure.
+      - alert: ConfigraWorkerStalled
+        expr: configra_worker_healthy{worker=~"audit|notification"} == 0 or (time() - configra_worker_last_attempt_timestamp_seconds{worker=~"audit|notification"} > 60)
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: Configra background work is failing or stalled
+          description: Check the named worker and its dependency. Slow notification endpoints should not block Audit delivery.
+      - alert: ConfigraAccessEventsLost
+        expr: increase(configra_access_dropped_total[5m]) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: Best-effort Access Events were dropped
+          description: Check NATS connectivity, subscriber pressure and ClickHouse. Access history is not a complete read audit.
+      - alert: ConfigraCredentialsExpiring
+        expr: configra_credentials_expiring_14d > 0
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: Configra credentials expire within fourteen days
+          description: Inspect the credential inventory and issuer relationships. Distribute and verify replacements before routine revocation.
+      - alert: ConfigraServerCertificateExpiring
+        expr: (configra_server_certificate_expiry_timestamp_seconds > 0) and (configra_server_certificate_expiry_timestamp_seconds - time() < 604800)
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: The certificate loaded by Configra expires within seven days
+          description: Replace the server TLS Secret and perform a controlled restart, then verify the certificate served on a new TLS connection.
+      - alert: ConfigraAPIReadErrors
+        expr: sum by (service, instance) (rate(configra_http_requests_total{method="get",code=~"5.."}[5m])) > 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: Configra reads are failing
+          description: Run an actual authorized read probe and check MySQL, resource validity and cryptographic health.
+      - alert: ConfigraKubernetesSourceFailures
+        expr: sum by (instance, job) (rate(configra_kubernetes_fetches_total{result="error"}[5m])) > 0
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: Kubernetes consumers cannot fetch complete Configra batches
+          description: Inspect Binding Ready/lastSyncedAt or provider mount failures, identity expiry and source availability. A successful source read does not attest application reload.

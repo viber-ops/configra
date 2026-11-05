@@ -73,6 +73,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .tabbar { gap: 20px; border-bottom-color: var(--line); }
 .tabbar button { padding: 12px 3px; font-size: 13px; font-weight: 550; }
 .tabbar button[aria-selected="true"] { border-bottom-width: 2px; }
+.administration-page > .tabbar { max-width: 100%; overflow-x: auto; overflow-y: hidden; }
+.administration-page > .tabbar button { flex: 0 0 auto; white-space: nowrap; }
 .table-frame { border-radius: 10px; background: var(--surface); box-shadow: 0 2px 5px #15223904; }
 .table-frame th { height: 40px; background: var(--surface-muted); font-size: 10px; font-weight: 650; color: var(--muted); }
 .table-frame td { padding-top: 15px; padding-bottom: 15px; }
@@ -165,6 +167,37 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .authority-card dt { color: var(--muted); }
 .authority-card dd { margin: 0; font-weight: 500; }
 .authority-card dd code { font-size: 10px; }
+.authority-card dl > .credential-identifier { display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; }
+.authority-card dd { min-width: 0; max-width: 100%; }
+.authority-card header > div:last-child { min-width: 0; }
+.authority-card h3 { overflow-wrap: anywhere; }
+.copy-value { display: inline-grid; min-width: 0; max-width: 100%; vertical-align: middle; gap: 4px; }
+.copy-value .copy-value-button { display: flex; align-items: flex-start; justify-content: space-between; gap: 9px; min-width: 0; max-width: 100%; border: 1px solid var(--line); border-radius: 5px; padding: 7px 9px; background: var(--surface-subtle); color: var(--ink); cursor: pointer; text-align: left; }
+.copy-value .copy-value-button:hover { border-color: var(--blue); }
+.copy-value .copy-value-button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.copy-value .copy-value-button code { min-width: 0; overflow-wrap: anywhere; white-space: normal; user-select: text; font: 11px/1.6 ui-monospace, "SFMono-Regular", Consolas, monospace; }
+.copy-value-button svg { flex: 0 0 auto; margin-top: 2px; color: var(--blue); }
+.copy-value .copy-feedback { display: block; white-space: normal; color: var(--green); font-size: 11px; font-weight: 400; }
+.copy-value .copy-failed { color: var(--danger); }
+.credential-identifier .copy-value { display: grid; }
+.credential-table .copy-value { max-width: 270px; min-width: 135px; }
+.tokens-panel td:first-child .copy-value { display: grid; margin-top: 5px; }
+.one-time-secret > .copy-value { grid-column: 1 / -1; }
+.credential-expiration { display: inline-grid; gap: 3px; font-variant-numeric: tabular-nums; }
+.credential-expiration small { color: var(--muted); font-size: 11px; font-weight: 400; }
+.credential-expiration .expired-hint, .expired-hint { color: var(--danger); }
+.expiry-field { display: grid; gap: 7px; min-width: 0; }
+.expiry-field > label { font-size: 12px; font-weight: 700; }
+.expiry-field > small { color: var(--muted); font-size: 11px; }
+.expiry-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.expiry-presets button { border: 1px solid var(--line-strong); border-radius: 5px; padding: 4px 8px; background: var(--surface); color: var(--blue); font-size: 11px; cursor: pointer; }
+.expiry-summary, .validity-preview { display: grid; gap: 4px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.expiry-summary { color: var(--ink); }
+.expiry-invalid { color: var(--danger); }
+.issuer-preview { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 12px; align-items: center; }
+.issuer-preview > span { font-size: 12px; color: var(--muted); }
+.issuer-preview .copy-value { justify-self: start; }
+.issuer-preview .validity-preview { grid-column: 1 / -1; }
 .authority-actions { display: flex; justify-content: space-between; gap: 12px; margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line); }
 .authority-actions button, .security-next-step button { border: 0; padding: 0; background: transparent; color: var(--blue); cursor: pointer; font-size: 11px; font-weight: 550; }
 .authority-actions .danger-link { color: var(--danger); }

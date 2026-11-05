@@ -264,7 +264,19 @@ logging:
 		warmDuration = 2 * time.Second
 	}
 	evidence.Stage = "warmup"
+	warmContext, stopWarmSampling := context.WithCancel(ctx)
+	warmSamplesDone := make(chan []loadSample, 1)
+	go func() { warmSamplesDone <- sampleLoad(warmContext, containerName, database.admin) }()
+	defer func() {
+		stopWarmSampling()
+		if warmSamplesDone != nil {
+			evidence.WarmupSamples = <-warmSamplesDone
+		}
+	}()
 	warmReport := runVegeta(t, ctx, required["vegeta"], warmDuration, targetFile, warmResult, tlsMaterial)
+	stopWarmSampling()
+	evidence.WarmupSamples = <-warmSamplesDone
+	warmSamplesDone = nil
 	evidence.Warmup = warmReport
 	validateVegetaReport(t, warmReport, warmDuration)
 
@@ -650,13 +662,15 @@ func validateVegetaReport(t *testing.T, report vegetaReport, duration time.Durat
 }
 
 type loadSample struct {
-	ElapsedSeconds  float64 `json:"elapsed_seconds"`
-	CPUPercent      float64 `json:"cpu_percent"`
-	MemoryBytes     uint64  `json:"memory_bytes"`
-	PIDs            uint64  `json:"pids"`
-	MySQLConnected  uint64  `json:"mysql_connected"`
-	MySQLRunning    uint64  `json:"mysql_running"`
-	SamplingFailure string  `json:"sampling_failure,omitempty"`
+	ElapsedSeconds   float64 `json:"elapsed_seconds"`
+	CPUPercent       float64 `json:"cpu_percent"`
+	MemoryBytes      uint64  `json:"memory_bytes"`
+	PIDs             uint64  `json:"pids"`
+	MySQLConnected   uint64  `json:"mysql_connected"`
+	MySQLRunning     uint64  `json:"mysql_running"`
+	MySQLConnections uint64  `json:"mysql_connections_total"`
+	MySQLPrepares    uint64  `json:"mysql_prepares_total"`
+	SamplingFailure  string  `json:"sampling_failure,omitempty"`
 }
 
 func TestSampleLoadIgnoresCancellationAsSamplingFailure(t *testing.T) {
@@ -719,6 +733,12 @@ func oneLoadSample(ctx context.Context, container string, database *sql.DB, elap
 	}
 	if err := database.QueryRowContext(ctx, "SHOW GLOBAL STATUS LIKE 'Threads_running'").Scan(new(string), &sample.MySQLRunning); err != nil {
 		sample.SamplingFailure = "mysql_running"
+	}
+	if err := database.QueryRowContext(ctx, "SHOW GLOBAL STATUS LIKE 'Connections'").Scan(new(string), &sample.MySQLConnections); err != nil {
+		sample.SamplingFailure = "mysql_connections_total"
+	}
+	if err := database.QueryRowContext(ctx, "SHOW GLOBAL STATUS LIKE 'Com_stmt_prepare'").Scan(new(string), &sample.MySQLPrepares); err != nil {
+		sample.SamplingFailure = "mysql_prepares_total"
 	}
 	return sample
 }
@@ -995,6 +1015,7 @@ type loadEvidence struct {
 	MySQLInterpolateParams bool                `json:"mysql_interpolate_params"`
 	ClickHouseVersion      string              `json:"clickhouse_version"`
 	Warmup                 vegetaReport        `json:"warmup"`
+	WarmupSamples          []loadSample        `json:"warmup_samples"`
 	Report                 vegetaReport        `json:"vegeta"`
 	Samples                []loadSample        `json:"samples"`
 	Resources              loadResourceSummary `json:"resources"`
@@ -1099,6 +1120,16 @@ func TestLoadEvidenceRejectsSecretsInReport(t *testing.T) {
 	evidence.Report.Errors = []string{base64.StdEncoding.EncodeToString(secret)}
 	if encoded, err := encodeLoadEvidence(evidence, sentinels); err == nil || len(encoded) != 0 {
 		t.Fatal("secret-bearing report must return an error without encoded content")
+	}
+	evidence.Report.Errors = nil
+	evidence.Stage = "warmup"
+	evidence.WarmupSamples = []loadSample{{CPUPercent: 150, MemoryBytes: 32 << 20, MySQLRunning: 3}}
+	if encoded, err := encodeLoadEvidence(evidence, sentinels); err != nil || !bytes.Contains(encoded, []byte(`"warmup_samples": [`)) {
+		t.Fatal("warmup diagnostics must survive before the measured stage")
+	}
+	evidence.WarmupSamples[0].SamplingFailure = string(secret)
+	if encoded, err := encodeLoadEvidence(evidence, sentinels); err == nil || len(encoded) != 0 {
+		t.Fatal("warmup diagnostics must reject protected material")
 	}
 }
 

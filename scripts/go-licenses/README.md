@@ -5,12 +5,15 @@ executable can target any of the four supported release platforms; it is not run
 
 ```sh
 # From the Configra checkout:
-GOTOOLCHAIN=go1.26.7 GOWORK=off GOFLAGS=-mod=readonly \
+GOTOOLCHAIN=go1.26.10 GOWORK=off GOFLAGS=-mod=readonly \
   go build -o .cache/release-tools/configra-go-licenses ./scripts/go-licenses
 .cache/release-tools/configra-go-licenses \
   -binary /absolute/path/to/configra \
   -out /absolute/path/to/new/module-materials
 ```
+
+For `configractl`, use the same root module with its executable. Three commands
+across four platforms have independent package-selection guards.
 
 For the Kubernetes executable, run the collector from `kubernetes/`. Normal
 release and Docker builds invoke it automatically. The output directory must be
@@ -48,7 +51,7 @@ package can bring a nested license or source-embedded attribution.
    schema; keep the remaining whole-artifact acceptance requirements in scope.
 
 ```sh
-GOTOOLCHAIN=go1.26.7 GOWORK=off GOFLAGS=-mod=readonly \
+GOTOOLCHAIN=go1.26.10 GOWORK=off GOFLAGS=-mod=readonly \
   go test -race ./scripts/go-licenses
 make image-license-test
 ```
@@ -57,3 +60,5 @@ The classifier is an aid, not the review result: its CSV command can exit zero
 while emitting Unknown findings. Segmentio's MIT-0 resolution is bound to its
 reviewed module/version/sum and exact LICENSE bytes; there is no blanket Unknown
 exception.
+
+The Go 1.26.10 patch review is recorded in [2026-11-04 verification](../../docs/verification/2026-11-04.md); all twelve package-selection digests and curated runtime notice bytes remain unchanged.

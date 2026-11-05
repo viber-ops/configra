@@ -1,5 +1,8 @@
 # Kubernetes deployment
 
+The [production overlay](production/README.md) supplies dual replicas, fault-domain
+spreading, PDBs, private metrics and independent database accounts.
+
 `base/` runs one Management replica and one independently scalable API replica.
 Render it before applying:
 

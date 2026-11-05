@@ -13,9 +13,9 @@ import (
 	"path/filepath"
 )
 
-const sourceURL = "https://security.debian.org/debian-security/pool/updates/main/c/ca-certificates/ca-certificates_20250419~deb12u1.tar.xz"
-const sourceHash = "b2a431cbab9a0ece921cffacbe238dc27a3e382ad4a1806dc8968c5eff30471d"
-const bundleHash = "714d457d580922dbf1d0be8bd35ba236a842b50b0072ae791582a19adef772a5"
+const sourceURL = "https://snapshot-cloudflare.debian.org/file/fde2c52fcb2eca9b91939d726dcce3cc6b6def90"
+const sourceHash = "934942a985b2efd7a8c122cb1d42cd87911cf6ac365c545938619fcf268ea8f4"
+const bundleHash = "e9c7b63ee2623386e9b0a3ee32f499d01a8ea23dc83b8383ddff9f8e749543b7"
 const bundlePath = "etc/ssl/certs/ca-certificates.crt"
 
 type material struct {
@@ -27,7 +27,7 @@ var inputs = []struct{ source, output, hash string }{
 	{"usr/share/doc/ca-certificates/copyright", "copyright.txt", "e85e1bcad3a915dc7e6f41412bc5bdeba275cadd817896ea0451f2140a93967c"},
 	{"usr/share/common-licenses/MPL-2.0", "MPL-2.0.txt", "fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85"},
 	{"usr/share/common-licenses/GPL-2", "GPL-2.0.txt", "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"},
-	{"etc/ca-certificates.conf", "ca-certificates.conf", "ab7339d40969fb1084cb23011fbdae7cc8edb46ac7e410897bb6b7016f07ed7f"},
+	{"etc/ca-certificates.conf", "ca-certificates.conf", "0a40ba8d99c9b4f3538fbf2fffcd49a35502b69969c41d379f0ae8711ecb10e0"},
 }
 
 func main() {
@@ -71,7 +71,7 @@ func collect(root, source, output string) error {
 		files = append(files, material{Path: input.output, SHA256: input.hash})
 	}
 	access := []byte("# System CA trust bundle source and licenses\n\n" +
-		"The runtime bundle is copied without modification from the reviewed Debian ca-certificates 20250419~deb12u1 package. Its SHA-256 is " + bundleHash + ".\n\n" +
+		"The runtime bundle is copied without modification from the reviewed Debian ca-certificates 20250419~deb12u2 package. Its SHA-256 is " + bundleHash + ".\n\n" +
 		"The complete original source is included in source.tar.xz (SHA-256 " + sourceHash + "). Upstream: " + sourceURL + "\n\n" +
 		"Inside that archive, ca-certificates/mozilla/certdata.txt and ca-certificates/mozilla/nssckbi.h carry Mozilla Contributors attribution and MPL-2.0 terms. See copyright.txt and MPL-2.0.txt.\n\n" +
 		"The archive also preserves Debian conversion/update/packaging scripts under GPL-2.0-or-later; GPL-2.0.txt accompanies those sources. These scripts are not installed as runtime programs in the Configra scratch image. This does not relicense Configra's separate original code away from Apache-2.0.\n\n" +
@@ -79,7 +79,7 @@ func collect(root, source, output string) error {
 	contents["SOURCE_ACCESS.md"] = access
 	files = append(files, material{Path: "SOURCE_ACCESS.md", SHA256: digest(access)})
 	metadata := map[string]any{
-		"formatVersion": 1, "package": "ca-certificates", "version": "20250419~deb12u1",
+		"formatVersion": 1, "package": "ca-certificates", "version": "20250419~deb12u2",
 		"bundle":      map[string]string{"path": "/" + bundlePath, "sha256": bundleHash},
 		"source":      map[string]string{"path": "source.tar.xz", "url": sourceURL, "sha256": sourceHash},
 		"dataLicense": "MPL-2.0", "sourceScriptsLicense": "GPL-2.0-or-later", "files": files,
@@ -108,7 +108,7 @@ func collect(root, source, output string) error {
 	if err := os.Rename(staging, output); err != nil {
 		return err
 	}
-	fmt.Println("Verified and preserved ca-certificates 20250419~deb12u1 source, licenses and runtime-bundle identity.")
+	fmt.Println("Verified and preserved ca-certificates 20250419~deb12u2 source, licenses and runtime-bundle identity.")
 	return nil
 }
 

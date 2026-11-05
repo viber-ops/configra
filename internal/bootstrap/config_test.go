@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 	"testing"
 
 	"github.com/viber-ops/configra/internal/bootstrap"
@@ -261,4 +262,85 @@ func writeFile(t *testing.T, name, content string) string {
 		t.Fatalf("write %s: %v", name, err)
 	}
 	return path
+}
+
+func TestSessionLimitsAreBoundedAndManagementOnly(t *testing.T) {
+	t.Setenv("CONFIGRA_TEST_MYSQL_DSN", "mysql-secret-sentinel")
+	t.Setenv("CONFIGRA_TEST_OIDC_SECRET", "oidc-secret-sentinel")
+	t.Setenv("CONFIGRA_TEST_CLICKHOUSE_DSN", "clickhouse-secret-sentinel")
+	management := `
+version: 1
+listen: :8443
+tls:
+  certificate_file: cert.pem
+  private_key_file: key.pem
+mysql:
+  dsn_env: CONFIGRA_TEST_MYSQL_DSN
+key_provider:
+  master_key_file: master-key
+clickhouse:
+  dsn_env: CONFIGRA_TEST_CLICKHOUSE_DSN
+nats:
+  urls: [nats://127.0.0.1:4222]
+oidc:
+  issuer: https://identity.example.com
+  client_id: configra
+  client_secret_env: CONFIGRA_TEST_OIDC_SECRET
+  redirect_url: https://configra.example.com/auth/callback
+  role_source: id_token
+  role_claim: groups
+  viewer_values: [viewer]
+  admin_values: [admin]
+`
+	config, err := bootstrap.Load(writeFile(t, "defaults.yaml", management), bootstrap.Management)
+	if err != nil {
+		t.Fatalf("Load defaults: %v", err)
+	}
+	if idle, lifetime := config.SessionLimits(); idle != 30*time.Minute || lifetime != 8*time.Hour {
+		t.Fatalf("default session limits = %s / %s", idle, lifetime)
+	}
+	config, err = bootstrap.Load(writeFile(t, "custom.yaml", management+"sessions:\n  idle_timeout_minutes: 120\n  lifetime_hours: 72\n"), bootstrap.Management)
+	if err != nil {
+		t.Fatalf("Load custom: %v", err)
+	}
+	if idle, lifetime := config.SessionLimits(); idle != 2*time.Hour || lifetime != 72*time.Hour {
+		t.Fatalf("custom session limits = %s / %s", idle, lifetime)
+	}
+	config, err = bootstrap.Load(writeFile(t, "partial.yaml", management+"sessions:\n  lifetime_hours: 12\n"), bootstrap.Management)
+	if err != nil {
+		t.Fatalf("Load partial: %v", err)
+	}
+	if idle, lifetime := config.SessionLimits(); idle != 30*time.Minute || lifetime != 12*time.Hour {
+		t.Fatalf("partial session limits = %s / %s", idle, lifetime)
+	}
+	for name, block := range map[string]string{
+		"idle too short":        "sessions:\n  idle_timeout_minutes: 4\n",
+		"idle too long":         "sessions:\n  idle_timeout_minutes: 1441\n  lifetime_hours: 48\n",
+		"lifetime too long":     "sessions:\n  lifetime_hours: 169\n",
+		"idle beyond lifetime":  "sessions:\n  idle_timeout_minutes: 180\n  lifetime_hours: 2\n",
+		"negative lifetime":     "sessions:\n  lifetime_hours: -1\n",
+		"unknown session field": "sessions:\n  remember_me: true\n",
+	} {
+		if _, err := bootstrap.Load(writeFile(t, "invalid.yaml", management+block), bootstrap.Management); err == nil {
+			t.Fatalf("%s was accepted", name)
+		}
+	}
+	api := `
+version: 1
+listen: :9443
+tls:
+  certificate_file: cert.pem
+  private_key_file: key.pem
+mysql:
+  dsn_env: CONFIGRA_TEST_MYSQL_DSN
+key_provider:
+  master_key_file: master-key
+nats:
+  urls: [nats://127.0.0.1:4222]
+sessions:
+  lifetime_hours: 12
+`
+	if _, err := bootstrap.Load(writeFile(t, "api.yaml", api), bootstrap.API); err == nil || !strings.Contains(err.Error(), "not valid for API Server") {
+		t.Fatalf("API Server accepted session limits: %v", err)
+	}
 }

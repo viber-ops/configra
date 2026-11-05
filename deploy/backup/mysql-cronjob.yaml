@@ -1,0 +1,95 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: configra-mysql-backup
+spec:
+  schedule: "7 * * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 1200
+      template:
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            fsGroup: 65532
+            seccompProfile: {type: RuntimeDefault}
+          initContainers:
+            - name: consistent-dump
+              image: mysql:8.0.22
+              command: [/bin/sh, -ec]
+              args:
+                - |
+                  umask 077
+                  case "$KEY_REFERENCE:$CONFIGRA_IMAGE_REFERENCE" in *REPLACE*|:|:*) echo 'configure backup key and image references' >&2; exit 64;; esac
+                  mkdir -m 700 /work/artifact
+                  date +%s > /work/artifact/recovery-point.timestamp
+                  schema=$(mysql --defaults-extra-file=/run/mysql/mysql.cnf --batch --skip-column-names "$BACKUP_DATABASE" -e 'SELECT MAX(version) FROM schema_migrations' 2>/dev/null)
+                  printf 'schema=%s\nimage=%s\nkey_reference=%s\n' "$schema" "$CONFIGRA_IMAGE_REFERENCE" "$KEY_REFERENCE" > /work/artifact/metadata.txt
+                  if ! sh /scripts/mysql-backup.sh /run/mysql/mysql.cnf "$BACKUP_DATABASE" /work/artifact >/dev/null 2>&1; then
+                    echo 'consistent database backup failed' >&2
+                    exit 1
+                  fi
+              env:
+                - name: BACKUP_DATABASE
+                  valueFrom: {configMapKeyRef: {name: configra-backup-settings, key: database}}
+                - name: KEY_REFERENCE
+                  valueFrom: {configMapKeyRef: {name: configra-backup-settings, key: key-reference}}
+                - name: CONFIGRA_IMAGE_REFERENCE
+                  valueFrom: {configMapKeyRef: {name: configra-backup-settings, key: image-reference}}
+              securityContext: &restricted
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: {drop: [ALL]}
+              resources:
+                requests: {cpu: 100m, memory: 128Mi}
+                limits: {memory: 512Mi}
+              volumeMounts:
+                - {name: scripts, mountPath: /scripts, readOnly: true}
+                - {name: database, mountPath: /run/mysql, readOnly: true}
+                - {name: work, mountPath: /work}
+                - {name: tmp, mountPath: /tmp}
+          containers:
+            - name: archive-and-verify
+              # AWS CLI v2.37.8, official multi-platform image, verified utilities.
+              image: public.ecr.aws/aws-cli/aws-cli@sha256:420ab345e847291b541b45d989535f55bcff957c27fa1100fae4aa233e86398c
+              command: [/bin/sh, /scripts/ship-s3.sh]
+              env:
+                - name: POD_UID
+                  valueFrom: {fieldRef: {fieldPath: metadata.uid}}
+                - name: BACKUP_S3_PREFIX
+                  valueFrom: {configMapKeyRef: {name: configra-backup-settings, key: s3-prefix}}
+                - name: PUSHGATEWAY_URL
+                  valueFrom: {configMapKeyRef: {name: configra-backup-settings, key: pushgateway-url}}
+                - {name: AWS_CONFIG_FILE, value: /run/aws/config}
+                - {name: AWS_SHARED_CREDENTIALS_FILE, value: /run/aws/credentials}
+                - {name: AWS_EC2_METADATA_DISABLED, value: "true"}
+              securityContext: *restricted
+              resources:
+                requests: {cpu: 100m, memory: 128Mi}
+                limits: {memory: 512Mi}
+              volumeMounts:
+                - {name: scripts, mountPath: /scripts, readOnly: true}
+                - {name: aws, mountPath: /run/aws, readOnly: true}
+                - {name: work, mountPath: /work, readOnly: true}
+                - {name: tmp, mountPath: /tmp}
+          volumes:
+            - name: scripts
+              configMap: {name: configra-backup-scripts, defaultMode: 0444}
+            - name: database
+              secret: {secretName: configra-backup-db, defaultMode: 0440}
+            - name: aws
+              secret: {secretName: configra-backup-s3, defaultMode: 0440}
+            - name: work
+              emptyDir: {sizeLimit: 20Gi}
+            - name: tmp
+              emptyDir: {sizeLimit: 20Gi}

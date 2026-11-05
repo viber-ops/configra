@@ -9,93 +9,106 @@ import (
 
 	"github.com/viber-ops/configra/internal/accessnats"
 	"github.com/viber-ops/configra/internal/logstore"
-	"github.com/viber-ops/configra/internal/notification"
 	"github.com/viber-ops/configra/internal/storage/mysqlstore"
 )
 
-func Run(
-	ctx context.Context,
-	outbox *mysqlstore.Store,
-	logs *logstore.Store,
-	consumer *accessnats.Consumer,
-	sender *notification.Sender,
-	logger *zap.Logger,
-) error {
+// Run gives durable Audit, Notification delivery and best-effort Access ingestion
+// independent budgets. A failed consumer cancels/join all workers and is returned
+// to the owning process; dependency outages remain retryable.
+func Run(ctx context.Context, outbox *mysqlstore.Store, logs *logstore.Store, consumer *accessnats.Consumer,
+	sender notificationAttemptSender, logger *zap.Logger, observers ...func(string, bool)) error {
 	if outbox == nil || logs == nil || consumer == nil || sender == nil || logger == nil {
 		return errors.New("Log Worker dependencies are required")
 	}
-	for {
-		initializeContext, cancel := context.WithTimeout(ctx, 5*time.Second)
-		err := logs.Initialize(initializeContext)
-		cancel()
-		if err == nil {
-			break
-		}
-		logger.Warn("ClickHouse unavailable; Log Worker will retry")
-		deliveryContext, cancel := context.WithTimeout(ctx, 15*time.Second)
-		_, deliveryErr := DeliverNotificationsOnce(deliveryContext, outbox, sender)
-		cancel()
-		if deliveryErr != nil && ctx.Err() == nil {
-			logger.Warn("Notification delivery did not complete")
-		}
-		select {
-		case <-ctx.Done():
-			consumer.Close()
-			return nil
-		case <-time.After(2 * time.Second):
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	observe := func(worker string, ok bool) {
+		for _, observer := range observers {
+			if observer != nil {
+				observer(worker, ok)
+			}
 		}
 	}
-
-	consumerDone := make(chan error, 1)
-	go func() { consumerDone <- consumer.Run(ctx, logs) }()
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
-	var recoveryCursor mysqlstore.OutboxID
-	recoveryDone := false
-	for {
-		select {
-		case err := <-consumerDone:
-			if err == nil && ctx.Err() != nil {
-				return nil
-			}
-			if err == nil {
-				return errors.New("NATS Access Event Consumer stopped unexpectedly")
-			}
+	results := make(chan error, 3)
+	ready := make(chan struct{})
+	go func() {
+		results <- runPeriodic(ctx, "notification", 15*time.Second, observe, logger, func(ctx context.Context) error {
+			_, err := DeliverNotificationsOnce(ctx, outbox, sender)
 			return err
-		case <-ticker.C:
-			if !recoveryDone {
-				recoveryContext, cancel := context.WithTimeout(ctx, 5*time.Second)
-				page, err := outbox.RequeueAuditFailures(recoveryContext, recoveryCursor, 100, func(event mysqlstore.OutboxEvent) bool {
+		})
+	}()
+	go func() {
+		initialized := false
+		var cursor mysqlstore.OutboxID
+		recovered := false
+		results <- runPeriodic(ctx, "audit", 10*time.Second, observe, logger, func(ctx context.Context) error {
+			if !initialized {
+				if err := logs.Initialize(ctx); err != nil {
+					return err
+				}
+				initialized = true
+				close(ready)
+			}
+			if !recovered {
+				page, err := outbox.RequeueAuditFailures(ctx, cursor, 100, func(event mysqlstore.OutboxEvent) bool {
 					_, err := logstore.DecodeAuditOutbox(event)
 					return err == nil
 				})
-				cancel()
-				if err == nil {
-					recoveryCursor, recoveryDone = page.After, page.Done
-					if page.Requeued > 0 {
-						logger.Info("Recovered valid Audit Events", zap.Int("count", page.Requeued))
-					}
-				} else if ctx.Err() == nil {
-					logger.Warn("Audit recovery will retry")
+				if err != nil {
+					return err
 				}
+				cursor, recovered = page.After, page.Done
 			}
-			deliveryContext, cancel := context.WithTimeout(ctx, 10*time.Second)
-			_, err := DeliverAuditOnce(deliveryContext, outbox, logs)
-			cancel()
+			_, err := DeliverAuditOnce(ctx, outbox, logs)
 			if err != nil {
-				logger.Warn("Audit Event delivery did not complete")
-				initializeContext, cancel := context.WithTimeout(ctx, 5*time.Second)
-				_ = logs.Initialize(initializeContext)
-				cancel()
+				// A restore can remove log tables; recreate the schema before retry.
+				_ = logs.Initialize(ctx)
 			}
-			deliveryContext, cancel = context.WithTimeout(ctx, 15*time.Second)
-			_, err = DeliverNotificationsOnce(deliveryContext, outbox, sender)
-			cancel()
-			if err != nil && ctx.Err() == nil {
-				logger.Warn("Notification delivery did not complete")
-			}
+			return err
+		})
+	}()
+	go func() {
+		select {
 		case <-ctx.Done():
-			return <-consumerDone
+			consumer.Close()
+			results <- nil
+			return
+		case <-ready:
+		}
+		err := consumer.Run(ctx, logs)
+		if ctx.Err() == nil && err == nil {
+			err = errors.New("NATS Access Event Consumer stopped unexpectedly")
+		}
+		results <- err
+	}()
+	var result error
+	for range 3 {
+		if err := <-results; err != nil {
+			result = errors.Join(result, err)
+			cancel()
+		}
+	}
+	return result
+}
+
+func runPeriodic(ctx context.Context, worker string, budget time.Duration, observe func(string, bool), logger *zap.Logger, work func(context.Context) error) error {
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if ctx.Err() != nil {
+			return nil
+		}
+		attempt, cancel := context.WithTimeout(ctx, budget)
+		err := work(attempt)
+		cancel()
+		observe(worker, err == nil)
+		if err != nil && ctx.Err() == nil {
+			logger.Warn("Background delivery will retry", zap.String("worker", worker))
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
 		}
 	}
 }

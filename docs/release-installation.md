@@ -16,7 +16,7 @@ extracting. Checksums detect corruption, not an independently compromised releas
 account. `BUILD.json` records the exact source commit and target.
 
 `LICENSE` and `NOTICE` apply to original Configra source. The Kubernetes module
-also carries its own copies. `licenses/go1.26.7/` retains reviewed Go runtime and
+also carries its own copies. `licenses/go1.26.10/` retains reviewed Go runtime and
 standard-library notices, including source-embedded terms; its `SOURCE.md`
 identifies the exact source and scope. `licenses/configra-modules/` and
 `licenses/configra-kubernetes-modules/` retain dependency texts and source-access
@@ -60,7 +60,12 @@ build from the tagged source under your organization's software policy.
 
 ## Deployment checks
 
-v1.0.1 is the first stable release. Review the documented security boundaries and
+v1.3.0 adds checked Config copies and templates, guided API Token replacement and
+optional administrator session limits, with no schema change from v1.2.2; see the
+[release notes](releases/v1.3.0.md). The v1.2.0 baseline adds `configractl`, consistent release sets and operational controls; follow
+the [schema 3 → 4 upgrade](releases/v1.2.0.md) and [CLI guide](cli.md).
+
+v1.0.1 was the first stable release. v1.1.0 adds [scoped automation writes](scoped-write-tokens.md); follow the [schema 2 → 3 upgrade procedure](releases/v1.1.0.md) before starting API replicas. Review the documented security boundaries and
 run an environment-specific rollout, backup/restore drill and load test before
 production. The tested hardware and Kubernetes topology do not establish an
 availability or throughput SLA for another deployment. Do not use Configra to

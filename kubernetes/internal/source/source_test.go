@@ -88,3 +88,30 @@ func TestObjectPathsCannotConflictWithTheirDirectories(t *testing.T) {
 		t.Fatalf("rejected non-conflicting paths: %v", err)
 	}
 }
+
+func TestReleaseSourceFetchesOneCompleteSetAndRejectsMixedSources(t *testing.T) {
+	requests := 0
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if r.URL.Path != "/v1/environments/prod/configs/server/release" {
+			t.Error("release used independent reads")
+			w.WriteHeader(404)
+			return
+		}
+		w.Header().Set("ETag", `"release-test"`)
+		io.WriteString(w, `{"manifest":{"environment":"prod","config_key":"server","release_key":"stable","config_revision":1,"config_path":"server.yaml","files":[{"namespace":"ops","item":"app","field":"key","path":"key.pem","revision":1}],"vault_revisions":{"ops.app":1}},"generation":1,"digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","config":{"format":"yaml","content":"version: 1\n","config_revision":1,"vault_revisions":{"ops.app":1}},"files":[{"path":"key.pem","bytes":"cHJpdmF0ZQ=="}]}`)
+	}))
+	defer server.Close()
+	reader, err := source.NewReader(server.URL, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	objects := []source.Object{{Type: "release", Environment: "prod", Config: "server", Path: "."}}
+	values, err := reader.Read(context.Background(), objects, map[string][]byte{"token": []byte("cfg_testuser_" + base64.RawURLEncoding.EncodeToString(make([]byte, 32)))})
+	if err != nil || len(values) != 2 || requests != 1 || values[0].Path != "server.yaml" || values[1].Path != "key.pem" || !values[1].Sensitive || values[0].Version != values[1].Version {
+		t.Fatal("incomplete release material", err)
+	}
+	if err := source.ValidateObjects(append(objects, source.Object{Type: "config", Environment: "prod", Config: "another", Path: "another.yaml"})); err == nil {
+		t.Fatal("release may be mixed with independently versioned objects")
+	}
+}
