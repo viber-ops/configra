@@ -60,8 +60,12 @@ build from the tagged source under your organization's software policy.
 
 ## Deployment checks
 
-v1.3.0 adds checked Config copies and templates, guided API Token replacement and
-optional administrator session limits, with no schema change from v1.2.2; see the
+v1.3.1 keeps the current version in view on Config pages, fixes their phone
+layout, stops rare 503 responses to concurrent automation writes and updates
+dependencies, with no schema or configuration change from
+v1.3.0; see the [patch notes](releases/v1.3.1.md). v1.3.0 adds checked Config
+copies and templates, guided API Token replacement and optional administrator
+session limits, with no schema change from v1.2.2; see the
 [release notes](releases/v1.3.0.md). The v1.2.0 baseline adds `configractl`, consistent release sets and operational controls; follow
 the [schema 3 → 4 upgrade](releases/v1.2.0.md) and [CLI guide](cli.md).
 

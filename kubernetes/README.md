@@ -1,6 +1,6 @@
 # Kubernetes integration
 
-Source builds require Go **1.26.10** or newer. The published v1.3.0 bundles include
+Source builds require Go **1.26.10** or newer. The published v1.3.1 bundles include
 the matching executable and remain compatible with configra-go v1.2.0.
 
 Configra itself runs as separate Management and API Deployments; see
