@@ -30,6 +30,8 @@ test('the Environment picker works from the keyboard and Tab leaves it without o
   await page.keyboard.press('ArrowDown');
   await expect(picker).toHaveAttribute('aria-expanded', 'true');
   const listbox = page.getByRole('listbox', { name: 'Environment filter' });
+  // Arrow keys move within the options already loaded, so wait for the first page.
+  await expect(listbox.getByRole('option', { name: 'Region 02 · env-02' })).toBeVisible();
   const activeName = async () => listbox.locator(`[id="${await picker.getAttribute('aria-activedescendant')}"]`).textContent();
   expect(await activeName()).toBe('All environments');
   await page.keyboard.press('ArrowDown');
