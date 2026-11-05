@@ -9,8 +9,8 @@
       "goos": "darwin",
       "goarch": "amd64",
       "goamd64": "v1",
-      "package_count": 361,
-      "package_paths_sha256": "144ed3f667e39233f846e42186b8e3a8de1c9dd7d483fb3019d0744a1de1fee6"
+      "package_count": 360,
+      "package_paths_sha256": "9ba640c6e4d5c75972402380ad4cb5184a358b011267e3d4033cb6242a9de540"
     },
     {
       "target": "configra-kubernetes/darwin/amd64",
@@ -19,8 +19,8 @@
       "goos": "darwin",
       "goarch": "amd64",
       "goamd64": "v1",
-      "package_count": 918,
-      "package_paths_sha256": "312d27c41a517bf4841322474db07765ee9b6d468048ed20b49f3a584c93ee76"
+      "package_count": 938,
+      "package_paths_sha256": "4882abef6b74a2e1d6940c5a8c0d990b1b26731627edecb337099fd94ee3f916"
     },
     {
       "target": "configra/darwin/arm64",
@@ -29,8 +29,8 @@
       "goos": "darwin",
       "goarch": "arm64",
       "goarm64": "v8.0",
-      "package_count": 359,
-      "package_paths_sha256": "0cd1663fc605272a08b45d85fdc402b28457f0d5b47496a97956e528dd8a3932"
+      "package_count": 358,
+      "package_paths_sha256": "86166e9d2218af9492e5c992e4eabbfc0f7f0f9bf351f8aa86b640128f38a036"
     },
     {
       "target": "configra-kubernetes/darwin/arm64",
@@ -39,8 +39,8 @@
       "goos": "darwin",
       "goarch": "arm64",
       "goarm64": "v8.0",
-      "package_count": 917,
-      "package_paths_sha256": "aa68308caee9b56b127b3d5e8764337faa57373083f921729241acfce49b4ee8"
+      "package_count": 937,
+      "package_paths_sha256": "d6b4cb3fd660ddadc630f7d2ed51e3f7d1162377432abb6b140bf47ec30b17ea"
     },
     {
       "target": "configra/linux/amd64",
@@ -49,8 +49,8 @@
       "goos": "linux",
       "goarch": "amd64",
       "goamd64": "v1",
-      "package_count": 364,
-      "package_paths_sha256": "8e46ea85bdb455d42275db303b75cfedd7c371724a4b6e9821eddf61c2da4733"
+      "package_count": 363,
+      "package_paths_sha256": "14dc127bf3c59ed18d2eaa86bca7d7b8bda767a49e9f984418308cc7b8aa3070"
     },
     {
       "target": "configra-kubernetes/linux/amd64",
@@ -59,8 +59,8 @@
       "goos": "linux",
       "goarch": "amd64",
       "goamd64": "v1",
-      "package_count": 921,
-      "package_paths_sha256": "c4b02e379ec97a4ca4a491bcdd36f3f951bcf9c70f5456d2d0d0813d2111413a"
+      "package_count": 941,
+      "package_paths_sha256": "ddeb95794eb750f3c5b9889ff311b5873d0f023f6b3017fcada7f40638494f38"
     },
     {
       "target": "configra/linux/arm64",
@@ -69,8 +69,8 @@
       "goos": "linux",
       "goarch": "arm64",
       "goarm64": "v8.0",
-      "package_count": 362,
-      "package_paths_sha256": "4d9e035ca373fa143846c7abd014ca0ea7fb38041577297ee7b447537ab2be56"
+      "package_count": 361,
+      "package_paths_sha256": "42cd08f7a2799af6759092dab48838e292f92ae00f7677447538d2e85cf6cc46"
     },
     {
       "target": "configra-kubernetes/linux/arm64",
@@ -79,8 +79,8 @@
       "goos": "linux",
       "goarch": "arm64",
       "goarm64": "v8.0",
-      "package_count": 920,
-      "package_paths_sha256": "59ba422e5f9468ad48f25ee6712ea1801ae2c3744fcab307afc54f2292adb70c"
+      "package_count": 940,
+      "package_paths_sha256": "a2fbe469208e2cc6edc01c1bb446ff9eb315952f2f28f5bfd53a239ecbc6e445"
     },
     {
       "target": "configractl/darwin/amd64",
@@ -218,8 +218,8 @@
     },
     {
       "module": "github.com/ClickHouse/clickhouse-go/v2",
-      "version": "v2.48.0",
-      "module_sum": "h1:auzd4VkapQYhQF8F2Gog7s3x78Bi1JZmByxGbrw3C+4=",
+      "version": "v2.50.0",
+      "module_sum": "h1:cX9TLBOdNVbecglF/c8KkbtZQpov84u+AtpwAA6Gv8g=",
       "primary_license_identifiers": [
         "Apache-2.0"
       ],
@@ -228,14 +228,14 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/ClickHouse/clickhouse-go",
-        "hash": "69b5195a9b2e04a999f9c130a7a9dc1248288689"
+        "hash": "1c0a5f93048393814b2a9ae2af3954d0c091317a"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "27099b82691d1d17cb18138319e2a4f9980ef59c1186c9b02a3273c757c0f91b",
-          "source": "https://github.com/ClickHouse/clickhouse-go/blob/69b5195a9b2e04a999f9c130a7a9dc1248288689/LICENSE",
+          "source": "https://github.com/ClickHouse/clickhouse-go/blob/1c0a5f93048393814b2a9ae2af3954d0c091317a/LICENSE",
           "verified": true
         }
       ],
@@ -270,8 +270,8 @@
     },
     {
       "module": "github.com/andybalholm/brotli",
-      "version": "v1.2.2",
-      "module_sum": "h1:HzTuoo2ErYQqf5qvcJInB8uvqSVxRttzkFexPWtnceM=",
+      "version": "v1.2.6",
+      "module_sum": "h1:ftYnfj6usCp+UGV5kSJ3+chpMQgU+gJf/AxsUQ52REI=",
       "primary_license_identifiers": [
         "BSD-3-Clause",
         "MIT"
@@ -281,21 +281,21 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/andybalholm/brotli",
-        "hash": "785aba538b2118979d2c573eccb287c4da157faf"
+        "hash": "451b9eb6fcc1f329d548f888b9ae2bc372ef434b"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "3d180008e36922a4e8daec11c34c7af264fed5962d07924aea928c38e8663c94",
-          "source": "https://github.com/andybalholm/brotli/blob/785aba538b2118979d2c573eccb287c4da157faf/LICENSE",
+          "source": "https://github.com/andybalholm/brotli/blob/451b9eb6fcc1f329d548f888b9ae2bc372ef434b/LICENSE",
           "verified": true
         },
         {
           "path": "flate/LICENSE",
           "kind": "license",
           "sha256": "2d36597f7117c38b006835ae7f537487207d8ec407aa9d9980794b2030cbc067",
-          "source": "https://github.com/andybalholm/brotli/blob/785aba538b2118979d2c573eccb287c4da157faf/flate/LICENSE",
+          "source": "https://github.com/andybalholm/brotli/blob/451b9eb6fcc1f329d548f888b9ae2bc372ef434b/flate/LICENSE",
           "verified": true
         }
       ],
@@ -372,8 +372,8 @@
     },
     {
       "module": "github.com/coreos/go-oidc/v3",
-      "version": "v3.20.0",
-      "module_sum": "h1:EtE0WIBHk03N+DqGkY4+UONzzZHk7amKt6IyNd7OsZE=",
+      "version": "v3.21.0",
+      "module_sum": "h1:wZo4Q9Pum8dYEj0eMUPrqR+kvuGkeUplbLpNCkBqoWM=",
       "primary_license_identifiers": [
         "Apache-2.0"
       ],
@@ -382,21 +382,21 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/coreos/go-oidc",
-        "hash": "75dfa5c0626c48e0ad8b761fdd9e1dc51cb8498a"
+        "hash": "c914bd380327a5a3a81403774d1a5d5b73772ce7"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14",
-          "source": "https://github.com/coreos/go-oidc/blob/75dfa5c0626c48e0ad8b761fdd9e1dc51cb8498a/LICENSE",
+          "source": "https://github.com/coreos/go-oidc/blob/c914bd380327a5a3a81403774d1a5d5b73772ce7/LICENSE",
           "verified": true
         },
         {
           "path": "NOTICE",
           "kind": "notice",
           "sha256": "dccd26c6fd9c296daf44d0bc56bb4efc566edd4880381b3331c9a63e6e471338",
-          "source": "https://github.com/coreos/go-oidc/blob/75dfa5c0626c48e0ad8b761fdd9e1dc51cb8498a/NOTICE",
+          "source": "https://github.com/coreos/go-oidc/blob/c914bd380327a5a3a81403774d1a5d5b73772ce7/NOTICE",
           "verified": true
         }
       ],
@@ -405,16 +405,16 @@
     },
     {
       "module": "github.com/davecgh/go-spew",
-      "version": "v1.1.1",
-      "module_sum": "h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=",
+      "version": "v1.1.2-0.20180830191138-d8f796af33cc",
+      "module_sum": "h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=",
       "primary_license_identifiers": [
         "ISC"
       ],
       "qualification": "Root license for the selected package scopes.",
       "origin": {
         "kind": "module_archive",
-        "url": "https://proxy.golang.org/github.com/davecgh/go-spew/@v/v1.1.1.zip",
-        "sha256": "6b44a843951f371b7010c754ecc3cabefe815d5ced1c5b9409fb2d697e8a890d",
+        "url": "https://proxy.golang.org/github.com/davecgh/go-spew/@v/v1.1.2-0.20180830191138-d8f796af33cc.zip",
+        "sha256": "b4d0923b169b194f0016ec46f3df1ab0c68e27999743e43fe2de59ecb2484128",
         "vcs_hash": null,
         "qualification": "The canonical Go module metadata lacks VCS Origin; verified archive identity is recorded instead of inventing a commit."
       },
@@ -423,8 +423,8 @@
           "path": "LICENSE",
           "kind": "license",
           "sha256": "1b93a317849ee09d3d7e4f1d20c2b78ddb230b4becb12d7c224c927b9d470251",
-          "source": "https://proxy.golang.org/github.com/davecgh/go-spew/@v/v1.1.1.zip",
-          "archive_inner_path": "github.com/davecgh/go-spew@v1.1.1/LICENSE",
+          "source": "https://proxy.golang.org/github.com/davecgh/go-spew/@v/v1.1.2-0.20180830191138-d8f796af33cc.zip",
+          "archive_inner_path": "github.com/davecgh/go-spew@v1.1.2-0.20180830191138-d8f796af33cc/LICENSE",
           "verified": true
         }
       ],
@@ -433,8 +433,8 @@
     },
     {
       "module": "github.com/emicklei/go-restful/v3",
-      "version": "v3.12.2",
-      "module_sum": "h1:DhwDP0vY3k8ZzE0RunuJy8GhNpPL6zqLkDf9B/a0/xU=",
+      "version": "v3.13.0",
+      "module_sum": "h1:C4Bl2xDndpU6nJ4bc1jXd+uTmYPVUwkD6bFY/oTyCes=",
       "primary_license_identifiers": [
         "MIT"
       ],
@@ -443,14 +443,14 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/emicklei/go-restful",
-        "hash": "d59fac5bd1b1c244342c44e3e41699b8c03a14c1"
+        "hash": "3fae6e4c6809ebc26315d163196ea7ab8e0685cb"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "bf4c2b4f64abc0b760f62c766f0dd5e735a8f1335d5cf2f83db5db65e01399ab",
-          "source": "https://github.com/emicklei/go-restful/blob/d59fac5bd1b1c244342c44e3e41699b8c03a14c1/LICENSE",
+          "source": "https://github.com/emicklei/go-restful/blob/3fae6e4c6809ebc26315d163196ea7ab8e0685cb/LICENSE",
           "verified": true
         }
       ],
@@ -485,6 +485,32 @@
     },
     {
       "module": "github.com/fsnotify/fsnotify",
+      "version": "v1.10.1",
+      "module_sum": "h1:b0/UzAf9yR5rhf3RPm9gf3ehBPpf0oZKIjtpKrx59Ho=",
+      "primary_license_identifiers": [
+        "BSD-3-Clause"
+      ],
+      "qualification": "Root license for the selected package scopes.",
+      "origin": {
+        "kind": "vcs",
+        "vcs": "git",
+        "url": "https://github.com/fsnotify/fsnotify",
+        "hash": "76b01a6e8f502187fecedea8b025e79e5a86085c"
+      },
+      "files": [
+        {
+          "path": "LICENSE",
+          "kind": "license",
+          "sha256": "2dfbe6d2b5eb18b55148f3805d88648a09e0d17e38428123259afb08c8996e37",
+          "source": "https://github.com/fsnotify/fsnotify/blob/76b01a6e8f502187fecedea8b025e79e5a86085c/LICENSE",
+          "verified": true
+        }
+      ],
+      "excluded_discovered_legal_paths": [],
+      "target_mask": 170
+    },
+    {
+      "module": "github.com/fsnotify/fsnotify",
       "version": "v1.9.0",
       "module_sum": "h1:2Ml+OJNzbYCTzsxtv8vKSFD9PbJjmhYF14k/jKC7S9k=",
       "primary_license_identifiers": [
@@ -507,12 +533,12 @@
         }
       ],
       "excluded_discovered_legal_paths": [],
-      "target_mask": 4010
+      "target_mask": 3840
     },
     {
       "module": "github.com/fxamacker/cbor/v2",
-      "version": "v2.9.0",
-      "module_sum": "h1:NpKPmjDBgUfBms6tr6JZkTHtfFGcMKsw3eGcmD/sapM=",
+      "version": "v2.9.2",
+      "module_sum": "h1:X4Ksno9+x3cz0TZv69ec1hxP/+tymuR8PXQJyDwfh78=",
       "primary_license_identifiers": [
         "MIT"
       ],
@@ -521,14 +547,14 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/fxamacker/cbor",
-        "hash": "d29ad7351b55b1844387cf9306c4101658cc5256"
+        "hash": "45589abe5c63bea2db4d311e0d0fcc551cd772ae"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "78cad457d5ea7318230f3d969d4cdf29cef45524a1fc8ca3a97646da1ad7a841",
-          "source": "https://github.com/fxamacker/cbor/blob/d29ad7351b55b1844387cf9306c4101658cc5256/LICENSE",
+          "source": "https://github.com/fxamacker/cbor/blob/45589abe5c63bea2db4d311e0d0fcc551cd772ae/LICENSE",
           "verified": true
         }
       ],
@@ -591,8 +617,8 @@
     },
     {
       "module": "github.com/go-jose/go-jose/v4",
-      "version": "v4.1.4",
-      "module_sum": "h1:moDMcTHmvE6Groj34emNPLs/qtYXRVcd6S7NHbHz3kA=",
+      "version": "v4.1.7",
+      "module_sum": "h1:Nac/98uT5LPkfbiFuYa8ktf62a2VxwQ4xbq1GK8pV5E=",
       "primary_license_identifiers": [
         "Apache-2.0",
         "BSD-3-Clause"
@@ -602,21 +628,21 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/go-jose/go-jose",
-        "hash": "0e59876635f3dbf46d7b5e97b52bb75a3f96e7d9"
+        "hash": "59611a121c781925dee4b9706bd75408b470a596"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
-          "source": "https://github.com/go-jose/go-jose/blob/0e59876635f3dbf46d7b5e97b52bb75a3f96e7d9/LICENSE",
+          "source": "https://github.com/go-jose/go-jose/blob/59611a121c781925dee4b9706bd75408b470a596/LICENSE",
           "verified": true
         },
         {
           "path": "json/LICENSE",
           "kind": "license",
           "sha256": "dd26a7abddd02e2d0aba97805b31f248ef7835d9e10da289b22e3b8ab78b324d",
-          "source": "https://github.com/go-jose/go-jose/blob/0e59876635f3dbf46d7b5e97b52bb75a3f96e7d9/json/LICENSE",
+          "source": "https://github.com/go-jose/go-jose/blob/59611a121c781925dee4b9706bd75408b470a596/json/LICENSE",
           "verified": true
         }
       ],
@@ -625,8 +651,8 @@
     },
     {
       "module": "github.com/go-logr/logr",
-      "version": "v1.4.3",
-      "module_sum": "h1:CjnDlHq8ikf6E492q6eKboGOC0T8CDaOvkHCIg8idEI=",
+      "version": "v1.4.4",
+      "module_sum": "h1:tG4xh9yMsRCAiodLVTxyrkzSZ9+o0L1Kg/+cPVcbP/8=",
       "primary_license_identifiers": [
         "Apache-2.0"
       ],
@@ -635,14 +661,14 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/go-logr/logr",
-        "hash": "38a1c47ef633fa6b2eee6b8f2e1371ba8626e557"
+        "hash": "96a9abaa56526dd5d51745e817732a2d61505fb7"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1",
-          "source": "https://github.com/go-logr/logr/blob/38a1c47ef633fa6b2eee6b8f2e1371ba8626e557/LICENSE",
+          "source": "https://github.com/go-logr/logr/blob/96a9abaa56526dd5d51745e817732a2d61505fb7/LICENSE",
           "verified": true
         }
       ],
@@ -677,24 +703,31 @@
     },
     {
       "module": "github.com/go-openapi/jsonpointer",
-      "version": "v0.21.0",
-      "module_sum": "h1:YgdVicSA9vH5RiHs9TZW5oyafXZFc6+2Vc1rr/O9oNQ=",
+      "version": "v1.0.0",
+      "module_sum": "h1:kR9tHqY0CtZaOPVFm622dPVNhrvYpwr4uCxgL3h1H8s=",
       "primary_license_identifiers": [
         "Apache-2.0"
       ],
-      "qualification": "Root license for the selected package scopes.",
+      "qualification": "Apache-2.0 root LICENSE and NOTICE; the NOTICE recalls the original Apache-2.0 sigu-399 jsonpointer code.",
       "origin": {
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/go-openapi/jsonpointer",
-        "hash": "8b546b950409bd7b131488a88613339cd8937b7f"
+        "hash": "94e86086395062d3094c09c01aea3592df0fcba3"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
-          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
-          "source": "https://github.com/go-openapi/jsonpointer/blob/8b546b950409bd7b131488a88613339cd8937b7f/LICENSE",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+          "source": "https://github.com/go-openapi/jsonpointer/blob/94e86086395062d3094c09c01aea3592df0fcba3/LICENSE",
+          "verified": true
+        },
+        {
+          "path": "NOTICE",
+          "kind": "notice",
+          "sha256": "05b8a1ce6ce54812980d27a99019687af7e40d6ad2e1ea70c1d537d682a90188",
+          "source": "https://github.com/go-openapi/jsonpointer/blob/94e86086395062d3094c09c01aea3592df0fcba3/NOTICE",
           "verified": true
         }
       ],
@@ -703,24 +736,31 @@
     },
     {
       "module": "github.com/go-openapi/jsonreference",
-      "version": "v0.20.2",
-      "module_sum": "h1:3sVjiK66+uXK/6oQ8xgcRKcFgQ5KXa2KvnJRumpMGbE=",
+      "version": "v1.0.0",
+      "module_sum": "h1:jlmTr6torcd1YgDQvSfNmRtKzYDO4FGBkrAdlAVWnpY=",
       "primary_license_identifiers": [
         "Apache-2.0"
       ],
-      "qualification": "Root license for the selected package scopes.",
+      "qualification": "Apache-2.0 root LICENSE and NOTICE; the NOTICE recalls the original Apache-2.0 sigu-399 jsonreference code.",
       "origin": {
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/go-openapi/jsonreference",
-        "hash": "1f158e563669961b8e54817e3ea57978d439ffff"
+        "hash": "edb350b0a13c936c03de055a3483ea334a50478c"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
-          "source": "https://github.com/go-openapi/jsonreference/blob/1f158e563669961b8e54817e3ea57978d439ffff/LICENSE",
+          "source": "https://github.com/go-openapi/jsonreference/blob/edb350b0a13c936c03de055a3483ea334a50478c/LICENSE",
+          "verified": true
+        },
+        {
+          "path": "NOTICE",
+          "kind": "notice",
+          "sha256": "9d5bd59fec685963e813e1f055ea35f27beff3a371199883cb0f71be3ee21f6a",
+          "source": "https://github.com/go-openapi/jsonreference/blob/edb350b0a13c936c03de055a3483ea334a50478c/NOTICE",
           "verified": true
         }
       ],
@@ -729,8 +769,8 @@
     },
     {
       "module": "github.com/go-openapi/swag",
-      "version": "v0.23.0",
-      "module_sum": "h1:vsEVJDUo2hPJ2tu0/Xc+4noaxyEffXNIs3cOULZ+GrE=",
+      "version": "v0.27.1",
+      "module_sum": "h1:VotvOLWW8q/EAxB0YdsBBGC8XYyeL1YwBj2ungAGPNg=",
       "primary_license_identifiers": [
         "Apache-2.0"
       ],
@@ -739,14 +779,311 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/go-openapi/swag",
-        "hash": "53e32e82f758c8e884819330a87aef294ff10c1f"
+        "hash": "c8a41f7226ee09d8f74ac3e9375d071041836b7c"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
-          "source": "https://github.com/go-openapi/swag/blob/53e32e82f758c8e884819330a87aef294ff10c1f/LICENSE",
+          "source": "https://github.com/go-openapi/swag/blob/c8a41f7226ee09d8f74ac3e9375d071041836b7c/LICENSE",
+          "verified": true
+        }
+      ],
+      "excluded_discovered_legal_paths": [],
+      "target_mask": 170
+    },
+    {
+      "module": "github.com/go-openapi/swag/cmdutils",
+      "version": "v0.27.1",
+      "module_sum": "h1:I7sYqaWVl5mq0NEmNQkAmFDyNin9ufvMX/p2zwtQaOE=",
+      "primary_license_identifiers": [
+        "Apache-2.0"
+      ],
+      "qualification": "Submodule license is the repository-root Apache-2.0 text included in the module archive.",
+      "origin": {
+        "kind": "vcs",
+        "vcs": "git",
+        "url": "https://github.com/go-openapi/swag",
+        "hash": "c8a41f7226ee09d8f74ac3e9375d071041836b7c",
+        "subdir": "cmdutils"
+      },
+      "files": [
+        {
+          "path": "LICENSE",
+          "kind": "license",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "source": "https://github.com/go-openapi/swag/blob/c8a41f7226ee09d8f74ac3e9375d071041836b7c/LICENSE",
+          "verified": true
+        }
+      ],
+      "excluded_discovered_legal_paths": [],
+      "target_mask": 170
+    },
+    {
+      "module": "github.com/go-openapi/swag/conv",
+      "version": "v0.27.1",
+      "module_sum": "h1:8wi9ZG+olmY1wXphl93EWniPtbSPkXM/feH7FgjsvrU=",
+      "primary_license_identifiers": [
+        "Apache-2.0"
+      ],
+      "qualification": "Submodule license is the repository-root Apache-2.0 text included in the module archive.",
+      "origin": {
+        "kind": "vcs",
+        "vcs": "git",
+        "url": "https://github.com/go-openapi/swag",
+        "hash": "c8a41f7226ee09d8f74ac3e9375d071041836b7c",
+        "subdir": "conv"
+      },
+      "files": [
+        {
+          "path": "LICENSE",
+          "kind": "license",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "source": "https://github.com/go-openapi/swag/blob/c8a41f7226ee09d8f74ac3e9375d071041836b7c/LICENSE",
+          "verified": true
+        }
+      ],
+      "excluded_discovered_legal_paths": [],
+      "target_mask": 170
+    },
+    {
+      "module": "github.com/go-openapi/swag/fileutils",
+      "version": "v0.27.1",
+      "module_sum": "h1:QQqBSoi5mW4XpU85nS0mLcA+zAE6vLzrb0QkmLKf9oM=",
+      "primary_license_identifiers": [
+        "Apache-2.0"
+      ],
+      "qualification": "Submodule license is the repository-root Apache-2.0 text included in the module archive.",
+      "origin": {
+        "kind": "vcs",
+        "vcs": "git",
+        "url": "https://github.com/go-openapi/swag",
+        "hash": "c8a41f7226ee09d8f74ac3e9375d071041836b7c",
+        "subdir": "fileutils"
+      },
+      "files": [
+        {
+          "path": "LICENSE",
+          "kind": "license",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "source": "https://github.com/go-openapi/swag/blob/c8a41f7226ee09d8f74ac3e9375d071041836b7c/LICENSE",
+          "verified": true
+        }
+      ],
+      "excluded_discovered_legal_paths": [],
+      "target_mask": 170
+    },
+    {
+      "module": "github.com/go-openapi/swag/jsonutils",
+      "version": "v0.27.1",
+      "module_sum": "h1:SVgK3i4USzCU5mibOOS/l4ea2h9UQXy7J7RNLTjuXjU=",
+      "primary_license_identifiers": [
+        "Apache-2.0"
+      ],
+      "qualification": "Submodule license is the repository-root Apache-2.0 text included in the module archive.",
+      "origin": {
+        "kind": "vcs",
+        "vcs": "git",
+        "url": "https://github.com/go-openapi/swag",
+        "hash": "c8a41f7226ee09d8f74ac3e9375d071041836b7c",
+        "subdir": "jsonutils"
+      },
+      "files": [
+        {
+          "path": "LICENSE",
+          "kind": "license",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "source": "https://github.com/go-openapi/swag/blob/c8a41f7226ee09d8f74ac3e9375d071041836b7c/LICENSE",
+          "verified": true
+        }
+      ],
+      "excluded_discovered_legal_paths": [],
+      "target_mask": 170
+    },
+    {
+      "module": "github.com/go-openapi/swag/loading",
+      "version": "v0.27.1",
+      "module_sum": "h1:/DxUgDXKbBX4bcn7r9uEXfJyzN5XpiJmZplzQTjrRCY=",
+      "primary_license_identifiers": [
+        "Apache-2.0"
+      ],
+      "qualification": "Submodule license is the repository-root Apache-2.0 text included in the module archive.",
+      "origin": {
+        "kind": "vcs",
+        "vcs": "git",
+        "url": "https://github.com/go-openapi/swag",
+        "hash": "c8a41f7226ee09d8f74ac3e9375d071041836b7c",
+        "subdir": "loading"
+      },
+      "files": [
+        {
+          "path": "LICENSE",
+          "kind": "license",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "source": "https://github.com/go-openapi/swag/blob/c8a41f7226ee09d8f74ac3e9375d071041836b7c/LICENSE",
+          "verified": true
+        }
+      ],
+      "excluded_discovered_legal_paths": [],
+      "target_mask": 170
+    },
+    {
+      "module": "github.com/go-openapi/swag/mangling",
+      "version": "v0.27.1",
+      "module_sum": "h1:yC9D0HyUE8gbP+BfmGx9+AA89ikwZTMjESK3OnnoaqA=",
+      "primary_license_identifiers": [
+        "Apache-2.0"
+      ],
+      "qualification": "Submodule license is the repository-root Apache-2.0 text included in the module archive.",
+      "origin": {
+        "kind": "vcs",
+        "vcs": "git",
+        "url": "https://github.com/go-openapi/swag",
+        "hash": "c8a41f7226ee09d8f74ac3e9375d071041836b7c",
+        "subdir": "mangling"
+      },
+      "files": [
+        {
+          "path": "LICENSE",
+          "kind": "license",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "source": "https://github.com/go-openapi/swag/blob/c8a41f7226ee09d8f74ac3e9375d071041836b7c/LICENSE",
+          "verified": true
+        }
+      ],
+      "excluded_discovered_legal_paths": [],
+      "target_mask": 170
+    },
+    {
+      "module": "github.com/go-openapi/swag/netutils",
+      "version": "v0.27.1",
+      "module_sum": "h1:mICMFoS82F5TZ4Zy3cqmcQk+BFeCp3Uyq3Np7GI0/qU=",
+      "primary_license_identifiers": [
+        "Apache-2.0"
+      ],
+      "qualification": "Submodule license is the repository-root Apache-2.0 text included in the module archive.",
+      "origin": {
+        "kind": "vcs",
+        "vcs": "git",
+        "url": "https://github.com/go-openapi/swag",
+        "hash": "c8a41f7226ee09d8f74ac3e9375d071041836b7c",
+        "subdir": "netutils"
+      },
+      "files": [
+        {
+          "path": "LICENSE",
+          "kind": "license",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "source": "https://github.com/go-openapi/swag/blob/c8a41f7226ee09d8f74ac3e9375d071041836b7c/LICENSE",
+          "verified": true
+        }
+      ],
+      "excluded_discovered_legal_paths": [],
+      "target_mask": 170
+    },
+    {
+      "module": "github.com/go-openapi/swag/pools",
+      "version": "v0.27.1",
+      "module_sum": "h1:9LeadcMyb2GJCbXX5hVQDbZ2Lq9TL4dCs/nx1j5DO0E=",
+      "primary_license_identifiers": [
+        "Apache-2.0"
+      ],
+      "qualification": "Submodule license is the repository-root Apache-2.0 text included in the module archive.",
+      "origin": {
+        "kind": "vcs",
+        "vcs": "git",
+        "url": "https://github.com/go-openapi/swag",
+        "hash": "c8a41f7226ee09d8f74ac3e9375d071041836b7c",
+        "subdir": "pools"
+      },
+      "files": [
+        {
+          "path": "LICENSE",
+          "kind": "license",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "source": "https://github.com/go-openapi/swag/blob/c8a41f7226ee09d8f74ac3e9375d071041836b7c/LICENSE",
+          "verified": true
+        }
+      ],
+      "excluded_discovered_legal_paths": [],
+      "target_mask": 170
+    },
+    {
+      "module": "github.com/go-openapi/swag/stringutils",
+      "version": "v0.27.1",
+      "module_sum": "h1:ZXePZ0r2p1qSjo8tD3Un4vFj8+FqlCkczxDrJIhYUp8=",
+      "primary_license_identifiers": [
+        "Apache-2.0"
+      ],
+      "qualification": "Submodule license is the repository-root Apache-2.0 text included in the module archive.",
+      "origin": {
+        "kind": "vcs",
+        "vcs": "git",
+        "url": "https://github.com/go-openapi/swag",
+        "hash": "c8a41f7226ee09d8f74ac3e9375d071041836b7c",
+        "subdir": "stringutils"
+      },
+      "files": [
+        {
+          "path": "LICENSE",
+          "kind": "license",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "source": "https://github.com/go-openapi/swag/blob/c8a41f7226ee09d8f74ac3e9375d071041836b7c/LICENSE",
+          "verified": true
+        }
+      ],
+      "excluded_discovered_legal_paths": [],
+      "target_mask": 170
+    },
+    {
+      "module": "github.com/go-openapi/swag/typeutils",
+      "version": "v0.27.1",
+      "module_sum": "h1:KSTdFlfnse4r6dP9IrEnwMldjE+zs71UeEB3//PtVXc=",
+      "primary_license_identifiers": [
+        "Apache-2.0"
+      ],
+      "qualification": "Submodule license is the repository-root Apache-2.0 text included in the module archive.",
+      "origin": {
+        "kind": "vcs",
+        "vcs": "git",
+        "url": "https://github.com/go-openapi/swag",
+        "hash": "c8a41f7226ee09d8f74ac3e9375d071041836b7c",
+        "subdir": "typeutils"
+      },
+      "files": [
+        {
+          "path": "LICENSE",
+          "kind": "license",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "source": "https://github.com/go-openapi/swag/blob/c8a41f7226ee09d8f74ac3e9375d071041836b7c/LICENSE",
+          "verified": true
+        }
+      ],
+      "excluded_discovered_legal_paths": [],
+      "target_mask": 170
+    },
+    {
+      "module": "github.com/go-openapi/swag/yamlutils",
+      "version": "v0.27.1",
+      "module_sum": "h1:ftxv6xvXb1E3zohUc+okZ9nSqNb9StQX/FXnKZ98sQA=",
+      "primary_license_identifiers": [
+        "Apache-2.0"
+      ],
+      "qualification": "Submodule license is the repository-root Apache-2.0 text included in the module archive.",
+      "origin": {
+        "kind": "vcs",
+        "vcs": "git",
+        "url": "https://github.com/go-openapi/swag",
+        "hash": "c8a41f7226ee09d8f74ac3e9375d071041836b7c",
+        "subdir": "yamlutils"
+      },
+      "files": [
+        {
+          "path": "LICENSE",
+          "kind": "license",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "source": "https://github.com/go-openapi/swag/blob/c8a41f7226ee09d8f74ac3e9375d071041836b7c/LICENSE",
           "verified": true
         }
       ],
@@ -755,8 +1092,8 @@
     },
     {
       "module": "github.com/go-sql-driver/mysql",
-      "version": "v1.10.0",
-      "module_sum": "h1:Q+1LV8DkHJvSYAdR83XzuhDaTykuDx0l6fkXxoWCWfw=",
+      "version": "v1.10.1",
+      "module_sum": "h1:arlSnNLq6a5yxGxV7qg9lF4j0C+KwD6NbQyKr9QL6ME=",
       "primary_license_identifiers": [
         "MPL-2.0"
       ],
@@ -765,30 +1102,30 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/go-sql-driver/mysql",
-        "hash": "a065b60ab6d0c8e15468e7709c7f76acf4431647"
+        "hash": "7ca26e801d130be8be84c1e265be71784f6f70c1"
       },
       "files": [
         {
           "path": "AUTHORS",
           "kind": "authors",
-          "sha256": "d926803a640d9c701aab3b54e70828953ce45e3e25b5078b88dfeae93b2f110a",
-          "source": "https://github.com/go-sql-driver/mysql/blob/a065b60ab6d0c8e15468e7709c7f76acf4431647/AUTHORS",
+          "sha256": "ccb046784741000e0704273e837d4a3c310cb52d357adc09d47f93c06e46d6ed",
+          "source": "https://github.com/go-sql-driver/mysql/blob/7ca26e801d130be8be84c1e265be71784f6f70c1/AUTHORS",
           "verified": true
         },
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85",
-          "source": "https://github.com/go-sql-driver/mysql/blob/a065b60ab6d0c8e15468e7709c7f76acf4431647/LICENSE",
+          "source": "https://github.com/go-sql-driver/mysql/blob/7ca26e801d130be8be84c1e265be71784f6f70c1/LICENSE",
           "verified": true
         }
       ],
       "excluded_discovered_legal_paths": [],
       "covered_source_archive": {
-        "url": "https://proxy.golang.org/github.com/go-sql-driver/mysql/@v/v1.10.0.zip",
-        "sha256": "dc93f5770556406e82bf750a980d2316f882a19d883a3689eadb820708c2b651",
-        "module_sum": "h1:Q+1LV8DkHJvSYAdR83XzuhDaTykuDx0l6fkXxoWCWfw=",
-        "inner_root": "github.com/go-sql-driver/mysql@v1.10.0/",
+        "url": "https://proxy.golang.org/github.com/go-sql-driver/mysql/@v/v1.10.1.zip",
+        "sha256": "540ca42579d19f7e548cda1a47f39cd26e1231577def50078ff9ab4c65b6dd7e",
+        "module_sum": "h1:arlSnNLq6a5yxGxV7qg9lF4j0C+KwD6NbQyKr9QL6ME=",
+        "inner_root": "github.com/go-sql-driver/mysql@v1.10.1/",
         "verified": true
       },
       "target_mask": 85
@@ -820,35 +1157,9 @@
       "target_mask": 4010
     },
     {
-      "module": "github.com/google/btree",
-      "version": "v1.1.3",
-      "module_sum": "h1:CVpQJjYgC4VbzxeGVHfvZrv1ctoYCAI8vbl07Fcxlyg=",
-      "primary_license_identifiers": [
-        "Apache-2.0"
-      ],
-      "qualification": "Root license for the selected package scopes.",
-      "origin": {
-        "kind": "vcs",
-        "vcs": "git",
-        "url": "https://github.com/google/btree",
-        "hash": "aeba20f7a1e1315badec4eca4fdc9f754f5f880a"
-      },
-      "files": [
-        {
-          "path": "LICENSE",
-          "kind": "license",
-          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
-          "source": "https://github.com/google/btree/blob/aeba20f7a1e1315badec4eca4fdc9f754f5f880a/LICENSE",
-          "verified": true
-        }
-      ],
-      "excluded_discovered_legal_paths": [],
-      "target_mask": 170
-    },
-    {
       "module": "github.com/google/gnostic-models",
-      "version": "v0.7.0",
-      "module_sum": "h1:qwTtogB15McXDaNqTZdzPJRHvaVJlAl+HVQnLmJEJxo=",
+      "version": "v0.7.1",
+      "module_sum": "h1:SisTfuFKJSKM5CPZkffwi6coztzzeYUhc3v4yxLWH8c=",
       "primary_license_identifiers": [
         "Apache-2.0"
       ],
@@ -857,14 +1168,14 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/google/gnostic-models",
-        "hash": "82b4ba06c153dcd30e1dbcf93601b3bee5cb3792"
+        "hash": "289d7b4936d1c53094daaadca34f8fcf7a916454"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "8c6db340475136df3c1201d458fa5755698eace76e510471ecc9d857d6083dac",
-          "source": "https://github.com/google/gnostic-models/blob/82b4ba06c153dcd30e1dbcf93601b3bee5cb3792/LICENSE",
+          "source": "https://github.com/google/gnostic-models/blob/289d7b4936d1c53094daaadca34f8fcf7a916454/LICENSE",
           "verified": true
         }
       ],
@@ -898,34 +1209,6 @@
       "target_mask": 255
     },
     {
-      "module": "github.com/josharian/intern",
-      "version": "v1.0.0",
-      "module_sum": "h1:vlS4z54oSdjm0bgjRigI+G1HpF+tI+9rE5LLzOg8HmY=",
-      "primary_license_identifiers": [
-        "MIT"
-      ],
-      "qualification": "Root license for the selected package scopes.",
-      "origin": {
-        "kind": "module_archive",
-        "url": "https://proxy.golang.org/github.com/josharian/intern/@v/v1.0.0.zip",
-        "sha256": "5679bfd11c14adccdb45bd1a0f9cf4b445b95caeed6fb507ba96ecced11c248d",
-        "vcs_hash": null,
-        "qualification": "The canonical Go module metadata lacks VCS Origin; verified archive identity is recorded instead of inventing a commit."
-      },
-      "files": [
-        {
-          "path": "license.md",
-          "kind": "license",
-          "sha256": "ad754e4f7d16f789dd0694828254cb4011928025b0d500339a5c4eded5a0c346",
-          "source": "https://proxy.golang.org/github.com/josharian/intern/@v/v1.0.0.zip",
-          "archive_inner_path": "github.com/josharian/intern@v1.0.0/license.md",
-          "verified": true
-        }
-      ],
-      "excluded_discovered_legal_paths": [],
-      "target_mask": 170
-    },
-    {
       "module": "github.com/json-iterator/go",
       "version": "v1.1.12",
       "module_sum": "h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnrnM=",
@@ -955,8 +1238,8 @@
     },
     {
       "module": "github.com/klauspost/compress",
-      "version": "v1.19.1",
-      "module_sum": "h1:VsB4HPswih7mmZ8WleSFQ75c/Ui1M4trX5oAsJnhSlk=",
+      "version": "v1.20.1",
+      "module_sum": "h1:T7kKElXUMXrUJ2E9QhQhxFtcK5rPyLdsGZvdbLMPdiQ=",
       "primary_license_identifiers": [
         "BSD-3-Clause",
         "MIT",
@@ -967,105 +1250,112 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/klauspost/compress",
-        "hash": "2602f4afea09fe72f2b58d4ed04d43a6047a0131"
+        "hash": "5d880f230c38a0fc806b9ca1613103a44feff0ac"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "0d9e582ee4bff57bf1189c9e514e6da7ce277f9cd3bc2d488b22fbb39a6d87cf",
-          "source": "https://github.com/klauspost/compress/blob/2602f4afea09fe72f2b58d4ed04d43a6047a0131/LICENSE",
+          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/LICENSE",
           "verified": true
         },
         {
           "path": "huff0/decompress_amd64.s",
           "kind": "assembly_review",
-          "sha256": "1be4b028f6a98b957cf7557629bbc3aaead44fccf0c60f796fdee608b8d7ee9e",
-          "source": "https://github.com/klauspost/compress/blob/2602f4afea09fe72f2b58d4ed04d43a6047a0131/huff0/decompress_amd64.s",
+          "sha256": "604062261d8e148ceb70c1a234d576d3c3454b35d4a27c868146554343fef3e1",
+          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/huff0/decompress_amd64.s",
+          "verified": true
+        },
+        {
+          "path": "huff0/decompress_arm64.s",
+          "kind": "assembly_review",
+          "sha256": "0875a130e3c54cc8df095115ad352afe20bbe81aed0e0b7e1f8f566361bc4838",
+          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/huff0/decompress_arm64.s",
           "verified": true
         },
         {
           "path": "internal/cpuinfo/cpuinfo_amd64.s",
           "kind": "assembly_review",
           "sha256": "9ea28b6d2e9e2210f12ef7d44af4716a3dc148c4e214f23f001271fd100547b9",
-          "source": "https://github.com/klauspost/compress/blob/2602f4afea09fe72f2b58d4ed04d43a6047a0131/internal/cpuinfo/cpuinfo_amd64.s",
+          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/internal/cpuinfo/cpuinfo_amd64.s",
           "verified": true
         },
         {
           "path": "internal/snapref/LICENSE",
           "kind": "license",
           "sha256": "f69f157b0be75da373605dbc8bbf142e8924ee82d8f44f11bcaf351335bf98cf",
-          "source": "https://github.com/klauspost/compress/blob/2602f4afea09fe72f2b58d4ed04d43a6047a0131/internal/snapref/LICENSE",
+          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/internal/snapref/LICENSE",
           "verified": true
         },
         {
           "path": "s2/LICENSE",
           "kind": "copied_code_license",
           "sha256": "08683b14bda8ae3538abf19e1879e853a39e3b8276a8d673363b529d15a61c1a",
-          "source": "https://github.com/klauspost/compress/blob/2602f4afea09fe72f2b58d4ed04d43a6047a0131/s2/LICENSE",
+          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/s2/LICENSE",
           "verified": true
         },
         {
           "path": "snappy/AUTHORS",
           "kind": "related_authorship",
           "sha256": "f6f3821e64460346c1ed1a15fb32b94ad241617276b60726c1350ca315309463",
-          "source": "https://github.com/klauspost/compress/blob/2602f4afea09fe72f2b58d4ed04d43a6047a0131/snappy/AUTHORS",
+          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/snappy/AUTHORS",
           "verified": true
         },
         {
           "path": "zstd/fse_decoder_amd64.s",
           "kind": "assembly_review",
           "sha256": "d25ab2895d0e28f4fa5dc1312e496b050b401ec1bb270ec450fc8ca217806dea",
-          "source": "https://github.com/klauspost/compress/blob/2602f4afea09fe72f2b58d4ed04d43a6047a0131/zstd/fse_decoder_amd64.s",
+          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/zstd/fse_decoder_amd64.s",
           "verified": true
         },
         {
           "path": "zstd/fse_decoder_arm64.s",
           "kind": "assembly_review",
-          "sha256": "b24881b593aa817f236a1ddee57874a6e61141b57a251675a7ff71d72d3c64b8",
-          "source": "https://github.com/klauspost/compress/blob/2602f4afea09fe72f2b58d4ed04d43a6047a0131/zstd/fse_decoder_arm64.s",
+          "sha256": "403d041bd6ff6407e75cabb276afcc5c5fec64373b7bf39a483940a9553ba4ab",
+          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/zstd/fse_decoder_arm64.s",
           "verified": true
         },
         {
           "path": "zstd/internal/xxhash/LICENSE.txt",
           "kind": "license",
           "sha256": "f566a9f97bacdaf00d9f21dd991e81dc11201c4e016c86b470799429a1c9a79c",
-          "source": "https://github.com/klauspost/compress/blob/2602f4afea09fe72f2b58d4ed04d43a6047a0131/zstd/internal/xxhash/LICENSE.txt",
+          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/zstd/internal/xxhash/LICENSE.txt",
           "verified": true
         },
         {
           "path": "zstd/internal/xxhash/xxhash_amd64.s",
           "kind": "assembly_review",
-          "sha256": "3796a9c399d49392c3ad83af1452099d24c1e6fb993941d8bd1735879f5edbc8",
-          "source": "https://github.com/klauspost/compress/blob/2602f4afea09fe72f2b58d4ed04d43a6047a0131/zstd/internal/xxhash/xxhash_amd64.s",
+          "sha256": "a6dfc44ff0d1e7929cfbb1f4aaec208fd868c568a378902dfe519fbe3fd75b4e",
+          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/zstd/internal/xxhash/xxhash_amd64.s",
           "verified": true
         },
         {
           "path": "zstd/internal/xxhash/xxhash_arm64.s",
           "kind": "assembly_review",
-          "sha256": "0e2b30d48c0ab8035e201d06c5b74813e39da76c7dc7e3239f4dd4acba7fbb64",
-          "source": "https://github.com/klauspost/compress/blob/2602f4afea09fe72f2b58d4ed04d43a6047a0131/zstd/internal/xxhash/xxhash_arm64.s",
+          "sha256": "6263de49d76ade89a73b4c5ff5131ef598132e7f6cb7101ae2d59601133fee39",
+          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/zstd/internal/xxhash/xxhash_arm64.s",
           "verified": true
         },
         {
           "path": "zstd/matchlen_amd64.s",
           "kind": "assembly_provenance",
           "sha256": "f6983c33f36ef09e255c1d029158fa31adfaf6cbc56d264d3ff6431097cfbc0f",
-          "source": "https://github.com/klauspost/compress/blob/2602f4afea09fe72f2b58d4ed04d43a6047a0131/zstd/matchlen_amd64.s",
+          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/zstd/matchlen_amd64.s",
           "verified": true
         },
         {
           "path": "zstd/seqdec_amd64.s",
           "kind": "assembly_review",
-          "sha256": "6eb5daf9c91f2717e3a1920e97bb82546f47d7392958885133f0e4e877e70b23",
-          "source": "https://github.com/klauspost/compress/blob/2602f4afea09fe72f2b58d4ed04d43a6047a0131/zstd/seqdec_amd64.s",
+          "sha256": "50e6a1c6a34b25058675d4608f36f37504acd2ba9973267b799311f2e178a700",
+          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/zstd/seqdec_amd64.s",
           "verified": true
         },
         {
           "path": "zstd/seqdec_arm64.s",
           "kind": "assembly_review",
-          "sha256": "a1fda36bec7c6dae411006cce54a2b5910f90de1be4c9cba91c4c6a778eaf0ee",
-          "source": "https://github.com/klauspost/compress/blob/2602f4afea09fe72f2b58d4ed04d43a6047a0131/zstd/seqdec_arm64.s",
+          "sha256": "97a0a29c7ce5d5bd5946212de91173eb5ad2c0da60b44231e5d2815bb56f094f",
+          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/zstd/seqdec_arm64.s",
           "verified": true
         }
       ],
@@ -1078,34 +1368,6 @@
         "snappy/xerial/LICENSE"
       ],
       "target_mask": 85
-    },
-    {
-      "module": "github.com/mailru/easyjson",
-      "version": "v0.7.7",
-      "module_sum": "h1:UGYAvKxe3sBsEDzO8ZeWOSlIQfWFlxbzLZe7hwFURr0=",
-      "primary_license_identifiers": [
-        "MIT"
-      ],
-      "qualification": "Root license for the selected package scopes.",
-      "origin": {
-        "kind": "module_archive",
-        "url": "https://proxy.golang.org/github.com/mailru/easyjson/@v/v0.7.7.zip",
-        "sha256": "139387981a220d499c9f47cece42a2002f105e4ee3ab9c74188a7fb8a9be711e",
-        "vcs_hash": null,
-        "qualification": "The canonical Go module metadata lacks VCS Origin; verified archive identity is recorded instead of inventing a commit."
-      },
-      "files": [
-        {
-          "path": "LICENSE",
-          "kind": "license",
-          "sha256": "87baa92c3100cf37441761262d622db99492ee386a063460d4676143db49af57",
-          "source": "https://proxy.golang.org/github.com/mailru/easyjson/@v/v0.7.7.zip",
-          "archive_inner_path": "github.com/mailru/easyjson@v0.7.7/LICENSE",
-          "verified": true
-        }
-      ],
-      "excluded_discovered_legal_paths": [],
-      "target_mask": 170
     },
     {
       "module": "github.com/modern-go/concurrent",
@@ -1226,8 +1488,8 @@
     },
     {
       "module": "github.com/nats-io/nats.go",
-      "version": "v1.53.1",
-      "module_sum": "h1:Otsq3uLc/kLdjmkNHkXH0jBqwUquwdKFoe3fq6/3/Xo=",
+      "version": "v1.55.0",
+      "module_sum": "h1:Ng8QKHdvdHIWoaiq0+d/aH1BWkxvcJxWJ0Y/9BPKx3M=",
       "primary_license_identifiers": [
         "Apache-2.0"
       ],
@@ -1236,14 +1498,14 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/nats-io/nats.go",
-        "hash": "db1375fcffae2eb0b4ced1b7bad4d47c4447e4ac"
+        "hash": "6068694d76fcf1f12bdf1e7383876aa5a3928421"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
-          "source": "https://github.com/nats-io/nats.go/blob/db1375fcffae2eb0b4ced1b7bad4d47c4447e4ac/LICENSE",
+          "source": "https://github.com/nats-io/nats.go/blob/6068694d76fcf1f12bdf1e7383876aa5a3928421/LICENSE",
           "verified": true
         }
       ],
@@ -1252,8 +1514,8 @@
     },
     {
       "module": "github.com/nats-io/nkeys",
-      "version": "v0.4.15",
-      "module_sum": "h1:JACV5jRVO9V856KOapQ7x+EY8Jo3qw1vJt/9Jpwzkk4=",
+      "version": "v0.4.16",
+      "module_sum": "h1:rd5oAuLOb8mnAycB0xleuEBNS1pVVnN0fv/FF34Eypg=",
       "primary_license_identifiers": [
         "Apache-2.0"
       ],
@@ -1262,14 +1524,14 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/nats-io/nkeys",
-        "hash": "0f430772b63004155287d5f3c061d41995f74b15"
+        "hash": "c1eebf38bd8b1b1021b45b5f8f403052ac042dc5"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
-          "source": "https://github.com/nats-io/nkeys/blob/0f430772b63004155287d5f3c061d41995f74b15/LICENSE",
+          "source": "https://github.com/nats-io/nkeys/blob/c1eebf38bd8b1b1021b45b5f8f403052ac042dc5/LICENSE",
           "verified": true
         }
       ],
@@ -1398,16 +1660,16 @@
     },
     {
       "module": "github.com/pmezard/go-difflib",
-      "version": "v1.0.0",
-      "module_sum": "h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=",
+      "version": "v1.0.1-0.20181226105442-5d4384ee4fb2",
+      "module_sum": "h1:Jamvg5psRIccs7FGNTlIRMkT8wgtp5eCXdBlqhYGL6U=",
       "primary_license_identifiers": [
         "BSD-3-Clause"
       ],
       "qualification": "Root license for the selected package scopes.",
       "origin": {
         "kind": "module_archive",
-        "url": "https://proxy.golang.org/github.com/pmezard/go-difflib/@v/v1.0.0.zip",
-        "sha256": "de04cecc1a4b8d53e4357051026794bcbc54f2e6a260cfac508ce69d5d6457a0",
+        "url": "https://proxy.golang.org/github.com/pmezard/go-difflib/@v/v1.0.1-0.20181226105442-5d4384ee4fb2.zip",
+        "sha256": "24ff45e356f638a53bd0c89fff961fbeaecfdb0dc5e482ceed0a2230e0e5f3b7",
         "vcs_hash": null,
         "qualification": "The canonical Go module metadata lacks VCS Origin; verified archive identity is recorded instead of inventing a commit."
       },
@@ -1416,8 +1678,8 @@
           "path": "LICENSE",
           "kind": "license",
           "sha256": "2eb550be6801c1ea434feba53bf6d12e7c71c90253e0a9de4a4f46cf88b56477",
-          "source": "https://proxy.golang.org/github.com/pmezard/go-difflib/@v/v1.0.0.zip",
-          "archive_inner_path": "github.com/pmezard/go-difflib@v1.0.0/LICENSE",
+          "source": "https://proxy.golang.org/github.com/pmezard/go-difflib/@v/v1.0.1-0.20181226105442-5d4384ee4fb2.zip",
+          "archive_inner_path": "github.com/pmezard/go-difflib@v1.0.1-0.20181226105442-5d4384ee4fb2/LICENSE",
           "verified": true
         }
       ],
@@ -1426,8 +1688,8 @@
     },
     {
       "module": "github.com/prometheus/client_golang",
-      "version": "v1.23.2",
-      "module_sum": "h1:Je96obch5RDVy3FDMndoUsjAhG5Edi49h0RJWRi/o0o=",
+      "version": "v1.25.0",
+      "module_sum": "h1:cDtW1TcFsMi1RJc8khwCKB4VhzwV04aKqbYtNOXuiK0=",
       "primary_license_identifiers": [
         "Apache-2.0",
         "BSD-3-Clause",
@@ -1438,35 +1700,35 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/prometheus/client_golang",
-        "hash": "8179a560819f2c64ef6ade70e6ae4c73aecaca3c"
+        "hash": "0d88875bc7494ed8414e067756ff3399e3068c64"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
-          "source": "https://github.com/prometheus/client_golang/blob/8179a560819f2c64ef6ade70e6ae4c73aecaca3c/LICENSE",
+          "source": "https://github.com/prometheus/client_golang/blob/0d88875bc7494ed8414e067756ff3399e3068c64/LICENSE",
           "verified": true
         },
         {
           "path": "NOTICE",
           "kind": "notice",
           "sha256": "8548bfb2bc1913396df38c548a6ec60b8dbcac3b0800485a40569c8bdd184471",
-          "source": "https://github.com/prometheus/client_golang/blob/8179a560819f2c64ef6ade70e6ae4c73aecaca3c/NOTICE",
+          "source": "https://github.com/prometheus/client_golang/blob/0d88875bc7494ed8414e067756ff3399e3068c64/NOTICE",
           "verified": true
         },
         {
           "path": "internal/github.com/golang/gddo/LICENSE",
           "kind": "license",
           "sha256": "dfffb9ec737eaba985243e95a549bd8c3a4d462032cfe603e2a6704c346427b6",
-          "source": "https://github.com/prometheus/client_golang/blob/8179a560819f2c64ef6ade70e6ae4c73aecaca3c/internal/github.com/golang/gddo/LICENSE",
+          "source": "https://github.com/prometheus/client_golang/blob/0d88875bc7494ed8414e067756ff3399e3068c64/internal/github.com/golang/gddo/LICENSE",
           "verified": true
         },
         {
           "path": "prometheus/internal/almost_equal.go",
           "kind": "source_notice",
           "sha256": "e22e24dab3b51d50a9f036ad4ee2154bba4e4a5cee61553535423c0d9c340f2a",
-          "source": "https://github.com/prometheus/client_golang/blob/8179a560819f2c64ef6ade70e6ae4c73aecaca3c/prometheus/internal/almost_equal.go",
+          "source": "https://github.com/prometheus/client_golang/blob/0d88875bc7494ed8414e067756ff3399e3068c64/prometheus/internal/almost_equal.go",
           "verified": true
         }
       ],
@@ -1475,8 +1737,8 @@
     },
     {
       "module": "github.com/prometheus/client_model",
-      "version": "v0.6.2",
-      "module_sum": "h1:oBsgwpGs7iVziMvrGhE53c/GrLUsZdHnqNwqPLxwZyk=",
+      "version": "v0.6.3",
+      "module_sum": "h1:O0jaTVAYNxTHYInEPFJt5I3+sN8zqBtVMPTB1qyxiEo=",
       "primary_license_identifiers": [
         "Apache-2.0"
       ],
@@ -1485,21 +1747,21 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/prometheus/client_model",
-        "hash": "eb136e513d419e0c31ad750922f0a6f7675c2dee"
+        "hash": "a834711dbe83d46508daa32d3389f109cc85f53b"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
-          "source": "https://github.com/prometheus/client_model/blob/eb136e513d419e0c31ad750922f0a6f7675c2dee/LICENSE",
+          "source": "https://github.com/prometheus/client_model/blob/a834711dbe83d46508daa32d3389f109cc85f53b/LICENSE",
           "verified": true
         },
         {
           "path": "NOTICE",
           "kind": "notice",
           "sha256": "6c79faa15168885fb88a316ae0df18f486deafddefdc16826cdc56dfbd421e24",
-          "source": "https://github.com/prometheus/client_model/blob/eb136e513d419e0c31ad750922f0a6f7675c2dee/NOTICE",
+          "source": "https://github.com/prometheus/client_model/blob/a834711dbe83d46508daa32d3389f109cc85f53b/NOTICE",
           "verified": true
         }
       ],
@@ -1508,8 +1770,8 @@
     },
     {
       "module": "github.com/prometheus/common",
-      "version": "v0.66.1",
-      "module_sum": "h1:h5E0h5/Y8niHc5DlaLlWLArTQI7tMrsfQjHV+d9ZoGs=",
+      "version": "v0.72.0",
+      "module_sum": "h1:tAYsE+sPJxIncDAobm4H5aQjmox9ZxEIIqPbiffa8G4=",
       "primary_license_identifiers": [
         "Apache-2.0"
       ],
@@ -1518,21 +1780,21 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/prometheus/common",
-        "hash": "8975dde6db7208309e9872891f24c7301aa77dfb"
+        "hash": "ca4f6e15e233b3f333973ff2530041301f91a859"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
-          "source": "https://github.com/prometheus/common/blob/8975dde6db7208309e9872891f24c7301aa77dfb/LICENSE",
+          "source": "https://github.com/prometheus/common/blob/ca4f6e15e233b3f333973ff2530041301f91a859/LICENSE",
           "verified": true
         },
         {
           "path": "NOTICE",
           "kind": "notice",
           "sha256": "600244c8052c8c1d307043fafacbc83b429c171dd8e08f5a537c0a54014585ee",
-          "source": "https://github.com/prometheus/common/blob/8975dde6db7208309e9872891f24c7301aa77dfb/NOTICE",
+          "source": "https://github.com/prometheus/common/blob/ca4f6e15e233b3f333973ff2530041301f91a859/NOTICE",
           "verified": true
         }
       ],
@@ -1541,8 +1803,8 @@
     },
     {
       "module": "github.com/prometheus/procfs",
-      "version": "v0.16.1",
-      "module_sum": "h1:hZ15bTNuirocR6u0JZ6BAHHmwS1p8B4P6MRqxtzMyRg=",
+      "version": "v0.22.0",
+      "module_sum": "h1:6q9+/JL9IKAPbCmBrv9n5O5Ty3NKnciV5X7YGw0oics=",
       "primary_license_identifiers": [
         "Apache-2.0"
       ],
@@ -1551,59 +1813,26 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/prometheus/procfs",
-        "hash": "cff69b9d9aa77a0793276da74310e38422864e28"
+        "hash": "e81f9e1a1a27c41b2c23dc1d58b56a85ebb7da4d"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
-          "source": "https://github.com/prometheus/procfs/blob/cff69b9d9aa77a0793276da74310e38422864e28/LICENSE",
+          "source": "https://github.com/prometheus/procfs/blob/e81f9e1a1a27c41b2c23dc1d58b56a85ebb7da4d/LICENSE",
           "verified": true
         },
         {
           "path": "NOTICE",
           "kind": "notice",
           "sha256": "497fcdb9fae55924c12f55f05cbe83a096662e5c591d79b74e4a8f23bab5ffee",
-          "source": "https://github.com/prometheus/procfs/blob/cff69b9d9aa77a0793276da74310e38422864e28/NOTICE",
+          "source": "https://github.com/prometheus/procfs/blob/e81f9e1a1a27c41b2c23dc1d58b56a85ebb7da4d/NOTICE",
           "verified": true
         }
       ],
       "excluded_discovered_legal_paths": [],
-      "target_mask": 80
-    },
-    {
-      "module": "github.com/prometheus/procfs",
-      "version": "v0.17.0",
-      "module_sum": "h1:FuLQ+05u4ZI+SS/w9+BWEM2TXiHKsUQ9TADiRH7DuK0=",
-      "primary_license_identifiers": [
-        "Apache-2.0"
-      ],
-      "qualification": "Root license for the selected package scopes.",
-      "origin": {
-        "kind": "vcs",
-        "vcs": "git",
-        "url": "https://github.com/prometheus/procfs",
-        "hash": "61fe41207276bc95c4c391762e9ef137385e8a5d"
-      },
-      "files": [
-        {
-          "path": "LICENSE",
-          "kind": "license",
-          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
-          "source": "https://github.com/prometheus/procfs/blob/61fe41207276bc95c4c391762e9ef137385e8a5d/LICENSE",
-          "verified": true
-        },
-        {
-          "path": "NOTICE",
-          "kind": "notice",
-          "sha256": "497fcdb9fae55924c12f55f05cbe83a096662e5c591d79b74e4a8f23bab5ffee",
-          "source": "https://github.com/prometheus/procfs/blob/61fe41207276bc95c4c391762e9ef137385e8a5d/NOTICE",
-          "verified": true
-        }
-      ],
-      "excluded_discovered_legal_paths": [],
-      "target_mask": 160
+      "target_mask": 240
     },
     {
       "module": "github.com/sagikazarmark/locafero",
@@ -1666,8 +1895,8 @@
     },
     {
       "module": "github.com/shopspring/decimal",
-      "version": "v1.4.0",
-      "module_sum": "h1:bxl37RwXBklmTi0C79JfXCEBD1cqqHt0bbgBAGFp81k=",
+      "version": "v1.5.0",
+      "module_sum": "h1:HxSWk31RmJv0EyY4oLiGQB9u7WPludUwPBdvQZnYFPc=",
       "primary_license_identifiers": [
         "MIT",
         "BSD-3-Clause"
@@ -1677,7 +1906,7 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/shopspring/decimal",
-        "hash": "a2e78c6cff3451d68a784428ce443e5a9021a89f"
+        "hash": "f658fbf1eb94abc869558633a0b9b239300899f4"
       },
       "files": [
         {
@@ -1693,21 +1922,21 @@
           "path": "LICENSE",
           "kind": "license",
           "sha256": "b92ba0f6ee02f2309628bfdadb123668a17c016e475ba477b857d33470d9d625",
-          "source": "https://github.com/shopspring/decimal/blob/a2e78c6cff3451d68a784428ce443e5a9021a89f/LICENSE",
+          "source": "https://github.com/shopspring/decimal/blob/f658fbf1eb94abc869558633a0b9b239300899f4/LICENSE",
           "verified": true
         },
         {
           "path": "decimal-go.go",
           "kind": "source_notice",
           "sha256": "e3da06b81105dd26de72443f5980242cd821458d65d5558b44891d1a108cd97f",
-          "source": "https://github.com/shopspring/decimal/blob/a2e78c6cff3451d68a784428ce443e5a9021a89f/decimal-go.go",
+          "source": "https://github.com/shopspring/decimal/blob/f658fbf1eb94abc869558633a0b9b239300899f4/decimal-go.go",
           "verified": true
         },
         {
           "path": "rounding.go",
           "kind": "source_notice",
           "sha256": "1db1de0fd77a66d2ed5282ef4c95fcb42967c1426dd7cc53ce0c9159978b6d1a",
-          "source": "https://github.com/shopspring/decimal/blob/a2e78c6cff3451d68a784428ce443e5a9021a89f/rounding.go",
+          "source": "https://github.com/shopspring/decimal/blob/f658fbf1eb94abc869558633a0b9b239300899f4/rounding.go",
           "verified": true
         }
       ],
@@ -1959,8 +2188,8 @@
     },
     {
       "module": "go.opentelemetry.io/otel",
-      "version": "v1.44.0",
-      "module_sum": "h1:JjwHmHpA4iZ3wBxluu2fbbE7j4kqlE8jXyAyPXH7HqU=",
+      "version": "v1.47.0",
+      "module_sum": "h1:j7ALJ/zgkS7Z6aeJW09p8VC9804bC+PpeTfCD4XPnOM=",
       "primary_license_identifiers": [
         "Apache-2.0",
         "BSD-3-Clause"
@@ -1970,14 +2199,14 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/open-telemetry/opentelemetry-go",
-        "hash": "b62d92831b2dd142f5a0cc89c828270274196877"
+        "hash": "66cfc9520e205b7d450183532772401bc2b6674c"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "1ae07514be1d7bb33f0698f8d91fb51b8b9fe1463157ec1c72081a49b9bc6f40",
-          "source": "https://github.com/open-telemetry/opentelemetry-go/blob/b62d92831b2dd142f5a0cc89c828270274196877/LICENSE",
+          "source": "https://github.com/open-telemetry/opentelemetry-go/blob/66cfc9520e205b7d450183532772401bc2b6674c/LICENSE",
           "verified": true
         }
       ],
@@ -1986,8 +2215,8 @@
     },
     {
       "module": "go.opentelemetry.io/otel/trace",
-      "version": "v1.44.0",
-      "module_sum": "h1:jxF5CsGYCe74MCRx2X4g7WsY/VBKRqqpNvXlX/6gtIk=",
+      "version": "v1.47.0",
+      "module_sum": "h1:JOjX/Oci8K94QHddo+bbfya/Ai/nf6/dt9ZfrFNWSrM=",
       "primary_license_identifiers": [
         "Apache-2.0",
         "BSD-3-Clause"
@@ -1997,7 +2226,7 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/open-telemetry/opentelemetry-go",
-        "hash": "b62d92831b2dd142f5a0cc89c828270274196877",
+        "hash": "66cfc9520e205b7d450183532772401bc2b6674c",
         "subdir": "trace"
       },
       "files": [
@@ -2005,7 +2234,7 @@
           "path": "LICENSE",
           "kind": "license",
           "sha256": "1ae07514be1d7bb33f0698f8d91fb51b8b9fe1463157ec1c72081a49b9bc6f40",
-          "source": "https://github.com/open-telemetry/opentelemetry-go/blob/b62d92831b2dd142f5a0cc89c828270274196877/LICENSE",
+          "source": "https://github.com/open-telemetry/opentelemetry-go/blob/66cfc9520e205b7d450183532772401bc2b6674c/LICENSE",
           "verified": true
         }
       ],
@@ -2040,32 +2269,6 @@
     },
     {
       "module": "go.uber.org/zap",
-      "version": "v1.27.0",
-      "module_sum": "h1:aJMhYGrd5QSmlpLMr2MftRKl7t8J8PTZPA732ud/XR8=",
-      "primary_license_identifiers": [
-        "MIT"
-      ],
-      "qualification": "Root license for the selected package scopes.",
-      "origin": {
-        "kind": "vcs",
-        "vcs": "git",
-        "url": "https://github.com/uber-go/zap",
-        "hash": "fcf8ee58669e358bbd6460bef5c2ee7a53c0803a"
-      },
-      "files": [
-        {
-          "path": "LICENSE",
-          "kind": "license",
-          "sha256": "7de716e70addb64f9305298ef32a9dd68e40d5b3095a5d868ba4461404dbfbcf",
-          "source": "https://github.com/uber-go/zap/blob/fcf8ee58669e358bbd6460bef5c2ee7a53c0803a/LICENSE",
-          "verified": true
-        }
-      ],
-      "excluded_discovered_legal_paths": [],
-      "target_mask": 170
-    },
-    {
-      "module": "go.uber.org/zap",
       "version": "v1.28.0",
       "module_sum": "h1:IZzaP1Fv73/T/pBMLk4VutPl36uNC+OSUh3JLG3FIjo=",
       "primary_license_identifiers": [
@@ -2088,12 +2291,12 @@
         }
       ],
       "excluded_discovered_legal_paths": [],
-      "target_mask": 85
+      "target_mask": 255
     },
     {
       "module": "go.yaml.in/yaml/v2",
-      "version": "v2.4.2",
-      "module_sum": "h1:DzmwEr2rDGHl7lsFgAHxmNz/1NlQ7xLIrlN2h5d1eGI=",
+      "version": "v2.4.4",
+      "module_sum": "h1:tuyd0P+2Ont/d6e2rl3be67goVK4R6deVxCUX5vyPaQ=",
       "primary_license_identifiers": [
         "Apache-2.0",
         "MIT"
@@ -2103,69 +2306,28 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/yaml/go-yaml",
-        "hash": "246a95c22c57f15ef6d3305a1f1b8a0b05e4d560"
+        "hash": "43b627a9da72517e91dbcf07cd10dfd6618423d8"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1",
-          "source": "https://github.com/yaml/go-yaml/blob/246a95c22c57f15ef6d3305a1f1b8a0b05e4d560/LICENSE",
+          "source": "https://github.com/yaml/go-yaml/blob/43b627a9da72517e91dbcf07cd10dfd6618423d8/LICENSE",
           "verified": true
         },
         {
           "path": "LICENSE.libyaml",
           "kind": "license",
           "sha256": "a94710b55e03b5285f77d048c5ba61bb9d6ee04a06c0eb90e68821e11b0c707a",
-          "source": "https://github.com/yaml/go-yaml/blob/246a95c22c57f15ef6d3305a1f1b8a0b05e4d560/LICENSE.libyaml",
+          "source": "https://github.com/yaml/go-yaml/blob/43b627a9da72517e91dbcf07cd10dfd6618423d8/LICENSE.libyaml",
           "verified": true
         },
         {
           "path": "NOTICE",
           "kind": "notice",
           "sha256": "f6c2dd3a67b576eafb89b80200b8b1627230bf3821a0c14cb99a22ac19107d00",
-          "source": "https://github.com/yaml/go-yaml/blob/246a95c22c57f15ef6d3305a1f1b8a0b05e4d560/NOTICE",
-          "verified": true
-        }
-      ],
-      "excluded_discovered_legal_paths": [],
-      "target_mask": 85
-    },
-    {
-      "module": "go.yaml.in/yaml/v2",
-      "version": "v2.4.3",
-      "module_sum": "h1:6gvOSjQoTB3vt1l+CU+tSyi/HOjfOjRLJ4YwYZGwRO0=",
-      "primary_license_identifiers": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "qualification": "File-specific: Apache root plus MIT LICENSE.libyaml for eight libyaml-derived files; not an OR choice.",
-      "origin": {
-        "kind": "vcs",
-        "vcs": "git",
-        "url": "https://github.com/yaml/go-yaml",
-        "hash": "3b57511c5e469cd030f5df7705d1f4208aa8b339"
-      },
-      "files": [
-        {
-          "path": "LICENSE",
-          "kind": "license",
-          "sha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1",
-          "source": "https://github.com/yaml/go-yaml/blob/3b57511c5e469cd030f5df7705d1f4208aa8b339/LICENSE",
-          "verified": true
-        },
-        {
-          "path": "LICENSE.libyaml",
-          "kind": "license",
-          "sha256": "a94710b55e03b5285f77d048c5ba61bb9d6ee04a06c0eb90e68821e11b0c707a",
-          "source": "https://github.com/yaml/go-yaml/blob/3b57511c5e469cd030f5df7705d1f4208aa8b339/LICENSE.libyaml",
-          "verified": true
-        },
-        {
-          "path": "NOTICE",
-          "kind": "notice",
-          "sha256": "f6c2dd3a67b576eafb89b80200b8b1627230bf3821a0c14cb99a22ac19107d00",
-          "source": "https://github.com/yaml/go-yaml/blob/3b57511c5e469cd030f5df7705d1f4208aa8b339/NOTICE",
+          "source": "https://github.com/yaml/go-yaml/blob/43b627a9da72517e91dbcf07cd10dfd6618423d8/NOTICE",
           "verified": true
         }
       ],
@@ -2174,8 +2336,8 @@
     },
     {
       "module": "go.yaml.in/yaml/v3",
-      "version": "v3.0.4",
-      "module_sum": "h1:tfq32ie2Jv2UxXFdLJdh3jXuOzWiL1fo0bu/FbuKpbc=",
+      "version": "v3.0.5",
+      "module_sum": "h1:N6y/pJk8buWs9NY5ERU2HSMfm+IuD/OtfdAnq6kESPw=",
       "primary_license_identifiers": [
         "Apache-2.0",
         "MIT"
@@ -2185,21 +2347,21 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/yaml/go-yaml",
-        "hash": "c3552c15f996075a7634df5159d9161c67bf3d76"
+        "hash": "e16c7af9361b241fa02d91582fb59ce4954d8afc"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "d18f6323b71b0b768bb5e9616e36da390fbd39369a81807cca352de4e4e6aa0b",
-          "source": "https://github.com/yaml/go-yaml/blob/c3552c15f996075a7634df5159d9161c67bf3d76/LICENSE",
+          "source": "https://github.com/yaml/go-yaml/blob/e16c7af9361b241fa02d91582fb59ce4954d8afc/LICENSE",
           "verified": true
         },
         {
           "path": "NOTICE",
           "kind": "notice",
           "sha256": "f6c2dd3a67b576eafb89b80200b8b1627230bf3821a0c14cb99a22ac19107d00",
-          "source": "https://github.com/yaml/go-yaml/blob/c3552c15f996075a7634df5159d9161c67bf3d76/NOTICE",
+          "source": "https://github.com/yaml/go-yaml/blob/e16c7af9361b241fa02d91582fb59ce4954d8afc/NOTICE",
           "verified": true
         }
       ],
@@ -2208,8 +2370,8 @@
     },
     {
       "module": "golang.org/x/crypto",
-      "version": "v0.54.0",
-      "module_sum": "h1:YLIA59K4fiNzHzjnZt2tUJQjQtUWfWbeHBqKtk3eScw=",
+      "version": "v0.58.0",
+      "module_sum": "h1:COkYLr4k7nDI4r6QtMML2AfzeIswWHAJthLS6K/M/54=",
       "primary_license_identifiers": [
         "BSD-3-Clause"
       ],
@@ -2218,49 +2380,49 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://go.googlesource.com/crypto",
-        "hash": "cdce021fa6c7d9c7eb2743bfbe551f0a98fd5d62"
+        "hash": "8fdf07b3114278fb3b78c1cf1814e08bd851eb4c"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
-          "source": "https://go.googlesource.com/crypto/+/cdce021fa6c7d9c7eb2743bfbe551f0a98fd5d62/LICENSE",
+          "source": "https://go.googlesource.com/crypto/+/8fdf07b3114278fb3b78c1cf1814e08bd851eb4c/LICENSE",
           "verified": true
         },
         {
           "path": "PATENTS",
           "kind": "patent_notice",
           "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
-          "source": "https://go.googlesource.com/crypto/+/cdce021fa6c7d9c7eb2743bfbe551f0a98fd5d62/PATENTS",
+          "source": "https://go.googlesource.com/crypto/+/8fdf07b3114278fb3b78c1cf1814e08bd851eb4c/PATENTS",
           "verified": true
         },
         {
           "path": "blake2b/blake2bAVX2_amd64.s",
           "kind": "assembly_review",
           "sha256": "5c29c80d50428e8541c97c6f31846c8d38b646f0f70bfc6325cd7b620b402651",
-          "source": "https://go.googlesource.com/crypto/+/cdce021fa6c7d9c7eb2743bfbe551f0a98fd5d62/blake2b/blake2bAVX2_amd64.s",
+          "source": "https://go.googlesource.com/crypto/+/8fdf07b3114278fb3b78c1cf1814e08bd851eb4c/blake2b/blake2bAVX2_amd64.s",
           "verified": true
         },
         {
           "path": "blake2b/blake2b_amd64.s",
           "kind": "assembly_review",
           "sha256": "f499772b4f15bc364b1c3d862a3c604c1b95a6ca9a11c131f080f31cc6f373bf",
-          "source": "https://go.googlesource.com/crypto/+/cdce021fa6c7d9c7eb2743bfbe551f0a98fd5d62/blake2b/blake2b_amd64.s",
+          "source": "https://go.googlesource.com/crypto/+/8fdf07b3114278fb3b78c1cf1814e08bd851eb4c/blake2b/blake2b_amd64.s",
           "verified": true
         },
         {
           "path": "internal/poly1305/sum_amd64.s",
           "kind": "assembly_review",
           "sha256": "f8959555c2e70f460ba88bca1f37705d6c570c0f99f37650a907e9391a960446",
-          "source": "https://go.googlesource.com/crypto/+/cdce021fa6c7d9c7eb2743bfbe551f0a98fd5d62/internal/poly1305/sum_amd64.s",
+          "source": "https://go.googlesource.com/crypto/+/8fdf07b3114278fb3b78c1cf1814e08bd851eb4c/internal/poly1305/sum_amd64.s",
           "verified": true
         },
         {
           "path": "salsa20/salsa/salsa20_amd64.s",
           "kind": "assembly_review",
           "sha256": "76483bbb543d9e30081bd9981dbcd2679adfc2a9b8978c8f39bd85916e2890f2",
-          "source": "https://go.googlesource.com/crypto/+/cdce021fa6c7d9c7eb2743bfbe551f0a98fd5d62/salsa20/salsa/salsa20_amd64.s",
+          "source": "https://go.googlesource.com/crypto/+/8fdf07b3114278fb3b78c1cf1814e08bd851eb4c/salsa20/salsa/salsa20_amd64.s",
           "verified": true
         }
       ],
@@ -2302,8 +2464,8 @@
     },
     {
       "module": "golang.org/x/oauth2",
-      "version": "v0.36.0",
-      "module_sum": "h1:peZ/1z27fi9hUOFCAZaHyrpWG5lwe0RJEEEeH0ThlIs=",
+      "version": "v0.37.0",
+      "module_sum": "h1:JUlcxA8oAtauLfiH8FX2/FkAWHAdi0QtGCGc+hofE98=",
       "primary_license_identifiers": [
         "BSD-3-Clause"
       ],
@@ -2312,14 +2474,14 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://go.googlesource.com/oauth2",
-        "hash": "4d954e69a88d9e1ccb8439f8d5b6cbef230c4ef9"
+        "hash": "c624b89dadc3221560b7345c090bbe69e90808ee"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
-          "source": "https://go.googlesource.com/oauth2/+/4d954e69a88d9e1ccb8439f8d5b6cbef230c4ef9/LICENSE",
+          "source": "https://go.googlesource.com/oauth2/+/c624b89dadc3221560b7345c090bbe69e90808ee/LICENSE",
           "verified": true
         }
       ],
@@ -2358,109 +2520,6 @@
       ],
       "excluded_discovered_legal_paths": [],
       "target_mask": 170
-    },
-    {
-      "module": "golang.org/x/sys",
-      "version": "v0.47.0",
-      "module_sum": "h1:o7XGOvZQCADBQQ4Y7VNq2dRWQR7JmOUW8Kxx4ZsNgWs=",
-      "primary_license_identifiers": [
-        "BSD-3-Clause"
-      ],
-      "qualification": "Root license for the selected package scopes.",
-      "origin": {
-        "kind": "vcs",
-        "vcs": "git",
-        "url": "https://go.googlesource.com/sys",
-        "hash": "9e7e939dcafac07e8ab4cffa6e5fc74908413f00"
-      },
-      "files": [
-        {
-          "path": "LICENSE",
-          "kind": "license",
-          "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
-          "source": "https://go.googlesource.com/sys/+/9e7e939dcafac07e8ab4cffa6e5fc74908413f00/LICENSE",
-          "verified": true
-        },
-        {
-          "path": "PATENTS",
-          "kind": "patent_notice",
-          "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
-          "source": "https://go.googlesource.com/sys/+/9e7e939dcafac07e8ab4cffa6e5fc74908413f00/PATENTS",
-          "verified": true
-        },
-        {
-          "path": "cpu/asm_darwin_arm64_gc.s",
-          "kind": "assembly_review",
-          "sha256": "6f6f35fbf284f205f49db2410b6554bd72aa1fc8ccf35f30a619482277e31ccd",
-          "source": "https://go.googlesource.com/sys/+/9e7e939dcafac07e8ab4cffa6e5fc74908413f00/cpu/asm_darwin_arm64_gc.s",
-          "verified": true
-        },
-        {
-          "path": "cpu/asm_darwin_x86_gc.s",
-          "kind": "assembly_review",
-          "sha256": "21022bf7461861b3744775075f4a4ef960c036cc469914684f87a4da9fc8b3a8",
-          "source": "https://go.googlesource.com/sys/+/9e7e939dcafac07e8ab4cffa6e5fc74908413f00/cpu/asm_darwin_x86_gc.s",
-          "verified": true
-        },
-        {
-          "path": "cpu/cpu_arm64.s",
-          "kind": "assembly_review",
-          "sha256": "704264fabff92f961c0bc68f0cb3cc49a21f62141e44ba709caf0ee2eccb0e5d",
-          "source": "https://go.googlesource.com/sys/+/9e7e939dcafac07e8ab4cffa6e5fc74908413f00/cpu/cpu_arm64.s",
-          "verified": true
-        },
-        {
-          "path": "cpu/cpu_gc_x86.s",
-          "kind": "assembly_review",
-          "sha256": "74ac7fc7ef9c56c3306238cf031ea8ef7c0312a7116cb9fba6d07f0b1382df80",
-          "source": "https://go.googlesource.com/sys/+/9e7e939dcafac07e8ab4cffa6e5fc74908413f00/cpu/cpu_gc_x86.s",
-          "verified": true
-        },
-        {
-          "path": "unix/asm_bsd_amd64.s",
-          "kind": "assembly_review",
-          "sha256": "1fecd01932d872c0d4ec06178a1860ae12bfab8490056dcf0a9d7a16cd455531",
-          "source": "https://go.googlesource.com/sys/+/9e7e939dcafac07e8ab4cffa6e5fc74908413f00/unix/asm_bsd_amd64.s",
-          "verified": true
-        },
-        {
-          "path": "unix/asm_bsd_arm64.s",
-          "kind": "assembly_review",
-          "sha256": "f7740a9d925eccd280e54e7971a36508a7d2856d9ef996a394ad5cfd80bec8c3",
-          "source": "https://go.googlesource.com/sys/+/9e7e939dcafac07e8ab4cffa6e5fc74908413f00/unix/asm_bsd_arm64.s",
-          "verified": true
-        },
-        {
-          "path": "unix/asm_linux_amd64.s",
-          "kind": "assembly_review",
-          "sha256": "14c826e5d2db337e49c32e0b5a66317b58da198874a0eb950c33aac571e9573c",
-          "source": "https://go.googlesource.com/sys/+/9e7e939dcafac07e8ab4cffa6e5fc74908413f00/unix/asm_linux_amd64.s",
-          "verified": true
-        },
-        {
-          "path": "unix/asm_linux_arm64.s",
-          "kind": "assembly_review",
-          "sha256": "9d1514c08da093cd38b77f03ff5fe265c16500a42295b32c66509dc828a34045",
-          "source": "https://go.googlesource.com/sys/+/9e7e939dcafac07e8ab4cffa6e5fc74908413f00/unix/asm_linux_arm64.s",
-          "verified": true
-        },
-        {
-          "path": "unix/zsyscall_darwin_amd64.s",
-          "kind": "assembly_review",
-          "sha256": "08e931fd2055f452d04b450a839ce2d87423f28ebc2aa014e391a7a764612b13",
-          "source": "https://go.googlesource.com/sys/+/9e7e939dcafac07e8ab4cffa6e5fc74908413f00/unix/zsyscall_darwin_amd64.s",
-          "verified": true
-        },
-        {
-          "path": "unix/zsyscall_darwin_arm64.s",
-          "kind": "assembly_review",
-          "sha256": "5daa70eefd10942e6ba8da79d69152b330da1981874d6726d1d09cf8d8a0d30e",
-          "source": "https://go.googlesource.com/sys/+/9e7e939dcafac07e8ab4cffa6e5fc74908413f00/unix/zsyscall_darwin_arm64.s",
-          "verified": true
-        }
-      ],
-      "excluded_discovered_legal_paths": [],
-      "target_mask": 3925
     },
     {
       "module": "golang.org/x/sys",
@@ -2566,6 +2625,109 @@
       "target_mask": 170
     },
     {
+      "module": "golang.org/x/sys",
+      "version": "v0.49.0",
+      "module_sum": "h1:XbzkgYJHdqh/8m2Uu0W/dQv8nktxx4BFHp1M0gROTXA=",
+      "primary_license_identifiers": [
+        "BSD-3-Clause"
+      ],
+      "qualification": "Root license for the selected package scopes.",
+      "origin": {
+        "kind": "vcs",
+        "vcs": "git",
+        "url": "https://go.googlesource.com/sys",
+        "hash": "b6b8557e8e2974925aec7a136ba0e323eedc5f43"
+      },
+      "files": [
+        {
+          "path": "LICENSE",
+          "kind": "license",
+          "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
+          "source": "https://go.googlesource.com/sys/+/b6b8557e8e2974925aec7a136ba0e323eedc5f43/LICENSE",
+          "verified": true
+        },
+        {
+          "path": "PATENTS",
+          "kind": "patent_notice",
+          "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+          "source": "https://go.googlesource.com/sys/+/b6b8557e8e2974925aec7a136ba0e323eedc5f43/PATENTS",
+          "verified": true
+        },
+        {
+          "path": "cpu/asm_darwin_arm64_gc.s",
+          "kind": "assembly_review",
+          "sha256": "6f6f35fbf284f205f49db2410b6554bd72aa1fc8ccf35f30a619482277e31ccd",
+          "source": "https://go.googlesource.com/sys/+/b6b8557e8e2974925aec7a136ba0e323eedc5f43/cpu/asm_darwin_arm64_gc.s",
+          "verified": true
+        },
+        {
+          "path": "cpu/asm_darwin_x86_gc.s",
+          "kind": "assembly_review",
+          "sha256": "21022bf7461861b3744775075f4a4ef960c036cc469914684f87a4da9fc8b3a8",
+          "source": "https://go.googlesource.com/sys/+/b6b8557e8e2974925aec7a136ba0e323eedc5f43/cpu/asm_darwin_x86_gc.s",
+          "verified": true
+        },
+        {
+          "path": "cpu/cpu_arm64.s",
+          "kind": "assembly_review",
+          "sha256": "704264fabff92f961c0bc68f0cb3cc49a21f62141e44ba709caf0ee2eccb0e5d",
+          "source": "https://go.googlesource.com/sys/+/b6b8557e8e2974925aec7a136ba0e323eedc5f43/cpu/cpu_arm64.s",
+          "verified": true
+        },
+        {
+          "path": "cpu/cpu_gc_x86.s",
+          "kind": "assembly_review",
+          "sha256": "74ac7fc7ef9c56c3306238cf031ea8ef7c0312a7116cb9fba6d07f0b1382df80",
+          "source": "https://go.googlesource.com/sys/+/b6b8557e8e2974925aec7a136ba0e323eedc5f43/cpu/cpu_gc_x86.s",
+          "verified": true
+        },
+        {
+          "path": "unix/asm_bsd_amd64.s",
+          "kind": "assembly_review",
+          "sha256": "1fecd01932d872c0d4ec06178a1860ae12bfab8490056dcf0a9d7a16cd455531",
+          "source": "https://go.googlesource.com/sys/+/b6b8557e8e2974925aec7a136ba0e323eedc5f43/unix/asm_bsd_amd64.s",
+          "verified": true
+        },
+        {
+          "path": "unix/asm_bsd_arm64.s",
+          "kind": "assembly_review",
+          "sha256": "f7740a9d925eccd280e54e7971a36508a7d2856d9ef996a394ad5cfd80bec8c3",
+          "source": "https://go.googlesource.com/sys/+/b6b8557e8e2974925aec7a136ba0e323eedc5f43/unix/asm_bsd_arm64.s",
+          "verified": true
+        },
+        {
+          "path": "unix/asm_linux_amd64.s",
+          "kind": "assembly_review",
+          "sha256": "14c826e5d2db337e49c32e0b5a66317b58da198874a0eb950c33aac571e9573c",
+          "source": "https://go.googlesource.com/sys/+/b6b8557e8e2974925aec7a136ba0e323eedc5f43/unix/asm_linux_amd64.s",
+          "verified": true
+        },
+        {
+          "path": "unix/asm_linux_arm64.s",
+          "kind": "assembly_review",
+          "sha256": "9d1514c08da093cd38b77f03ff5fe265c16500a42295b32c66509dc828a34045",
+          "source": "https://go.googlesource.com/sys/+/b6b8557e8e2974925aec7a136ba0e323eedc5f43/unix/asm_linux_arm64.s",
+          "verified": true
+        },
+        {
+          "path": "unix/zsyscall_darwin_amd64.s",
+          "kind": "assembly_review",
+          "sha256": "08e931fd2055f452d04b450a839ce2d87423f28ebc2aa014e391a7a764612b13",
+          "source": "https://go.googlesource.com/sys/+/b6b8557e8e2974925aec7a136ba0e323eedc5f43/unix/zsyscall_darwin_amd64.s",
+          "verified": true
+        },
+        {
+          "path": "unix/zsyscall_darwin_arm64.s",
+          "kind": "assembly_review",
+          "sha256": "5daa70eefd10942e6ba8da79d69152b330da1981874d6726d1d09cf8d8a0d30e",
+          "source": "https://go.googlesource.com/sys/+/b6b8557e8e2974925aec7a136ba0e323eedc5f43/unix/zsyscall_darwin_arm64.s",
+          "verified": true
+        }
+      ],
+      "excluded_discovered_legal_paths": [],
+      "target_mask": 3925
+    },
+    {
       "module": "golang.org/x/term",
       "version": "v0.46.0",
       "module_sum": "h1:3+OXuTbaKDgwk8jTi3aSLHRlmWqHEUDUtxnbFigO4YE=",
@@ -2597,39 +2759,6 @@
       ],
       "excluded_discovered_legal_paths": [],
       "target_mask": 170
-    },
-    {
-      "module": "golang.org/x/text",
-      "version": "v0.40.0",
-      "module_sum": "h1:Ub2Z6/xjgF1WrYQz2nuITOEegKFtiIy+rieRJ5lHZKs=",
-      "primary_license_identifiers": [
-        "BSD-3-Clause"
-      ],
-      "qualification": "Root license for the selected package scopes.",
-      "origin": {
-        "kind": "vcs",
-        "vcs": "git",
-        "url": "https://go.googlesource.com/text",
-        "hash": "724af9c35838492dcaacc1ac51a8a0187c994c54"
-      },
-      "files": [
-        {
-          "path": "LICENSE",
-          "kind": "license",
-          "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
-          "source": "https://go.googlesource.com/text/+/724af9c35838492dcaacc1ac51a8a0187c994c54/LICENSE",
-          "verified": true
-        },
-        {
-          "path": "PATENTS",
-          "kind": "patent_notice",
-          "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
-          "source": "https://go.googlesource.com/text/+/724af9c35838492dcaacc1ac51a8a0187c994c54/PATENTS",
-          "verified": true
-        }
-      ],
-      "excluded_discovered_legal_paths": [],
-      "target_mask": 3840
     },
     {
       "module": "golang.org/x/text",
@@ -2665,9 +2794,42 @@
       "target_mask": 170
     },
     {
+      "module": "golang.org/x/text",
+      "version": "v0.43.0",
+      "module_sum": "h1:1QivrlhwAsnMOcqgOdl9my7s9OyZl8O5/UGUTJVXoWc=",
+      "primary_license_identifiers": [
+        "BSD-3-Clause"
+      ],
+      "qualification": "Root license for the selected package scopes.",
+      "origin": {
+        "kind": "vcs",
+        "vcs": "git",
+        "url": "https://go.googlesource.com/text",
+        "hash": "ac40b0f06c159afb5bfca4d1860f8b4b60dbc160"
+      },
+      "files": [
+        {
+          "path": "LICENSE",
+          "kind": "license",
+          "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
+          "source": "https://go.googlesource.com/text/+/ac40b0f06c159afb5bfca4d1860f8b4b60dbc160/LICENSE",
+          "verified": true
+        },
+        {
+          "path": "PATENTS",
+          "kind": "patent_notice",
+          "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+          "source": "https://go.googlesource.com/text/+/ac40b0f06c159afb5bfca4d1860f8b4b60dbc160/PATENTS",
+          "verified": true
+        }
+      ],
+      "excluded_discovered_legal_paths": [],
+      "target_mask": 3840
+    },
+    {
       "module": "golang.org/x/time",
-      "version": "v0.9.0",
-      "module_sum": "h1:EsRrnYcQiGH+5FfbgvV4AP7qEZstoyrHB0DzarOQ4ZY=",
+      "version": "v0.16.0",
+      "module_sum": "h1:vMb6ptszcQMkcwiRTAuNNU50gom6++Q/6gY2hDM6VDE=",
       "primary_license_identifiers": [
         "BSD-3-Clause"
       ],
@@ -2676,21 +2838,21 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://go.googlesource.com/time",
-        "hash": "1ce61fe87e0e5dd90752d2b6c5972f9b6918e77c"
+        "hash": "fb013b3d305a26f5ef5350a6eaffc7c87a200383"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
-          "source": "https://go.googlesource.com/time/+/1ce61fe87e0e5dd90752d2b6c5972f9b6918e77c/LICENSE",
+          "source": "https://go.googlesource.com/time/+/fb013b3d305a26f5ef5350a6eaffc7c87a200383/LICENSE",
           "verified": true
         },
         {
           "path": "PATENTS",
           "kind": "patent_notice",
           "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
-          "source": "https://go.googlesource.com/time/+/1ce61fe87e0e5dd90752d2b6c5972f9b6918e77c/PATENTS",
+          "source": "https://go.googlesource.com/time/+/fb013b3d305a26f5ef5350a6eaffc7c87a200383/PATENTS",
           "verified": true
         }
       ],
@@ -2699,8 +2861,8 @@
     },
     {
       "module": "gomodules.xyz/jsonpatch/v2",
-      "version": "v2.4.0",
-      "module_sum": "h1:Ci3iUJyx9UeRx7CeFN8ARgGbkESwJK+KB9lLcWxY/Zw=",
+      "version": "v2.5.0",
+      "module_sum": "h1:JELs8RLM12qJGXU4u/TO3V25KW8GreMKl9pdkk14RM0=",
       "primary_license_identifiers": [
         "Apache-2.0"
       ],
@@ -2709,14 +2871,14 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/gomodules/jsonpatch",
-        "hash": "17d7994fea15a033020ac51ee05b7dda0afda0fe"
+        "hash": "ffbac609e26aa014d59e5bd6872ceda34d07dd89"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08",
-          "source": "https://github.com/gomodules/jsonpatch/blob/17d7994fea15a033020ac51ee05b7dda0afda0fe/LICENSE",
+          "source": "https://github.com/gomodules/jsonpatch/blob/ffbac609e26aa014d59e5bd6872ceda34d07dd89/LICENSE",
           "verified": true
         }
       ],
@@ -2725,8 +2887,8 @@
     },
     {
       "module": "google.golang.org/genproto/googleapis/rpc",
-      "version": "v0.0.0-20260526163538-3dc84a4a5aaa",
-      "module_sum": "h1:mZHHdPZl0dbGHCflZgAq/Q468DWVFcU2whhB2KAo8fk=",
+      "version": "v0.0.0-20260817212433-ac3dfec99bb1",
+      "module_sum": "h1:utmqiUzZAEINbLmRyAt1QjVkMyLQ+lvIwCpLaB1rZfw=",
       "primary_license_identifiers": [
         "Apache-2.0"
       ],
@@ -2735,7 +2897,7 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/googleapis/go-genproto",
-        "hash": "3dc84a4a5aaa87331e10f51e22e90d961f986894",
+        "hash": "ac3dfec99bb1e804a90b47ec8a14c5309b5c7375",
         "subdir": "googleapis/rpc"
       },
       "files": [
@@ -2743,7 +2905,7 @@
           "path": "LICENSE",
           "kind": "license",
           "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
-          "source": "https://github.com/googleapis/go-genproto/blob/3dc84a4a5aaa87331e10f51e22e90d961f986894/LICENSE",
+          "source": "https://github.com/googleapis/go-genproto/blob/ac3dfec99bb1e804a90b47ec8a14c5309b5c7375/LICENSE",
           "verified": true
         }
       ],
@@ -2752,8 +2914,8 @@
     },
     {
       "module": "google.golang.org/grpc",
-      "version": "v1.83.2",
-      "module_sum": "h1:EManeRomTObA0BU7I8vXgg/78uE5MJ9M8B39EX2WscU=",
+      "version": "v1.85.0",
+      "module_sum": "h1:BPBCfuVRQ1qvBhKDOq9uvQllMvO59rKsYhXpp7Dd8vw=",
       "primary_license_identifiers": [
         "Apache-2.0"
       ],
@@ -2762,28 +2924,28 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/grpc/grpc-go",
-        "hash": "030ee8becb20ce4315d6bf2dfa26bdd876169dc4"
+        "hash": "c9ab42cdb0a2b3e7b9d5510ebbc999638ee41eb7"
       },
       "files": [
         {
           "path": "AUTHORS",
           "kind": "authors",
           "sha256": "627c695f80fdac6412d66e6ad4160a4acb41923ca7ee3fd7e112e105f0ff46b9",
-          "source": "https://github.com/grpc/grpc-go/blob/030ee8becb20ce4315d6bf2dfa26bdd876169dc4/AUTHORS",
+          "source": "https://github.com/grpc/grpc-go/blob/c9ab42cdb0a2b3e7b9d5510ebbc999638ee41eb7/AUTHORS",
           "verified": true
         },
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
-          "source": "https://github.com/grpc/grpc-go/blob/030ee8becb20ce4315d6bf2dfa26bdd876169dc4/LICENSE",
+          "source": "https://github.com/grpc/grpc-go/blob/c9ab42cdb0a2b3e7b9d5510ebbc999638ee41eb7/LICENSE",
           "verified": true
         },
         {
           "path": "NOTICE.txt",
           "kind": "notice",
           "sha256": "693ff28ec216d5112ac1bbfe64ef539005867d1c7bd427b57d579683293b947f",
-          "source": "https://github.com/grpc/grpc-go/blob/030ee8becb20ce4315d6bf2dfa26bdd876169dc4/NOTICE.txt",
+          "source": "https://github.com/grpc/grpc-go/blob/c9ab42cdb0a2b3e7b9d5510ebbc999638ee41eb7/NOTICE.txt",
           "verified": true
         }
       ],
@@ -2792,104 +2954,64 @@
     },
     {
       "module": "google.golang.org/protobuf",
-      "version": "v1.36.11",
-      "module_sum": "h1:fV6ZwhNocDyBLK0dj+fg8ektcVegBBuEolpbTQyBNVE=",
+      "version": "v1.36.12",
+      "module_sum": "h1:pJOKDDOyeXErUroCihFAd5LQuwXBSpVnKGrj5o/fwxc=",
       "primary_license_identifiers": [
         "BSD-3-Clause"
       ],
-      "qualification": "Root BSD-3-Clause and patent notice; selected generated well-known/descriptor source files retain their Google 2008 BSD notices as a conservative supplement.",
+      "qualification": "Root BSD-3-Clause and patent notice; selected generated well-known/descriptor source files retain their Google 2008 copyright and BSD notices (descriptor.pb.go now refers to the BSD license instead of repeating it) as a conservative supplement.",
       "origin": {
         "kind": "vcs",
         "vcs": "git",
         "url": "https://go.googlesource.com/protobuf",
-        "hash": "96a179180f0ad6bba9b1e7b6e38d0affb0168e9a"
+        "hash": "cdd4c5f7406e82462949c7a65defa9f3029c162d"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "4835612df0098ca95f8e7d9e3bffcb02358d435dbb38057c844c99d7f725eb20",
-          "source": "https://go.googlesource.com/protobuf/+/96a179180f0ad6bba9b1e7b6e38d0affb0168e9a/LICENSE",
+          "source": "https://go.googlesource.com/protobuf/+/cdd4c5f7406e82462949c7a65defa9f3029c162d/LICENSE",
           "verified": true
         },
         {
           "path": "PATENTS",
           "kind": "patent_notice",
           "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
-          "source": "https://go.googlesource.com/protobuf/+/96a179180f0ad6bba9b1e7b6e38d0affb0168e9a/PATENTS",
+          "source": "https://go.googlesource.com/protobuf/+/cdd4c5f7406e82462949c7a65defa9f3029c162d/PATENTS",
           "verified": true
         },
         {
           "path": "types/descriptorpb/descriptor.pb.go",
           "kind": "source_notice",
-          "sha256": "9fefb7a2eb647084e3d4bc25512d28568fe59a214b3f00a43f690c680fe6d55b",
-          "source": "https://github.com/protocolbuffers/protobuf-go/blob/96a179180f0ad6bba9b1e7b6e38d0affb0168e9a/types/descriptorpb/descriptor.pb.go",
+          "sha256": "2ed9fc25e31903630d3562007d78b416165598e4df4115d332cade90001932a2",
+          "source": "https://go.googlesource.com/protobuf/+/cdd4c5f7406e82462949c7a65defa9f3029c162d/types/descriptorpb/descriptor.pb.go",
           "verified": true
         },
         {
           "path": "types/known/anypb/any.pb.go",
           "kind": "source_notice",
-          "sha256": "3cbf2f79ff2e65fea1a884a7af64014a864142424bdaa776126a4dabd0d0159f",
-          "source": "https://github.com/protocolbuffers/protobuf-go/blob/96a179180f0ad6bba9b1e7b6e38d0affb0168e9a/types/known/anypb/any.pb.go",
+          "sha256": "0e45ec8af43084d6dd09d4a300d10d3a51a2790535721585f6531cafae922200",
+          "source": "https://go.googlesource.com/protobuf/+/cdd4c5f7406e82462949c7a65defa9f3029c162d/types/known/anypb/any.pb.go",
           "verified": true
         },
         {
           "path": "types/known/durationpb/duration.pb.go",
           "kind": "source_notice",
           "sha256": "c40e56dc8f8643a1a9fcaff45563c11d50f679ea41f37dfb9942c9be31ee0f4b",
-          "source": "https://github.com/protocolbuffers/protobuf-go/blob/96a179180f0ad6bba9b1e7b6e38d0affb0168e9a/types/known/durationpb/duration.pb.go",
+          "source": "https://go.googlesource.com/protobuf/+/cdd4c5f7406e82462949c7a65defa9f3029c162d/types/known/durationpb/duration.pb.go",
           "verified": true
         },
         {
           "path": "types/known/timestamppb/timestamp.pb.go",
           "kind": "source_notice",
-          "sha256": "a0a10a8152cf08086efc87237bdc8bb19db25df22675ccd43b03a86f4a81de4c",
-          "source": "https://github.com/protocolbuffers/protobuf-go/blob/96a179180f0ad6bba9b1e7b6e38d0affb0168e9a/types/known/timestamppb/timestamp.pb.go",
+          "sha256": "7a3dd04fd975b5e834ebbb4966a824b99707b8549ba1b40b363102967ae1054a",
+          "source": "https://go.googlesource.com/protobuf/+/cdd4c5f7406e82462949c7a65defa9f3029c162d/types/known/timestamppb/timestamp.pb.go",
           "verified": true
         }
       ],
       "excluded_discovered_legal_paths": [],
-      "target_mask": 170
-    },
-    {
-      "module": "google.golang.org/protobuf",
-      "version": "v1.36.8",
-      "module_sum": "h1:xHScyCOEuuwZEc6UtSOvPbAT4zRh0xcNRYekJwfqyMc=",
-      "primary_license_identifiers": [
-        "BSD-3-Clause"
-      ],
-      "qualification": "Root BSD-3-Clause and patent notice; selected generated well-known/descriptor source files retain their Google 2008 BSD notices as a conservative supplement.",
-      "origin": {
-        "kind": "vcs",
-        "vcs": "git",
-        "url": "https://go.googlesource.com/protobuf",
-        "hash": "0833cf304e6344e895e819f769afa28107fe8892"
-      },
-      "files": [
-        {
-          "path": "LICENSE",
-          "kind": "license",
-          "sha256": "4835612df0098ca95f8e7d9e3bffcb02358d435dbb38057c844c99d7f725eb20",
-          "source": "https://go.googlesource.com/protobuf/+/0833cf304e6344e895e819f769afa28107fe8892/LICENSE",
-          "verified": true
-        },
-        {
-          "path": "PATENTS",
-          "kind": "patent_notice",
-          "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
-          "source": "https://go.googlesource.com/protobuf/+/0833cf304e6344e895e819f769afa28107fe8892/PATENTS",
-          "verified": true
-        },
-        {
-          "path": "types/known/timestamppb/timestamp.pb.go",
-          "kind": "source_notice",
-          "sha256": "1713598ed2d192aab925d037e0ddda6f665fa11c1034c737726cce513da3741d",
-          "source": "https://github.com/protocolbuffers/protobuf-go/blob/0833cf304e6344e895e819f769afa28107fe8892/types/known/timestamppb/timestamp.pb.go",
-          "verified": true
-        }
-      ],
-      "excluded_discovered_legal_paths": [],
-      "target_mask": 85
+      "target_mask": 255
     },
     {
       "module": "gopkg.in/evanphx/json-patch.v4",
@@ -2947,46 +3069,9 @@
       "target_mask": 170
     },
     {
-      "module": "gopkg.in/yaml.v3",
-      "version": "v3.0.1",
-      "module_sum": "h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=",
-      "primary_license_identifiers": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "qualification": "File-specific MIT for eight libyaml-derived files and Apache for the rest; retain LICENSE and NOTICE.",
-      "origin": {
-        "kind": "module_archive",
-        "url": "https://proxy.golang.org/gopkg.in/yaml.v3/@v/v3.0.1.zip",
-        "sha256": "aab8fbc4e6300ea08e6afe1caea18a21c90c79f489f52c53e2f20431f1a9a015",
-        "vcs_hash": null,
-        "qualification": "The canonical Go module metadata lacks VCS Origin; verified archive identity is recorded instead of inventing a commit."
-      },
-      "files": [
-        {
-          "path": "LICENSE",
-          "kind": "license",
-          "sha256": "d18f6323b71b0b768bb5e9616e36da390fbd39369a81807cca352de4e4e6aa0b",
-          "source": "https://proxy.golang.org/gopkg.in/yaml.v3/@v/v3.0.1.zip",
-          "archive_inner_path": "gopkg.in/yaml.v3@v3.0.1/LICENSE",
-          "verified": true
-        },
-        {
-          "path": "NOTICE",
-          "kind": "notice",
-          "sha256": "f6c2dd3a67b576eafb89b80200b8b1627230bf3821a0c14cb99a22ac19107d00",
-          "source": "https://proxy.golang.org/gopkg.in/yaml.v3/@v/v3.0.1.zip",
-          "archive_inner_path": "gopkg.in/yaml.v3@v3.0.1/NOTICE",
-          "verified": true
-        }
-      ],
-      "excluded_discovered_legal_paths": [],
-      "target_mask": 170
-    },
-    {
       "module": "k8s.io/api",
-      "version": "v0.35.0",
-      "module_sum": "h1:iBAU5LTyBI9vw3L5glmat1njFK34srdLmktWwLTprlY=",
+      "version": "v0.37.2",
+      "module_sum": "h1:PnxqnUFy93jr2GcpWDkKOm8wfy25kT9wa572MuQS8oc=",
       "primary_license_identifiers": [
         "Apache-2.0"
       ],
@@ -2995,14 +3080,14 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/kubernetes/api",
-        "hash": "9afe7de0a56c582b06ca094f7309015bc84657a7"
+        "hash": "1bc0c529309723075aed339d50f16d4b311d908d"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
-          "source": "https://github.com/kubernetes/api/blob/9afe7de0a56c582b06ca094f7309015bc84657a7/LICENSE",
+          "source": "https://github.com/kubernetes/api/blob/1bc0c529309723075aed339d50f16d4b311d908d/LICENSE",
           "verified": true
         }
       ],
@@ -3011,8 +3096,8 @@
     },
     {
       "module": "k8s.io/apiextensions-apiserver",
-      "version": "v0.35.0",
-      "module_sum": "h1:3xHk2rTOdWXXJM+RDQZJvdx0yEOgC0FgQ1PlJatA5T4=",
+      "version": "v0.37.0",
+      "module_sum": "h1:zRMQ3+/LIE5oZ0tVvXwYHC+dIkSP5cjNWju7AZU1LOI=",
       "primary_license_identifiers": [
         "Apache-2.0"
       ],
@@ -3021,14 +3106,14 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/kubernetes/apiextensions-apiserver",
-        "hash": "a8d2a03a6b798832f3b9a63638d404ef89fe5b69"
+        "hash": "78b55771e5935f10d7d8d187de1b2f3c934cdcb9"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
-          "source": "https://github.com/kubernetes/apiextensions-apiserver/blob/a8d2a03a6b798832f3b9a63638d404ef89fe5b69/LICENSE",
+          "source": "https://github.com/kubernetes/apiextensions-apiserver/blob/78b55771e5935f10d7d8d187de1b2f3c934cdcb9/LICENSE",
           "verified": true
         }
       ],
@@ -3037,8 +3122,8 @@
     },
     {
       "module": "k8s.io/apimachinery",
-      "version": "v0.35.0",
-      "module_sum": "h1:Z2L3IHvPVv/MJ7xRxHEtk6GoJElaAqDCCU0S6ncYok8=",
+      "version": "v0.37.2",
+      "module_sum": "h1:G4t9RGoPDbQML38hz/kQQiltttgd3egg2ODCR8aIc2o=",
       "primary_license_identifiers": [
         "Apache-2.0",
         "BSD-3-Clause"
@@ -3048,28 +3133,28 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/kubernetes/apimachinery",
-        "hash": "72d71eac265e06713c6d83d7034aac609450243f"
+        "hash": "97adf147c7378229d45db0fc7511af84d0c3c092"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
-          "source": "https://github.com/kubernetes/apimachinery/blob/72d71eac265e06713c6d83d7034aac609450243f/LICENSE",
+          "source": "https://github.com/kubernetes/apimachinery/blob/97adf147c7378229d45db0fc7511af84d0c3c092/LICENSE",
           "verified": true
         },
         {
           "path": "third_party/forked/golang/LICENSE",
           "kind": "license",
           "sha256": "2d36597f7117c38b006835ae7f537487207d8ec407aa9d9980794b2030cbc067",
-          "source": "https://github.com/kubernetes/apimachinery/blob/72d71eac265e06713c6d83d7034aac609450243f/third_party/forked/golang/LICENSE",
+          "source": "https://github.com/kubernetes/apimachinery/blob/97adf147c7378229d45db0fc7511af84d0c3c092/third_party/forked/golang/LICENSE",
           "verified": true
         },
         {
           "path": "third_party/forked/golang/PATENTS",
           "kind": "patent_notice",
           "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
-          "source": "https://github.com/kubernetes/apimachinery/blob/72d71eac265e06713c6d83d7034aac609450243f/third_party/forked/golang/PATENTS",
+          "source": "https://github.com/kubernetes/apimachinery/blob/97adf147c7378229d45db0fc7511af84d0c3c092/third_party/forked/golang/PATENTS",
           "verified": true
         }
       ],
@@ -3078,8 +3163,8 @@
     },
     {
       "module": "k8s.io/client-go",
-      "version": "v0.35.0",
-      "module_sum": "h1:IAW0ifFbfQQwQmga0UdoH0yvdqrbwMdq9vIFEhRpxBE=",
+      "version": "v0.37.2",
+      "module_sum": "h1:sgFtyRZukGkOrsu+QgS7LYnbFFJ5ut3MchdBNduD//E=",
       "primary_license_identifiers": [
         "Apache-2.0"
       ],
@@ -3088,27 +3173,28 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/kubernetes/client-go",
-        "hash": "9bcb69436287b966d0c5c195efef00aed921fb1b"
+        "hash": "72c52dd0cc3b9099b36af11290b0304045dd1ada"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
-          "source": "https://github.com/kubernetes/client-go/blob/9bcb69436287b966d0c5c195efef00aed921fb1b/LICENSE",
+          "source": "https://github.com/kubernetes/client-go/blob/72c52dd0cc3b9099b36af11290b0304045dd1ada/LICENSE",
           "verified": true
         }
       ],
       "excluded_discovered_legal_paths": [
         "third_party/forked/golang/LICENSE",
-        "third_party/forked/golang/PATENTS"
+        "third_party/forked/golang/PATENTS",
+        "third_party/forked/httpcache/LICENSE"
       ],
       "target_mask": 170
     },
     {
       "module": "k8s.io/klog/v2",
-      "version": "v2.130.1",
-      "module_sum": "h1:n9Xl7H1Xvksem4KFG4PYbdQCQxqc/tTUyrgXaOhHSzk=",
+      "version": "v2.140.0",
+      "module_sum": "h1:Tf+J3AH7xnUzZyVVXhTgGhEKnFqye14aadWv7bzXdzc=",
       "primary_license_identifiers": [
         "Apache-2.0"
       ],
@@ -3117,14 +3203,14 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/kubernetes/klog",
-        "hash": "75663bb798999a49e3e4c0f2375ed5cca8164194"
+        "hash": "ef4b370a5578b77a401416e4d12f5900cc8850cb"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "73ba74dfaa520b49a401b5d21459a8523a146f3b7518a833eea5efa85130bf68",
-          "source": "https://github.com/kubernetes/klog/blob/75663bb798999a49e3e4c0f2375ed5cca8164194/LICENSE",
+          "source": "https://github.com/kubernetes/klog/blob/ef4b370a5578b77a401416e4d12f5900cc8850cb/LICENSE",
           "verified": true
         }
       ],
@@ -3133,8 +3219,8 @@
     },
     {
       "module": "k8s.io/kube-openapi",
-      "version": "v0.0.0-20250910181357-589584f1c912",
-      "module_sum": "h1:Y3gxNAuB0OBLImH611+UDZcmKS3g6CthxToOb37KgwE=",
+      "version": "v0.0.0-20260721132016-d427ff9ee9ad",
+      "module_sum": "h1:oXImqH8mQNk7PmvzKhmN3ddJoY6OnyM225MXwGHPm0A=",
       "primary_license_identifiers": [
         "Apache-2.0",
         "BSD-3-Clause"
@@ -3144,35 +3230,35 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/kubernetes/kube-openapi",
-        "hash": "589584f1c912f4367fe8954f649a59a98b912da5"
+        "hash": "d427ff9ee9ad05f5da435abbb7c5929cb713ac56"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
-          "source": "https://github.com/kubernetes/kube-openapi/blob/589584f1c912f4367fe8954f649a59a98b912da5/LICENSE",
+          "source": "https://github.com/kubernetes/kube-openapi/blob/d427ff9ee9ad05f5da435abbb7c5929cb713ac56/LICENSE",
           "verified": true
         },
         {
           "path": "pkg/internal/third_party/go-json-experiment/json/AUTHORS",
           "kind": "authors",
           "sha256": "5aa3167c44245f0b12b27195d85c6a8c8e067cfdd511059daa4d7b3c5b232129",
-          "source": "https://github.com/kubernetes/kube-openapi/blob/589584f1c912f4367fe8954f649a59a98b912da5/pkg/internal/third_party/go-json-experiment/json/AUTHORS",
+          "source": "https://github.com/kubernetes/kube-openapi/blob/d427ff9ee9ad05f5da435abbb7c5929cb713ac56/pkg/internal/third_party/go-json-experiment/json/AUTHORS",
           "verified": true
         },
         {
           "path": "pkg/internal/third_party/go-json-experiment/json/LICENSE",
           "kind": "license",
           "sha256": "14a34c4db2d21bf9cf80d028b802cd22fed9bf597a6c2db7ce30ee6ffd04967a",
-          "source": "https://github.com/kubernetes/kube-openapi/blob/589584f1c912f4367fe8954f649a59a98b912da5/pkg/internal/third_party/go-json-experiment/json/LICENSE",
+          "source": "https://github.com/kubernetes/kube-openapi/blob/d427ff9ee9ad05f5da435abbb7c5929cb713ac56/pkg/internal/third_party/go-json-experiment/json/LICENSE",
           "verified": true
         },
         {
           "path": "pkg/validation/spec/LICENSE",
           "kind": "license",
           "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
-          "source": "https://github.com/kubernetes/kube-openapi/blob/589584f1c912f4367fe8954f649a59a98b912da5/pkg/validation/spec/LICENSE",
+          "source": "https://github.com/kubernetes/kube-openapi/blob/d427ff9ee9ad05f5da435abbb7c5929cb713ac56/pkg/validation/spec/LICENSE",
           "verified": true
         }
       ],
@@ -3186,54 +3272,73 @@
     },
     {
       "module": "k8s.io/utils",
-      "version": "v0.0.0-20251002143259-bc988d571ff4",
-      "module_sum": "h1:SjGebBtkBqHFOli+05xYbK8YF1Dzkbzn+gDM4X9T4Ck=",
+      "version": "v0.0.0-20260626114624-be93311217bd",
+      "module_sum": "h1:Ea7fgQ5we8Y9T0OX5o0dAHzQOBRI07D/dEYRaB9ZZEs=",
       "primary_license_identifiers": [
         "Apache-2.0",
         "BSD-3-Clause"
       ],
-      "qualification": "File-specific combination across the selected package/license scopes; not an OR choice.",
+      "qualification": "File-specific combination across the selected package/license scopes; not an OR choice. third_party/forked/golang/btree is derived from github.com/google/btree and keeps its own Apache-2.0 LICENSE and Google/Kubernetes headers; the enclosing third_party/forked/golang Go BSD LICENSE and PATENTS are retained as directory scope.",
       "origin": {
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/kubernetes/utils",
-        "hash": "bc988d571ff40eb17793769e9c1b71ecf8ee9c0f"
+        "hash": "be93311217bd4e42d0aa42a5987d08e8f5581ec0"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
-          "source": "https://github.com/kubernetes/utils/blob/bc988d571ff40eb17793769e9c1b71ecf8ee9c0f/LICENSE",
+          "source": "https://github.com/kubernetes/utils/blob/be93311217bd4e42d0aa42a5987d08e8f5581ec0/LICENSE",
           "verified": true
         },
         {
           "path": "internal/third_party/forked/golang/LICENSE",
           "kind": "license",
           "sha256": "dd26a7abddd02e2d0aba97805b31f248ef7835d9e10da289b22e3b8ab78b324d",
-          "source": "https://github.com/kubernetes/utils/blob/bc988d571ff40eb17793769e9c1b71ecf8ee9c0f/internal/third_party/forked/golang/LICENSE",
+          "source": "https://github.com/kubernetes/utils/blob/be93311217bd4e42d0aa42a5987d08e8f5581ec0/internal/third_party/forked/golang/LICENSE",
           "verified": true
         },
         {
           "path": "internal/third_party/forked/golang/PATENTS",
           "kind": "patent_notice",
           "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
-          "source": "https://github.com/kubernetes/utils/blob/bc988d571ff40eb17793769e9c1b71ecf8ee9c0f/internal/third_party/forked/golang/PATENTS",
+          "source": "https://github.com/kubernetes/utils/blob/be93311217bd4e42d0aa42a5987d08e8f5581ec0/internal/third_party/forked/golang/PATENTS",
+          "verified": true
+        },
+        {
+          "path": "third_party/forked/golang/LICENSE",
+          "kind": "license",
+          "sha256": "dd26a7abddd02e2d0aba97805b31f248ef7835d9e10da289b22e3b8ab78b324d",
+          "source": "https://github.com/kubernetes/utils/blob/be93311217bd4e42d0aa42a5987d08e8f5581ec0/third_party/forked/golang/LICENSE",
+          "verified": true
+        },
+        {
+          "path": "third_party/forked/golang/PATENTS",
+          "kind": "patent_notice",
+          "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+          "source": "https://github.com/kubernetes/utils/blob/be93311217bd4e42d0aa42a5987d08e8f5581ec0/third_party/forked/golang/PATENTS",
+          "verified": true
+        },
+        {
+          "path": "third_party/forked/golang/btree/LICENSE",
+          "kind": "license",
+          "sha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd",
+          "source": "https://github.com/kubernetes/utils/blob/be93311217bd4e42d0aa42a5987d08e8f5581ec0/third_party/forked/golang/btree/LICENSE",
           "verified": true
         }
       ],
       "excluded_discovered_legal_paths": [
         "inotify/LICENSE",
-        "inotify/PATENTS",
-        "third_party/forked/golang/LICENSE",
-        "third_party/forked/golang/PATENTS"
+        "inotify/PATENTS"
       ],
       "target_mask": 170
     },
     {
       "module": "sigs.k8s.io/controller-runtime",
-      "version": "v0.23.1",
-      "module_sum": "h1:TjJSM80Nf43Mg21+RCy3J70aj/W6KyvDtOlpKf+PupE=",
+      "version": "v0.25.2",
+      "module_sum": "h1:bEkK3PVOIVK9X8QWLGVhJgmFc++47vfT6wakSzAOLsQ=",
       "primary_license_identifiers": [
         "Apache-2.0"
       ],
@@ -3242,14 +3347,14 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/kubernetes-sigs/controller-runtime",
-        "hash": "f52bbb8bb1a2275cbe90dec8d6c12d5cacb1a7de"
+        "hash": "5d8467b3065818a3b382d8f6941147a801fd1969"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1",
-          "source": "https://github.com/kubernetes-sigs/controller-runtime/blob/f52bbb8bb1a2275cbe90dec8d6c12d5cacb1a7de/LICENSE",
+          "source": "https://github.com/kubernetes-sigs/controller-runtime/blob/5d8467b3065818a3b382d8f6941147a801fd1969/LICENSE",
           "verified": true
         }
       ],
@@ -3318,8 +3423,8 @@
     },
     {
       "module": "sigs.k8s.io/secrets-store-csi-driver",
-      "version": "v1.6.0",
-      "module_sum": "h1:YpKG/2hJkp3EkRGpH5SPxg1/5AkmeD5pwHNKIlE90FU=",
+      "version": "v1.6.1",
+      "module_sum": "h1:u/RFkwkq41ErK/1IXKkXQUDia8R0mZYB2q8VrFjoI8c=",
       "primary_license_identifiers": [
         "Apache-2.0"
       ],
@@ -3328,14 +3433,14 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/kubernetes-sigs/secrets-store-csi-driver",
-        "hash": "4960f9637c51ad9cb9ef264481bc6d9a98bf1f1c"
+        "hash": "0e4ceeb734246e1de5267d8968023a3c8dcff39a"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "43070e2d4e532684de521b885f385d0841030efa2b1a20bafb76133a5e1379c1",
-          "source": "https://github.com/kubernetes-sigs/secrets-store-csi-driver/blob/4960f9637c51ad9cb9ef264481bc6d9a98bf1f1c/LICENSE",
+          "source": "https://github.com/kubernetes-sigs/secrets-store-csi-driver/blob/0e4ceeb734246e1de5267d8968023a3c8dcff39a/LICENSE",
           "verified": true
         }
       ],
@@ -3346,8 +3451,8 @@
     },
     {
       "module": "sigs.k8s.io/structured-merge-diff/v6",
-      "version": "v6.3.2-0.20260122202528-d9cc6641c482",
-      "module_sum": "h1:2WOzJpHUBVrrkDjU4KBT8n5LDcj824eX0I5UKcgeRUs=",
+      "version": "v6.4.2",
+      "module_sum": "h1:qdOxHwrl2Kaag1aQEarlYcOA9vSyGCp3CIki3aW8c4Q=",
       "primary_license_identifiers": [
         "Apache-2.0"
       ],
@@ -3356,14 +3461,14 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/kubernetes-sigs/structured-merge-diff",
-        "hash": "d9cc6641c48292946e838bfc3b9bf7c297526757"
+        "hash": "15d075473efece0367330fd20a7cc2aad2eeb998"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1",
-          "source": "https://github.com/kubernetes-sigs/structured-merge-diff/blob/d9cc6641c48292946e838bfc3b9bf7c297526757/LICENSE",
+          "source": "https://github.com/kubernetes-sigs/structured-merge-diff/blob/15d075473efece0367330fd20a7cc2aad2eeb998/LICENSE",
           "verified": true
         }
       ],

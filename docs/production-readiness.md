@@ -107,11 +107,12 @@ The MySQL compatibility baseline is the production version `8.0.22`; container i
 6. A release image passes startup, migration, readiness, graceful-shutdown, backup-verification, and dependency-recovery drills.
 7. Load and leakage gates pass on a recorded machine and configuration.
 
-Core/CLI and SDK modules retain Go `1.25.13` language compatibility. The Kubernetes
-module requires Go `1.26.10` after its x/net security update. Production images and release
+The SDK module retains Go `1.25.13` language compatibility. Core/CLI modules require
+Go `1.26` since their November 2026 dependency update (several dependencies now need
+it, and Go 1.25 is no longer supported); the Kubernetes module requires Go `1.26.10`
+after its x/net security update. Production images and release
 bundles use the digest-pinned/reviewed Go `1.26.10` builder; use the tagged build
-scripts for production builds. The older-toolchain CI lane checks compatibility,
-not the security status of binaries built with that old runtime. Release
+scripts for production builds. Release
 `govulncheck v1.7.0` runs with the production toolchain. Unimported advisory-bearing
 modules in the core graph remain identified separately. The v1.2.1 evidence and
 final CI/artifact receipts are linked from its [release record](verification/2026-10-16.md).

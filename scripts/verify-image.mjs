@@ -104,8 +104,12 @@ try {
     }
   }
   if (binary === 'configra') {
-    assert.equal(hash(readFileSync(join(moduleDirectory, 'sources/mysql-v1.10.0.zip'))),
-      'dc93f5770556406e82bf750a980d2316f882a19d883a3689eadb820708c2b651');
+    // The reviewed manifest pins the exact MPL source archive for the MySQL driver version that is linked.
+    const mysql = info.Deps.find((entry) => entry.Path === 'github.com/go-sql-driver/mysql');
+    const covered = JSON.parse(readFileSync(join(root, 'scripts/go-licenses/reviewed.json'), 'utf8')).modules
+      .find((entry) => entry.module === mysql?.Path && entry.version === mysql?.Version)?.covered_source_archive;
+    assert.ok(covered?.verified, 'The linked MySQL driver has a reviewed source archive');
+    assert.equal(hash(readFileSync(join(moduleDirectory, `sources/mysql-${mysql.Version}.zip`))), covered.sha256);
     const uiDirectory = join(temporary, 'ui');
     run(['cp', `${container}:/licenses/configra/ui`, uiDirectory]);
     const notices = readFileSync(join(uiDirectory, 'THIRD_PARTY_NOTICES.txt'));

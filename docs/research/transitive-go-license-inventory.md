@@ -2,6 +2,66 @@
 
 Reviewed 2026-09-12. This report inventories **93 distinct application-module/version pairs** in the eight `v0.1.0-rc.2-review.2` executables under `.cache/release-license-check-20260912/dist/v0.1.0-rc.2-review.2/`. It covers the server and Kubernetes command on Darwin/Linux and amd64/arm64. The Go runtime, UI/npm dependencies, and container CA bundle have separate scope; see [distribution requirements](distribution-license-requirements.md).
 
+## Follow-up — 2026-11-04 (dependency update)
+
+The Go dependency update from Dependabot (#28) changes the root, e2e and
+Kubernetes modules. The root and e2e modules now declare `go 1.26.0`, because
+several updated dependencies require Go 1.26. The reviewed toolchain stays
+Go 1.26.10. The manifest now has **100 module/version records and 197 retained
+files**, up from 96 and 193. 57 newly selected pairs were reviewed and 53 records
+that are no longer linked were removed. Two unchanged pairs changed target
+masks: `fsnotify` v1.9.0 is now CLI-only, and `zap` v1.28.0 is now used by the
+server and Kubernetes command.
+
+Package selections come from target-matched `go list -deps` in the collector's
+own environment. On the pre-update tree this reproduced all twelve recorded
+profiles exactly. After the update, the four CLI profiles are unchanged, and the
+server and Kubernetes profiles have new counts and digests. For each new pair,
+the module sum and VCS origin come from `go mod download`. Every retained file
+was compared byte for byte with its pinned source: the GitHub blob, the
+googlesource file, or the canonical module ZIP entry. All 197 matched.
+Legal-named files were found across each whole module and classified by
+whether they enclose a selected package, then compared with the previous
+reviewed version. Selected source and assembly files that changed were checked
+for new copyright holders, license statements and notes about copied code.
+
+- **go-openapi.** `jsonpointer` and `jsonreference` v1.0.0 add Apache-2.0
+  NOTICE files that credit the go-swagger maintainers and recall the original
+  Apache-2.0 sigu-399 code. Both NOTICE files are retained. The `jsonpointer`
+  LICENSE only drops a leading blank line. `swag` v0.27.1 splits into eleven
+  submodules: `cmdutils`, `conv`, `fileutils`, `jsonutils`, `loading`,
+  `mangling`, `netutils`, `pools`, `stringutils`, `typeutils` and `yamlutils`.
+  Their archives carry the repository-root Apache-2.0 LICENSE, recorded at the
+  root path as for OpenTelemetry `trace`. The generated `CONTRIBUTORS.md` lists
+  are contribution counts, not copyright notices. Like the CONTRIBUTORS files
+  in earlier reviews, they are not retained.
+- **k8s.io/utils.** `third_party/forked/golang/btree` is derived from
+  `github.com/google/btree`. It keeps its own Apache-2.0 LICENSE and Google
+  2014–2022 / Kubernetes 2025 headers. That LICENSE is retained, together with
+  the enclosing `third_party/forked/golang` Go BSD LICENSE and PATENTS, which
+  are retained as directory scope. `google/btree` itself is no longer linked.
+  `client-go` adds `third_party/forked/httpcache/LICENSE` in an unselected
+  subtree, so it is listed as excluded.
+- **klauspost/compress v1.20.1.** Six reviewed avo assembly files were
+  regenerated, and `huff0/decompress_arm64.s` is newly selected. All of them
+  carry only generated-code headers. The S2 provenance of
+  `zstd/matchlen_amd64.s` is unchanged. The root, snapref, xxhash and S2 texts
+  are byte-identical.
+- **go-sql-driver/mysql v1.10.1.** AUTHORS adds one contributor, and the MPL-2.0
+  LICENSE is unchanged. The covered-source ZIP is now the exact v1.10.1 archive
+  (SHA-256 `540ca42579d1…`).
+- **protobuf v1.36.12** now serves both the server and the Kubernetes command.
+  Its four selected generated files keep their Google 2008 copyright.
+  `descriptor.pb.go` now refers to the BSD license instead of repeating it, and
+  it is still retained as source-notice material.
+- **klog v2.140.0.** The newly selected `textlogger` carries an Intel
+  Corporation copyright under the same Apache-2.0 header.
+- `google/btree`, `josharian/intern`, `mailru/easyjson` and `gopkg.in/yaml.v3`
+  are no longer linked by the Kubernetes command, and `go.yaml.in/yaml/v2` is no
+  longer linked by the server. All other updated modules keep byte-identical
+  legal files, and their changed sources carry only their projects' usual
+  headers. Primary license identifiers are unchanged for every updated module.
+
 ## Follow-up — 2026-10-03 (v1.2.0)
 
 The current manifest covers **12 program/target combinations**: `configra`,
