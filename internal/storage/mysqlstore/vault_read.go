@@ -320,11 +320,14 @@ func (store *Store) readVaultItem(ctx context.Context, transaction *sql.Tx, name
 		return VaultItem{}, fmt.Errorf("read Vault Revision metadata: %w", err)
 	}
 
+	// Fields appear in the order they were first added to the Item. Fields created together before that order was
+	// recorded were inserted in key order, so they keep key order.
 	fieldRows, err := transaction.QueryContext(ctx, `
-		SELECT resource_key, display_name, field_type, archived
-		FROM vault_revision_fields
-		WHERE item_id = ? AND revision = ?
-		ORDER BY resource_key
+		SELECT revision_field.resource_key, revision_field.display_name, revision_field.field_type, revision_field.archived
+		FROM vault_revision_fields AS revision_field
+		JOIN vault_fields AS field ON field.item_id = revision_field.item_id AND field.id = revision_field.field_id
+		WHERE revision_field.item_id = ? AND revision_field.revision = ?
+		ORDER BY field.created_at, revision_field.resource_key
 	`, itemID, revision)
 	if err != nil {
 		return VaultItem{}, fmt.Errorf("read Vault Revision Fields: %w", err)

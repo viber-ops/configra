@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/viber-ops/configra/internal/machine"
 	"github.com/viber-ops/configra/internal/vaultcrypto"
@@ -364,6 +365,9 @@ type vaultFieldRecord struct {
 	name     string
 	typeName vaultdoc.FieldType
 	active   bool
+	// created marks a Field this commit adds; position is its place in the request.
+	created  bool
+	position int
 }
 
 func prepareVaultFields(
@@ -393,7 +397,7 @@ func prepareVaultFields(
 			return nil, fmt.Errorf("iterate Vault Fields: %w", err)
 		}
 	}
-	for _, field := range requested {
+	for position, field := range requested {
 		record, found := existing[field.Key]
 		if found && record.typeName != field.Type {
 			return nil, fmt.Errorf("Vault Field %s type cannot change: %w", field.Key, ErrValidation)
@@ -403,7 +407,7 @@ func prepareVaultFields(
 			if err != nil {
 				return nil, err
 			}
-			record = vaultFieldRecord{id: id, key: field.Key, typeName: field.Type}
+			record = vaultFieldRecord{id: id, key: field.Key, typeName: field.Type, created: true, position: position}
 		}
 		record.name = field.Name
 		record.active = true
@@ -521,21 +525,44 @@ func (store *Store) currentVaultSnapshot(
 }
 
 func writeVaultFields(ctx context.Context, transaction *sql.Tx, itemID []byte, fields []vaultFieldRecord) error {
+	var created []vaultFieldRecord
 	for _, field := range fields {
-		if field.active {
+		switch {
+		case field.created:
+			created = append(created, field)
+		case field.active:
+			// Renaming or restoring a Field keeps its created_at, and with it its place in the Item.
 			if _, err := transaction.ExecContext(ctx, `
-				INSERT INTO vault_fields (item_id, id, resource_key, display_name, field_type, archived_at)
-				VALUES (?, ?, ?, ?, ?, NULL)
-				ON DUPLICATE KEY UPDATE display_name = VALUES(display_name), archived_at = NULL
-			`, itemID, field.id, field.key, field.name, string(field.typeName)); err != nil {
+				UPDATE vault_fields SET display_name = ?, archived_at = NULL WHERE item_id = ? AND id = ?
+			`, field.name, itemID, field.id); err != nil {
 				return fmt.Errorf("write active Vault Field: %w", err)
 			}
-		} else if _, err := transaction.ExecContext(ctx, `
-			UPDATE vault_fields SET archived_at = COALESCE(archived_at, UTC_TIMESTAMP(6))
-			WHERE item_id = ? AND id = ?
-		`, itemID, field.id); err != nil {
-			return fmt.Errorf("archive removed Vault Field: %w", err)
+		default:
+			if _, err := transaction.ExecContext(ctx, `
+				UPDATE vault_fields SET archived_at = COALESCE(archived_at, UTC_TIMESTAMP(6))
+				WHERE item_id = ? AND id = ?
+			`, itemID, field.id); err != nil {
+				return fmt.Errorf("archive removed Vault Field: %w", err)
+			}
 		}
+	}
+	if len(created) == 0 {
+		return nil
+	}
+	// Fields are shown in the order they were first added to the Item, which is their created_at order. One
+	// statement shares a single CURRENT_TIMESTAMP(6), so the microsecond offsets alone order the new Fields as the
+	// request lists them, whatever the timing.
+	slices.SortFunc(created, func(left, right vaultFieldRecord) int { return left.position - right.position })
+	rows := make([]string, 0, len(created))
+	arguments := make([]any, 0, len(created)*6)
+	for index, field := range created {
+		rows = append(rows, "(?, ?, ?, ?, ?, NULL, CURRENT_TIMESTAMP(6) + INTERVAL ? MICROSECOND)")
+		arguments = append(arguments, itemID, field.id, field.key, field.name, string(field.typeName), index)
+	}
+	if _, err := transaction.ExecContext(ctx, `
+		INSERT INTO vault_fields (item_id, id, resource_key, display_name, field_type, archived_at, created_at)
+		VALUES `+strings.Join(rows, ", "), arguments...); err != nil {
+		return fmt.Errorf("create Vault Fields: %w", err)
 	}
 	return nil
 }
