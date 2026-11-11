@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { chooseEnvironment } from './environment.js';
+import { chooseEnvironment, checkEnvironments } from './environment.js';
 import { inventoryPage } from './inventory.js';
 
 async function mockIdentity(page, role = 'admin') {
@@ -305,7 +305,7 @@ test('administrator creates, archives, and restores a Config identity', async ({
 
   await page.getByRole('button', { name: 'New config' }).click();
   if (process.env.CONFIGRA_CONFIG_CREATE_SCREENSHOT) await page.screenshot({ path: process.env.CONFIGRA_CONFIG_CREATE_SCREENSHOT, fullPage: true });
-  await chooseEnvironment(page, 'Environment', 'production');
+  await checkEnvironments(page, 'Environments', ['production']);
   await page.getByLabel('Resource key').fill('payment');
   await page.getByLabel('Display name').fill('Payment service');
   await page.getByLabel('Format').selectOption('yaml');
@@ -935,6 +935,15 @@ test('administrator creates and controls the soft lifecycle of a Vault Item snap
       await route.fulfill({ status: 200, contentType: 'application/json', body: '{"outcome":"success","revision":1}' });
       return;
     }
+    if (request.method() === 'GET' && pathname === '/v1/vault-items/platform/redis') {
+      const snapshot = { fields: commit.body.snapshot.fields, variants: commit.body.snapshot.variants.map(({ id, environments }) => ({ id, environments })) };
+      await route.fulfill({ json: { namespace_key: 'platform', key: 'redis', display_name: commit.body.display_name, revision: 1, archived: false, snapshot } });
+      return;
+    }
+    if (request.method() === 'GET' && pathname.startsWith('/v1/vault-items/platform/redis/')) {
+      await route.fulfill({ json: { items: pathname.endsWith('/revisions') ? [{ revision: 1, actor_id: 'admin@example.com', created_at: '2026-08-27T01:00:00Z' }] : [], total: 0 } });
+      return;
+    }
     if (request.method() === 'POST') {
       const action = pathname.endsWith('/unarchive') ? 'unarchive' : 'archive';
       lifecycle.push({ action, operation: request.headers()['idempotency-key'] });
@@ -989,6 +998,11 @@ test('administrator creates and controls the soft lifecycle of a Vault Item snap
   expect(commit.body.snapshot.variants[1].environments).toEqual(['staging']);
   expect(commit.body.snapshot.variants[1].values.password.text).toBe('staging-secret');
   expect(commit.operation).toMatch(/^[0-9a-f-]{36}$/);
+  // A successful create opens the new Item, with values still hidden (#53).
+  await expect(page).toHaveURL(/#\/vault\/platform\/redis$/);
+  await expect(page.getByRole('heading', { name: 'Redis connection' })).toBeVisible();
+  await expect(page.getByText('secret-value')).toHaveCount(0);
+  await page.goto('/ui/#/vault');
   await page.getByRole('button', { name: 'Archive Redis connection' }).click();
   await page.getByRole('button', { name: 'Confirm archive Redis connection' }).click();
   await page.getByLabel('Status').selectOption('archived');

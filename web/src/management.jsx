@@ -85,6 +85,20 @@ export function InventoryPagination({ collection, t, onPageChange, hideSinglePag
   </>;
 }
 
+// Like useMutation, but remembers an operation for every distinct request, so a batch can retry each target
+// with the operation it first used: an applied write replays instead of creating a second one.
+export function useMutationSet(request) {
+  const attempts = useRef(new Map());
+  const mutate = (path, body, method = 'POST') => {
+    const signature = JSON.stringify([method, path, body]);
+    if (!attempts.current.has(signature)) attempts.current.set(signature, crypto.randomUUID());
+    const operationID = attempts.current.get(signature);
+    return request(path, { method, headers: { 'Content-Type': 'application/json', 'Idempotency-Key': operationID }, ...(body ? { body: JSON.stringify(body) } : {}) })
+      .catch(error => { error.operationID = operationID; throw error; });
+  };
+  return [mutate, () => attempts.current.clear()];
+}
+
 export function useMutation(request) {
   const attempt = useRef(null);
   const mutate = (path, body, method = 'POST') => {
