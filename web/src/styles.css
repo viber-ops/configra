@@ -734,6 +734,14 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .vault-value-editor > div:first-child span { border-radius: 999px; padding: 2px 6px; background: var(--fog); color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
 .vault-value-editor > textarea, .vault-secret-editor input { width: 100%; min-height: 38px; border: 1px solid var(--line-strong); border-radius: 4px; padding: 8px 9px; background: var(--surface); color: var(--ink); font: 12px/1.5 ui-monospace, "SFMono-Regular", Consolas, monospace; }
 .vault-value-editor > textarea { resize: vertical; }
+.vault-value-hint { grid-column: -2 / -1; margin-top: -8px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.vault-value-hint.warning { color: var(--amber-ink); }
+.vault-text-cleanup { display: grid; justify-items: start; gap: 8px; border: 1px solid var(--amber-line); border-radius: 4px; padding: 11px 13px; background: var(--amber-soft); color: var(--amber-ink); font-size: 12px; line-height: 1.5; }
+.vault-text-cleanup p { margin: 0; }
+.vault-text-cleanup ul { display: grid; gap: 3px; margin: 0; padding-left: 18px; }
+.vault-text-cleanup li { overflow-wrap: anywhere; }
+.vault-text-cleanup li code { margin-right: 6px; font-weight: 700; }
+.field-current > .status { flex: none; }
 .vault-secret-editor { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 5px; }
 .vault-secret-editor button { min-height: 34px; border: 0; background: transparent; color: var(--blue); cursor: pointer; font-size: 10px; font-weight: 700; }
 .vault-secret-editor button:disabled { color: var(--disabled); cursor: default; }

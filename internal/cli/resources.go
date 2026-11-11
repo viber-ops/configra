@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/spf13/cobra"
 	configra "github.com/viber-ops/configra-go"
@@ -159,6 +161,11 @@ func vaultCommand(settings *options) *cobra.Command {
 			if name == "" {
 				name = args[2]
 			}
+			if !binary && kind == "secret" && edgeWhitespace(data) {
+				// Secret values are stored exactly as given, unlike single-line Text (#62). stderr carries fixed codes
+				// only, so the warning is one JSON line without the value, like an error.
+				_ = json.NewEncoder(command.ErrOrStderr()).Encode(map[string]string{"warning": "secret_edge_whitespace"})
+			}
 			return settings.network(command, func(ctx context.Context, client *configra.Client, selected profile) error {
 				var result configra.MutationResult
 				var err error
@@ -217,4 +224,20 @@ func vaultCommand(settings *options) *cobra.Command {
 	outputFlags(fileGet, &fileOutput, &fileReveal)
 	file.AddCommand(fileGet)
 	return group
+}
+
+// edgeWhitespace reports whether value begins or ends with a character the server removes from single-line Text
+// (vaultdoc.IsEdgeSpace): Unicode White_Space, U+200B or U+FEFF. configractl does not link vaultdoc, so the rule is
+// repeated here and pinned by a test.
+func edgeWhitespace(value []byte) bool {
+	if len(value) == 0 {
+		return false
+	}
+	first, _ := utf8.DecodeRune(value)
+	last, _ := utf8.DecodeLastRune(value)
+	return edgeSpace(first) || edgeSpace(last)
+}
+
+func edgeSpace(r rune) bool {
+	return unicode.Is(unicode.White_Space, r) || r == 0x200B || r == 0xFEFF
 }

@@ -338,7 +338,8 @@ Parsing is strict and bounded to 1 MiB, 1000 Fields and 256 Environments:
 
 Problems carry a path, a line and a code, never a value, and nothing about the
 file is logged or audited. A clean draft fills the ordinary create form, in file
-order and with Secret values hidden, for review and changes. **Create Vault
+order and with Secret values hidden, for review and changes. Its single-line Text
+values are already cleaned of edge whitespace, as a save would store them. **Create Vault
 item** then writes the whole Item with the usual `PUT`, idempotency, audit and
 redirect to the new Item. Checking the file again replaces the form.
 
@@ -349,6 +350,63 @@ Vault 页面的“导入 YAML”用一个文件创建一个新的 Item 和一个
 已有 Item（包括已归档）都会按路径和行号列出，报错中不包含值。检查通过后，结果按文件
 顺序填入现有的创建表单（Secret 默认隐藏），核对或调整后点击“创建 Vault Item”，通过
 现有的 `PUT` 一次写入，沿用幂等、审计和创建后跳转。
+
+### Vault Text whitespace / Vault 文本值的首尾空白
+
+Since v1.4.1, a single-line **Text** value is stored without leading and trailing
+whitespace, so a pasted `" http://service.example.com:8918\n"` is saved, read and
+resolved as `http://service.example.com:8918`
+([#62](https://github.com/viber-ops/configra/issues/62)). Whitespace inside the
+value is kept (`XOOM INTERNET LIMITED` stays as it is). The removed characters are
+spaces, tabs, line breaks, U+00A0, the full-width space U+3000 and the other
+Unicode White_Space characters, plus the invisible U+200B and U+FEFF that copying
+from documents leaves behind. A value of only whitespace becomes `""`, which is a
+valid empty Text value.
+
+These values are stored exactly as given:
+- **Text that still contains a line break** once its edges are removed, such as a
+  certificate, a key or a script, because a final newline or an indent can matter;
+- **Secret** values: the editor warns, without showing the value, when one starts
+  or ends with whitespace, and `configractl` reports `secret_edge_whitespace`;
+- **File** bytes.
+
+The rule applies on every write path: the editor, `PUT /v1/vault-items/{namespace}/{item}`,
+scoped writes and `configractl`, and YAML import, whose draft already shows the
+cleaned values. A single-line Text whose edge whitespace is meant to be there
+therefore needs a Secret Field instead. Saving a value that equals the stored one
+once trimmed is `no_change` and adds no revision. A retried request must repeat
+the same body, because the Operation ID covers the bytes that were sent.
+
+Existing values are not rewritten. A Text value saved earlier with edge
+whitespace shows an **Edge whitespace** badge when the Item's values are revealed.
+In the editor:
+- the value is cleaned when its field loses focus;
+- a list above the Save button names each Field and Environment, in every Variant,
+  that saving will clean, without showing values;
+- **Remove now** cleans them without retyping.
+
+An Admin save sends the whole Item, so it cleans those values in every Variant. A
+scoped write cleans only the values it submits. Restoring a revision brings back
+its values exactly.
+
+从 v1.4.1 起，单行 **Text** 值保存时会去掉首尾空白（空格、Tab、换行、全角空格及其他
+Unicode 空白，以及复制时常带入的不可见字符 U+200B、U+FEFF），读取和 Config 解析得到的
+都是清理后的值；中间的空格保留。全是空白的值变为空字符串 `""`，空 Text 值本身是合法的。
+以下情况按原样保存：
+- 去掉首尾后仍含换行的多行 Text（证书、密钥、脚本等）；
+- Secret：首尾有空白时页面会提示，但不显示明文；
+- File。
+
+该规则对页面、管理 API、Scoped 写入、`configractl` 和 YAML 导入都生效。确实需要
+保留首尾空白的单行值请使用 Secret 字段。
+
+已有数据不会被批量改写。查看值时，首尾有空白的 Text 会标出“首尾有空白”。编辑时：
+- 字段失焦后自动清理；
+- 保存按钮上方列出保存时会被清理的字段和环境；
+- “立即清理”可直接清理，不用重新输入。
+
+管理员保存会提交整个 Item，因此会一并清理所有 Variant 中的这类值。Scoped 写入只清理
+本次提交的值。恢复历史版本时按原样恢复。
 
 ### Token grant edits / Token 授权修改
 

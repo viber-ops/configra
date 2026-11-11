@@ -286,6 +286,10 @@ func (reader *reader) item(root *yaml.Node) Draft {
 			reader.add(path+".type", reader.lines[path+".type"], CodeUnsupportedType)
 		}
 		value, valued := reader.text(node, fieldEntries, path, "value", true)
+		if fieldType == string(vaultdoc.Text) {
+			// The draft shows the value the create form will store (#62).
+			value = vaultdoc.NormalizeText(value)
+		}
 		if valued && len(value) > vaultdoc.MaxTextBytes {
 			reader.add(path+".value", reader.lines[path+".value"], CodeValueTooLarge)
 		}

@@ -92,6 +92,14 @@ Vault `fields` entries use `{key, name, type}`. `values` maps each Field key to
 snapshot. A Field's type is immutable; File size is capped at 5 MiB, Text/Secret at
 512 KiB, encrypted snapshot plaintext at 10 MiB, and JSON request bodies at 32 MiB.
 
+Since v1.4.1, a single-line Text value this request submits is stored without
+leading and trailing whitespace, as in the Management UI
+([UI notes](ui.md#vault-text-whitespace--vault-文本值的首尾空白)). Text that still
+contains a line break, Secret and File values, and values the request does not
+submit are stored exactly as given. Writing a value that equals the stored value
+once trimmed is `no_change` and does not split a shared Variant. Retry an uncertain
+write with the same body: the Operation ID covers the bytes sent.
+
 Value updates isolate the selected Environment, splitting a shared Variant when
 necessary. Item Display Names and Field definitions are shared: changing them,
 adding/removing Fields or deleting an Item requires grants for **every** bound

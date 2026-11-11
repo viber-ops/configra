@@ -70,6 +70,14 @@ func (store *Store) prepareScopedVault(ctx context.Context, tx *sql.Tx, commit *
 	switch request.Action {
 	case "put_item":
 		fields, values = slices.Clone(request.Fields), maps.Clone(request.Values)
+		types := make(map[string]vaultdoc.FieldType, len(fields))
+		for _, field := range fields {
+			types[field.Key] = field.Type
+		}
+		// Normalize only what this token submitted (#62); values carried over from other Variants stay byte-equal.
+		for key, value := range values {
+			values[key] = vaultdoc.NormalizeValue(types[key], value)
+		}
 	case "put_field":
 		if !validResourceKey(request.Field.Key) {
 			return ErrValidation
@@ -80,7 +88,7 @@ func (store *Store) prepareScopedVault(ctx context.Context, tx *sql.Tx, commit *
 		} else {
 			fields[index] = request.Field
 		}
-		values[request.Field.Key] = request.Value
+		values[request.Field.Key] = vaultdoc.NormalizeValue(request.Field.Type, request.Value)
 	case "delete_field":
 		if target < 0 {
 			return ErrNotFound
