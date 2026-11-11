@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "toolchain": "go1.26.10",
+  "toolchain": "go1.26.11",
   "package_profiles": [
     {
       "target": "configra/darwin/amd64",
@@ -1913,7 +1913,7 @@
           "path": "Go-BSD-3-Clause.LICENSE",
           "kind": "supplemental_upstream_license",
           "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
-          "source": "https://github.com/golang/go/blob/go1.26.10/LICENSE",
+          "source": "https://github.com/golang/go/blob/go1.26.11/LICENSE",
           "verified": true,
           "qualification": "Full Go BSD-3-Clause terms supplement the original Go copyright headers retained by decimal-go.go and rounding.go; this toolchain version is not asserted to be their historical port origin.",
           "external_to_module": true

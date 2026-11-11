@@ -12,7 +12,7 @@ COPY web/src ./src
 RUN npm run build
 RUN node scripts/export-licenses.mjs /src/web/dist /out/ui-licenses
 
-FROM --platform=$BUILDPLATFORM golang:1.26.10-bookworm@sha256:23ce71337b726608afb1bc00986e630a05034a87a87ea1fc2cd1ae5cf33387eb AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.11-bookworm@sha256:dc40a13b61304647ed7e5d581d246b86413dfc29d63c6d018310feb93cd98fc0 AS build
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -34,7 +34,7 @@ COPY scripts/ca-notices ./scripts/ca-notices
 ADD --checksum=sha256:934942a985b2efd7a8c122cb1d42cd87911cf6ac365c545938619fcf268ea8f4 https://snapshot-cloudflare.debian.org/file/fde2c52fcb2eca9b91939d726dcce3cc6b6def90 /tmp/ca-certificates-source.tar.xz
 RUN --mount=type=cache,target=/root/.cache/go-build go run ./scripts/ca-notices -rootfs / -source /tmp/ca-certificates-source.tar.xz -out /out/licenses/ca-certificates
 RUN --mount=type=cache,target=/root/.cache/go-build go build -trimpath -buildvcs=false -o /tmp/configra-go-licenses ./scripts/go-licenses
-RUN GOOS=$TARGETOS GOARCH=$TARGETARCH sh scripts/go-notices/collect.sh /out/licenses/go1.26.10
+RUN GOOS=$TARGETOS GOARCH=$TARGETARCH sh scripts/go-notices/collect.sh /out/licenses/go1.26.11
 COPY --from=web-build /src/web/dist ./web/dist
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
