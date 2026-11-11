@@ -2,7 +2,7 @@ import React, { lazy, Suspense, useDeferredValue, useEffect, useId, useMemo, use
 import { createRoot } from 'react-dom/client';
 import { AuthorityManagement, CertificateManagement, authorityLabel } from './security/Certificates.jsx';
 import { Sessions, sessionLabel } from './security/Sessions.jsx';
-import { request, managementError, ActionError, useInventory, InventoryPagination, useMutation } from './management.jsx';
+import { request, managementError, ActionError, useInventory, InventoryPagination, useMutation, useMutationSet } from './management.jsx';
 import { validateTokenInput, tokenValidationMessage } from './token-validation.js';
 import { CopyValue } from './CopyValue.jsx';
 import { Expiration, ExpiryInput, useCurrentTime } from './security/Lifetime.jsx';
@@ -134,6 +134,26 @@ const messages = {
     loadTemplate: 'Load template',
     editedCopyNote: 'Edited content is saved as a new first version, not as a copy of the source revision.',
     alreadyHasConfig: 'already has this Config',
+    insertVaultReference: 'Insert Vault reference',
+    vaultReferenceSearch: 'Search Namespace, Item, name or Field key',
+    vaultReferenceItems: 'Vault Items',
+    vaultReferenceFields: 'Fields',
+    vaultReferenceChooseItem: 'Choose a Vault Item to see its Fields.',
+    vaultReferenceFile: 'File Fields are read through their own endpoint and cannot be inserted as a value.',
+    vaultReferenceArchived: 'This Item is archived, so its references do not resolve. Restore it first.',
+    vaultReferenceNoVariant: 'No Variant covers {environment} yet, so this reference will not resolve there until one does.',
+    vaultReferenceBound: 'A Variant covers {environment}.',
+    vaultReferencePlacement: 'Put the cursor where a value goes, inside empty quotes, or select a whole value, then insert again.',
+    insert: 'Insert',
+    batchTargets: 'Target Environments',
+    batchCreateNote: 'Batch create: each Environment gets its own first version with this content. Later edits in one Environment are not synchronised to the others.',
+    createInEnvironments: 'Create in {count} Environments',
+    retryFailedEnvironments: 'Retry failed Environments',
+    batchConflict: 'Already has this Config, so it is not written.',
+    batchCreated: 'Created v{revision}',
+    batchWriting: 'Writing…',
+    batchCheckFailed: 'Could not check this Environment; the write still validates the content.',
+    chooseEnvironments: 'Choose at least one Environment.',
     preflightChecking: 'Checking against {environment}…',
     preflightClear: 'Checked against {environment}: every Vault reference has a value there.',
     preflightWarnings: 'Checked against {environment}: these Vault references have no value there yet.',
@@ -598,6 +618,26 @@ const messages = {
     loadTemplate: '加载模板',
     editedCopyNote: '编辑后的内容将作为新的首个版本保存，而不是源 Revision 的副本。',
     alreadyHasConfig: '已有此 Config',
+    insertVaultReference: '插入 Vault 引用',
+    vaultReferenceSearch: '搜索 Namespace、Item、名称或字段键',
+    vaultReferenceItems: 'Vault Item',
+    vaultReferenceFields: '字段',
+    vaultReferenceChooseItem: '选择一个 Vault Item 以查看其字段。',
+    vaultReferenceFile: 'File 字段通过单独的接口读取，不能作为值插入。',
+    vaultReferenceArchived: '该 Item 已归档，其引用无法解析。请先恢复。',
+    vaultReferenceNoVariant: '{environment} 尚无对应的 Variant，在添加之前该引用在此环境无法解析。',
+    vaultReferenceBound: '{environment} 有对应的 Variant。',
+    vaultReferencePlacement: '请将光标放在值的位置、空引号内，或选中整个值，然后再插入。',
+    insert: '插入',
+    batchTargets: '目标环境',
+    batchCreateNote: '本次为批量创建：每个环境各自创建内容相同的第一个版本，之后在某个环境中的修改不会自动同步到其他环境。',
+    createInEnvironments: '在 {count} 个环境中创建',
+    retryFailedEnvironments: '重试失败的环境',
+    batchConflict: '已有同名 Config，不会写入。',
+    batchCreated: '已创建 v{revision}',
+    batchWriting: '写入中…',
+    batchCheckFailed: '无法检查该环境；写入时仍会校验内容。',
+    chooseEnvironments: '请至少选择一个环境。',
     preflightChecking: '正在按 {environment} 检查…',
     preflightClear: '已按 {environment} 检查：所有 Vault 引用在该环境都有值。',
     preflightWarnings: '已按 {environment} 检查：以下 Vault 引用在该环境尚无值。',
@@ -1796,7 +1836,13 @@ function Configs({ principal, filters = new URLSearchParams(), t }) {
   const [initialPage, setInitialPage] = useState(() => Math.max(1, Number.parseInt(filters.get('page'), 10) || 1));
   const [createFormat, setCreateFormat] = useState('yaml');
   const [createContent, setCreateContent] = useState('');
-  const [createEnvironment, setCreateEnvironment] = useState(templateLink?.environment || '');
+  const [createEnvironments, setCreateEnvironments] = useState(templateLink?.environment ? [templateLink.environment] : []);
+  const [createKey, setCreateKey] = useState('');
+  // Creating in several Environments at once (#50): a per-target preflight, then per-target results.
+  const [batchMutate, resetBatch] = useMutationSet(request);
+  const [batch, setBatch] = useState(null);
+  const [preflight, setPreflight] = useState({});
+  const batchCreate = createEnvironments.length > 1;
   const state = useInventory(`/v1/configs?${new URLSearchParams({ status: statusFilter, environment: environmentFilter, q: query, unbound: String(filters.get('unbound') === 'true') })}`, refresh, initialPage);
   const filterKey = filters.toString();
   useEffect(() => {
@@ -1808,14 +1854,59 @@ function Configs({ principal, filters = new URLSearchParams(), t }) {
     setEnvironmentFilter(filters.get('environment') || '');
     setInitialPage(Math.max(1, Number.parseInt(filters.get('page'), 10) || 1));
   }, [filterKey]);
+  // Check the content against every target before writing: syntax errors block, missing Vault values are listed per
+  // Environment, and an Environment that already has this Config is a conflict that is never written.
+  useEffect(() => {
+    if (!batchCreate || !createContent.trim()) { setPreflight({}); return undefined; }
+    let live = true;
+    const keyValid = /^[a-z][a-z0-9_-]{0,62}$/.test(createKey);
+    setPreflight(Object.fromEntries(createEnvironments.map(environment => [environment, { status: 'checking' }])));
+    const timer = window.setTimeout(() => {
+      for (const environment of createEnvironments) {
+        Promise.all([
+          request('/v1/configs/validate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ environment, format: createFormat, content: createContent }) }),
+          keyValid ? request(`/v1/environments?${new URLSearchParams({ config: createKey, key: environment, limit: '1' })}`) : Promise.resolve({ items: [] }),
+        ]).then(([checked, existing]) => live && setPreflight(current => ({ ...current, [environment]: existing.items.some(item => item.key === environment)
+          ? { status: 'conflict' } : { status: 'ready', warnings: checked.warnings || [] } })))
+          .catch(error => live && setPreflight(current => ({ ...current, [environment]: error.status === 422
+            ? { status: 'invalid', error: managementError(error, t, t.config_document_invalid) } : { status: 'failed' } })));
+      }
+    }, 350);
+    return () => { live = false; window.clearTimeout(timer); };
+  }, [batchCreate, createEnvironments.join(','), createKey, createFormat, createContent]);
+  // Any change to the request is a new intent: forget results and operations.
+  useEffect(() => { setBatch(null); resetBatch(); }, [createEnvironments.join(','), createKey, createFormat, createContent]);
+  const createInEnvironments = async body => {
+    let results = { ...(batch || {}) };
+    for (const environment of createEnvironments) if (preflight[environment]?.status === 'conflict') results[environment] = { status: 'conflict' };
+    // Each target is written on its own, so successes stand when another target fails. A retry repeats only the
+    // failures, with the operation each one first used, so an applied write replays rather than writing again.
+    const targets = createEnvironments.filter(environment => !['created', 'conflict'].includes(results[environment]?.status));
+    for (const environment of targets) results[environment] = { status: 'writing' };
+    setBatch(results);
+    let created = false;
+    for (const environment of targets) {
+      try {
+        const result = await batchMutate(`/v1/environments/${encodeURIComponent(environment)}/configs/${encodeURIComponent(createKey)}`, body, 'PUT');
+        results = { ...results, [environment]: { status: 'created', revision: result.revision, warnings: result.warnings || [] } };
+        created = true;
+      } catch (error) {
+        results = { ...results, [environment]: error.status === 409 ? { status: 'conflict' } : { status: 'failed', error: createError(error, t, t.saveFailed) } };
+      }
+      setBatch(results);
+    }
+    if (created) setRefresh(value => value + 1);
+  };
   const create = async event => {
     event.preventDefault();
     setError(null);
     const data = new FormData(event.currentTarget);
     if (!createContent.trim()) return setError({ message: t.saveFailed });
+    if (!createEnvironments.length) return setError({ message: t.chooseEnvironments });
+    if (batchCreate) return createInEnvironments({ name: data.get('display_name'), expected_revision: 0, format: createFormat, content: createContent });
     try {
       // The same request keeps its operation ID, so a retry after a lost response replays instead of conflicting.
-      const result = await createMutate(`/v1/environments/${encodeURIComponent(data.get('environment'))}/configs/${encodeURIComponent(data.get('key'))}`,
+      const result = await createMutate(`/v1/environments/${encodeURIComponent(createEnvironments[0])}/configs/${encodeURIComponent(createKey)}`,
         { name: data.get('display_name'), expected_revision: 0, format: createFormat, content: createContent }, 'PUT');
       setWarnings(result.warnings || []);
       setCreating(false);
@@ -1837,17 +1928,19 @@ function Configs({ principal, filters = new URLSearchParams(), t }) {
   };
   return (
     <ResourcePage className="config-index-page" eyebrow="CFG / canonical YAML + JSON" title={t.configs} body={t.configBody}
-      action={principal.role === 'admin' && <button className="primary-action compact-action" type="button" onClick={() => { setCreating(value => !value); setCreateSession(value => value + 1); setTemplateSeed(null); setLoadedTemplate(null); resetCreate(); setCreateFormat('yaml'); setCreateContent(''); setWarnings([]); }}>{t.newConfig}</button>}>
+      action={principal.role === 'admin' && <button className="primary-action compact-action" type="button" onClick={() => { setCreating(value => !value); setCreateSession(value => value + 1); setTemplateSeed(null); setLoadedTemplate(null); resetCreate(); setCreateFormat('yaml'); setCreateContent(''); setCreateKey(''); setCreateEnvironments([]); setWarnings([]); }}>{t.newConfig}</button>}>
       {creating && <form className="config-create-form" onSubmit={create}>
-        <EnvironmentSelect label={t.environment} name="environment" required value={createEnvironment} onChange={setCreateEnvironment} t={t} />
-        <label>{t.resourceKey}<input name="key" required maxLength="63" pattern="[a-z][a-z0-9_-]{0,62}" autoComplete="off" /></label>
+        <EnvironmentChoices label={t.environments} checked={environment => createEnvironments.includes(environment.key)}
+          onChange={(key, on) => setCreateEnvironments(current => on ? [...current.filter(item => item !== key), key] : current.filter(item => item !== key))} t={t} />
+        <label>{t.resourceKey}<input name="key" required maxLength="63" pattern="[a-z][a-z0-9_-]{0,62}" autoComplete="off" value={createKey} onChange={event => setCreateKey(event.target.value)} /></label>
         <label>{t.displayName}<input name="display_name" required maxLength="255" autoComplete="off" /></label>
         <label>{t.format}<select name="format" value={createFormat} onChange={event => setCreateFormat(event.target.value)}><option value="yaml">YAML</option><option value="json">JSON</option></select></label>
         <ConfigTemplatePicker key={createSession} initialConfig={templateSeed?.config} initialEnvironment={templateSeed?.environment}
           replaceable={!createContent.trim() || createContent === loadedTemplate}
           onLoad={template => { setCreateFormat(template.format); setCreateContent(template.content); setLoadedTemplate(template.content); }} t={t} />
         <div className="form-source"><span>{t.configurationSource}</span><ConfigCodeEditor label={t.configurationSource} value={createContent} format={createFormat} readOnly={false} onChange={setCreateContent} /></div>
-        <div className="form-actions"><ActionError error={error} t={t} /><button className="primary-action compact-action" type="submit" disabled={!createContent.trim()}>{t.createConfig}</button></div>
+        {batchCreate && <ConfigBatchTargets environments={createEnvironments} preflight={preflight} batch={batch} configKey={createKey} t={t} />}
+        <div className="form-actions"><ActionError error={error} t={t} /><ConfigCreateButton environments={createEnvironments} content={createContent} preflight={preflight} batch={batch} t={t} /></div>
       </form>}
       <div className="config-index">
           {filters.get('unbound') === 'true' && <p>{t.noActiveConfigContext} · <a href="#/configs">{t.configs}</a></p>}
@@ -1887,6 +1980,45 @@ function Configs({ principal, filters = new URLSearchParams(), t }) {
       {!creating && error && <p className="inline-error"><ActionError error={error} t={t} /></p>}
     </ResourcePage>
   );
+}
+
+function ConfigCreateButton({ environments, content, preflight, batch, t }) {
+  if (environments.length < 2) return <button className="primary-action compact-action" type="submit" disabled={!content.trim()}>{t.createConfig}</button>;
+  const results = Object.values(batch || {});
+  const writing = results.some(result => result.status === 'writing');
+  const failures = results.some(result => result.status === 'failed');
+  const checks = environments.map(environment => preflight[environment]?.status);
+  const writable = environments.filter(environment => preflight[environment]?.status !== 'conflict').length;
+  const blocked = !content.trim() || writing || checks.includes('checking') || checks.includes(undefined) || checks.includes('invalid') || writable === 0 || (batch && !failures);
+  return <button className="primary-action compact-action" type="submit" disabled={blocked}>
+    {failures ? t.retryFailedEnvironments : t.createInEnvironments.replace('{count}', writable)}
+  </button>;
+}
+
+function ConfigBatchTargets({ environments, preflight, batch, configKey, t }) {
+  const invalid = Object.values(preflight).find(check => check.status === 'invalid');
+  return <section className="config-batch" aria-label={t.batchTargets}>
+    <p className="muted-note">{t.batchCreateNote}</p>
+    {invalid && <ActionError error={invalid.error} t={t} />}
+    <ul>{environments.map(environment => {
+      const result = batch?.[environment];
+      const check = preflight[environment] || { status: 'checking' };
+      const open = <a href={`#/configs/${configKey}/${environment}`}>{t.openTargetConfig}</a>;
+      return <li key={environment} data-environment={environment}><code>{environment}</code><div role="status">
+        {result?.status === 'writing' && <span className="muted-note">{t.batchWriting}</span>}
+        {result?.status === 'created' && <><span className="success-note">{t.batchCreated.replace('{revision}', result.revision)}</span> {open}
+          {result.warnings.length > 0 && <div className="config-warning-list"><ConfigWarningLines warnings={result.warnings} t={t} /></div>}</>}
+        {result?.status === 'conflict' && <><span>{t.batchConflict}</span> {open}</>}
+        {result?.status === 'failed' && <ActionError error={result.error} t={t} />}
+        {!result && check.status === 'checking' && <span className="muted-note">{t.preflightChecking.replace('{environment}', environment)}</span>}
+        {!result && check.status === 'conflict' && <><span>{t.batchConflict}</span> {open}</>}
+        {!result && check.status === 'failed' && <span className="muted-note">{t.batchCheckFailed}</span>}
+        {!result && check.status === 'ready' && (check.warnings.length
+          ? <div className="config-warning-list"><strong>{t.preflightWarnings.replace('{environment}', environment)}</strong><ConfigWarningLines warnings={check.warnings} t={t} /></div>
+          : <span className="muted-note">{t.preflightClear.replace('{environment}', environment)}</span>)}
+      </div></li>;
+    })}</ul>
+  </section>;
 }
 
 function ConfigHome({ configKey, preferredEnvironment = '', t }) {
@@ -2996,6 +3128,8 @@ function AuditPage({ principal, t }) {
 
 
 function ConfigDetail({ principal, configKey, environmentKey, t }) {
+  const editorController = useRef(null);
+  const [pickingReference, setPickingReference] = useState(false);
   const [state, setState] = useState({ status: 'loading' });
   const [source, setSource] = useState('');
   const [tab, setTab] = useState('raw');
@@ -3166,8 +3300,9 @@ function ConfigDetail({ principal, configKey, environmentKey, t }) {
             inspection.status === 'loading' ? <div className="collection-state"><span className="loading-line" /></div>
               : inspection.status === 'failed' ? <p className="inline-error" role="alert">{t.operationFailed}</p>
                 : <section className="editor-panel">
-                  <div className="editor-toolbar"><span>{viewedFormat.toUpperCase()}</span><div className="editor-toolbar-actions"><code>{t.revision} {viewedRevision}</code><CopyValue value={viewedContent} label={t.copyConfiguration} display={t.copyContent} t={t} /></div></div>
-                  <ConfigCodeEditor label={viewingCurrent ? t.configurationSource : t.revisionLabel.replace('{revision}', viewedRevision)} value={viewedContent} format={viewedFormat} readOnly={!viewingCurrent || principal.role !== 'admin'} onChange={value => { setSource(value); setSaveError(null); setValidation({ status: 'idle', warnings: [] }); }} />
+                  <div className="editor-toolbar"><span>{viewedFormat.toUpperCase()}</span><div className="editor-toolbar-actions"><code>{t.revision} {viewedRevision}</code>{principal.role === 'admin' && viewingCurrent && <button type="button" aria-pressed={pickingReference} onClick={() => setPickingReference(value => !value)}>{t.insertVaultReference}</button>}<CopyValue value={viewedContent} label={t.copyConfiguration} display={t.copyContent} t={t} /></div></div>
+                  {principal.role === 'admin' && viewingCurrent && pickingReference && <VaultReferencePicker environmentKey={environmentKey} onInsert={reference => editorController.current?.insertReference(reference)} onClose={() => setPickingReference(false)} t={t} />}
+                  <ConfigCodeEditor controller={editorController} label={viewingCurrent ? t.configurationSource : t.revisionLabel.replace('{revision}', viewedRevision)} value={viewedContent} format={viewedFormat} readOnly={!viewingCurrent || principal.role !== 'admin'} onChange={value => { setSource(value); setSaveError(null); setValidation({ status: 'idle', warnings: [] }); }} />
                   {principal.role === 'admin' && viewingCurrent && <div className="editor-actions">
                     <div className="editor-feedback" role="status">
                       {validation.status === 'saved' ? t.savedRevision.replace('{revision}', validation.revision) : validation.status === 'ready' && validation.warnings.length === 0 ? t.formatComplete : ''}
@@ -3480,6 +3615,72 @@ function ConfigCopy({ path, config, newConfig, existingEnvironments, t }) {
     {edited && showChanges && <ConfigDiffEditor source={config.content} target={diffTarget} sourceFormat={config.format} targetFormat={config.format}
       sourceLabel={`${config.environment_key}/${config.config_key}@v${config.revision}`} targetLabel={t.editedCopy} t={t} />}
     <ConfigCodeEditor label={t.source} readOnly={newConfig} value={content} format={config.format} onChange={value => { setContent(value); change(); }} />
+  </section>;
+}
+
+// Chooses a Vault Field and inserts its reference into the Config being edited (#51). It reads Item metadata only;
+// values stay behind the separate, explicitly authorised values endpoint.
+function VaultReferencePicker({ environmentKey, onInsert, onClose, t }) {
+  const [search, setSearch] = useState('');
+  const items = useInventory(`/v1/vault-items?${new URLSearchParams({ status: 'all', q: search })}`);
+  const [selected, setSelected] = useState(null);
+  const [detail, setDetail] = useState({ status: 'idle' });
+  const [field, setField] = useState(null);
+  const [placementError, setPlacementError] = useState(false);
+  useEffect(() => {
+    if (!selected) return undefined;
+    let live = true;
+    setDetail({ status: 'loading' });
+    setField(null);
+    request(`/v1/vault-items/${encodeURIComponent(selected.namespace_key)}/${encodeURIComponent(selected.key)}`)
+      .then(item => live && setDetail({ status: 'ready', item }))
+      .catch(error => live && setDetail({ status: 'failed', error: managementError(error, t, t.loadFailed) }));
+    return () => { live = false; };
+  }, [selected?.namespace_key, selected?.key]);
+  const item = detail.status === 'ready' ? detail.item : null;
+  const bound = Boolean(item?.snapshot.variants.some(variant => variant.environments.includes(environmentKey)));
+  const reference = selected && field ? `{vault.${selected.namespace_key}.${selected.key}.${field.key}}` : '';
+  const insert = () => {
+    if (!onInsert(reference)) return setPlacementError(true);
+    onClose();
+  };
+  return <section className="vault-reference-picker" aria-label={t.insertVaultReference}>
+    <div className="vault-reference-columns">
+      <div className="vault-reference-items">
+        <input type="search" aria-label={t.vaultReferenceSearch} placeholder={t.vaultReferenceSearch} value={search} onChange={event => setSearch(event.target.value)} autoFocus />
+        <div className="vault-reference-list" role="group" aria-label={t.vaultReferenceItems}>{items.items.map(entry => {
+          const key = `${entry.namespace_key}.${entry.key}`;
+          const active = selected && `${selected.namespace_key}.${selected.key}` === key;
+          return <button type="button" aria-pressed={Boolean(active)} key={key} onClick={() => { setSelected(entry); setPlacementError(false); }}>
+            <strong title={entry.display_name}>{entry.display_name}</strong><code>{key}</code>{entry.archived && <small>{t.statusArchived}</small>}
+          </button>;
+        })}</div>
+        {items.status === 'loading' && <span className="loading-line" role="status" aria-busy="true" />}
+        {items.status === 'ready' && !items.items.length && <p className="muted-note">{t.noResources}</p>}
+        <InventoryPagination collection={items} t={t} hideSinglePage />
+      </div>
+      <div className="vault-reference-fields">
+        {!selected && <p className="muted-note">{t.vaultReferenceChooseItem}</p>}
+        {detail.status === 'loading' && <span className="loading-line" role="status" aria-busy="true" />}
+        {detail.status === 'failed' && <ActionError error={detail.error} t={t} />}
+        {item && <>
+          <p className={bound ? 'muted-note' : 'vault-reference-warning'} role="status">{(bound ? t.vaultReferenceBound : t.vaultReferenceNoVariant).replace('{environment}', environmentKey)}</p>
+          {item.archived && <p className="vault-reference-warning" role="alert">{t.vaultReferenceArchived}</p>}
+          <div className="vault-reference-list" role="group" aria-label={t.vaultReferenceFields}>{item.snapshot.fields.map(entry => <button type="button" key={entry.key}
+            aria-pressed={field?.key === entry.key} disabled={entry.type === 'file' || item.archived} title={entry.type === 'file' ? t.vaultReferenceFile : undefined}
+            onClick={() => { setField(entry); setPlacementError(false); }}>
+            <strong>{entry.name}</strong><code>{entry.key}</code><small>{entry.type}</small>
+          </button>)}</div>
+          {item.snapshot.fields.some(entry => entry.type === 'file') && <p className="muted-note">{t.vaultReferenceFile}</p>}
+        </>}
+      </div>
+    </div>
+    <div className="vault-reference-actions">
+      <code aria-label={t.reference}>{reference || '—'}</code>
+      {placementError && <p className="vault-reference-warning" role="alert">{t.vaultReferencePlacement}</p>}
+      <button type="button" onClick={onClose}>{t.cancel}</button>
+      <button className="primary-action compact-action" type="button" disabled={!reference || item?.archived} onClick={insert}>{t.insert}</button>
+    </div>
   </section>;
 }
 

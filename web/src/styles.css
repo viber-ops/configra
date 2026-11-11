@@ -496,9 +496,10 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .template-import-status:empty { display: none; }
 .template-import-status p { margin: 0; }
 .template-import-status button { min-height: 38px; border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 14px; background: var(--surface); color: var(--blue); cursor: pointer; font-weight: 700; }
-.editor-toolbar { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); padding: 10px 14px; background: var(--surface-muted); }
+.editor-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; border-bottom: 1px solid var(--line); padding: 10px 14px; background: var(--surface-muted); }
 .editor-toolbar span, .editor-toolbar code { color: var(--muted); font: 700 11px ui-monospace, "SFMono-Regular", Consolas, monospace; }
-.editor-toolbar-actions { display: flex; align-items: center; gap: 10px; }
+.editor-toolbar-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 10px; }
+.editor-toolbar-actions > :is(code, button), .editor-toolbar .copy-value .copy-value-compact { white-space: nowrap; }
 .editor-toolbar-actions > button, .editor-toolbar .copy-value .copy-value-compact { min-height: 28px; border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 10px; background: var(--surface); color: var(--blue); cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 700; line-height: 1; }
 .editor-toolbar-actions > button[aria-pressed="true"] { border-color: var(--blue-line); background: var(--blue-soft); }
 .editor-toolbar .copy-value .copy-value-compact { display: inline-flex; align-items: center; gap: 6px; }
@@ -700,6 +701,26 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .vault-editor-variant code { border: 1px solid var(--line); border-radius: 4px; padding: 2px 5px; background: var(--surface); color: var(--blue); font-size: 10px; }
 .vault-editor-variant small { color: var(--muted); font-size: 10px; }
 .vault-variant-form { min-width: 0; padding: 15px; }
+.vault-reference-picker { margin: 0 0 12px; border: 1px solid var(--blue-line); border-radius: 5px; background: var(--surface-subtle); }
+.vault-reference-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.vault-reference-items, .vault-reference-fields { display: grid; align-content: start; gap: 8px; min-width: 0; padding: 12px; }
+.vault-reference-fields { border-left: 1px solid var(--line); }
+.vault-reference-items input[type="search"] { width: 100%; min-height: 34px; border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 10px; background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; }
+.vault-reference-list { display: grid; max-height: 248px; overflow: auto; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
+.vault-reference-list > button { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; border: 0; border-bottom: 1px solid var(--line); padding: 8px 10px; background: transparent; color: var(--ink); cursor: pointer; font: inherit; font-size: 13px; text-align: left; }
+.vault-reference-list > button:last-child { border-bottom: 0; }
+.vault-reference-list > button strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vault-reference-list > button code { grid-column: 1; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.vault-reference-list > button small { grid-column: 2; grid-row: 1 / span 2; align-self: center; color: var(--muted); font-size: 11px; }
+.vault-reference-list > button[aria-pressed="true"] { background: var(--blue-soft); box-shadow: inset 3px 0 0 var(--blue); }
+.vault-reference-list > button:disabled { background: var(--surface-disabled); color: var(--disabled); cursor: not-allowed; }
+.vault-reference-list > button:disabled :is(code, small) { color: var(--disabled); }
+.vault-reference-picker .muted-note { margin: 0; color: var(--muted); font-size: 12px; }
+.vault-reference-warning { margin: 0; border: 1px solid var(--amber-line); border-radius: 4px; padding: 7px 9px; background: var(--amber-soft); color: var(--amber-ink); font-size: 12px; }
+.vault-reference-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; border-top: 1px solid var(--line); padding: 10px 12px; }
+.vault-reference-actions > code { flex: 1 1 260px; min-width: 0; color: var(--amber); font-size: 12px; overflow-wrap: anywhere; }
+.vault-reference-actions > .vault-reference-warning { flex-basis: 100%; order: -1; }
+.vault-reference-actions > button:not(.primary-action) { min-height: 32px; border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 12px; background: var(--surface); color: var(--ink); cursor: pointer; font: inherit; font-size: 13px; font-weight: 600; }
 .vault-environment-picker { margin: 14px 0; border: 1px solid var(--line); border-radius: 5px; padding: 11px; }
 .vault-environment-picker legend { padding: 0 5px; font-size: 11px; font-weight: 700; }
 .choice-grid .choice-disabled { opacity: .55; cursor: default; }
@@ -730,6 +751,17 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .config-create-form > label, .vault-editor-form > label, .clone-form > label { display: grid; gap: 6px; font-size: 12px; font-weight: 700; }
 .config-create-form input, .config-create-form select, .vault-editor-form input, .clone-form input { width: 100%; min-height: 40px; border: 1px solid var(--line-strong); border-radius: 4px; padding: 7px 10px; background: var(--surface); }
 .config-create-form .form-source, .vault-editor-form .form-source { grid-column: 1 / -1; }
+/* Several target Environments (#50): the picker and the per-target list span the form. */
+.config-create-form > .vault-environment-picker, .config-create-form > .config-batch { grid-column: 1 / -1; }
+/* The form's full-width input rule must not stretch the Environment checkboxes. */
+.config-create-form .choice-grid input[type="checkbox"] { width: auto; min-height: 0; margin: 0; padding: 0; }
+.config-batch a { color: var(--blue); text-decoration: underline; text-underline-offset: 2px; }
+.config-batch { display: grid; gap: 10px; border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; background: var(--surface); }
+.config-batch p { margin: 0; }
+.config-batch ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.config-batch li { display: grid; grid-template-columns: minmax(90px, max-content) minmax(0, 1fr); align-items: baseline; gap: 12px; font-size: 12px; }
+.config-batch li > code { font: 700 11px ui-monospace, "SFMono-Regular", Consolas, monospace; }
+.config-batch li .config-warning-list { margin-top: 6px; }
 .config-create-form .form-source { display: grid; gap: 6px; font-size: 12px; font-weight: 700; }
 .config-create-form .config-code-editor { height: 300px; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--editor-surface); }
 .config-create-form textarea, .vault-editor-form textarea { width: 100%; min-height: 250px; resize: vertical; border: 1px solid var(--line-strong); border-radius: 4px; padding: 14px; background: var(--surface); color: var(--ink); font: 13px/1.65 ui-monospace, "SFMono-Regular", Consolas, monospace; }
@@ -980,6 +1012,8 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
 }
 
 @media (max-width: 620px) {
+  .vault-reference-columns { grid-template-columns: 1fr; }
+  .vault-reference-fields { border-top: 1px solid var(--line); border-left: 0; }
   .login-layout { padding: 22px; }
   .login-panel { min-height: calc(100vh - 80px); padding-top: 45px; }
   .login-copy h1 { font-size: 43px; }

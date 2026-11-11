@@ -281,3 +281,14 @@ test('clone points to an editable start from the same template', async ({ page }
   await page.locator('summary[aria-label="More actions"]').click();
   await expect(page.getByRole('link', { name: 'New Config from this template', exact: true })).toHaveAttribute('href', '#/configs?new=1&template=server&template_environment=test');
 });
+
+test('a typed search without a choice leaves the required target Environment empty', async ({ page }) => {
+  await sourcePage(page);
+  await page.getByRole('button', { name: 'Copy to environment', exact: true }).click();
+  const picker = page.getByRole('combobox', { name: 'Target environment', exact: true });
+  await picker.fill('prod');
+  await page.locator('.config-copy-panel > p').first().click();
+  await expect(picker).toHaveValue('');
+  expect(await picker.evaluate(element => element.validity.valueMissing)).toBe(true);
+  expect(await page.locator('input[type=hidden][name=target_environment]').inputValue()).toBe('');
+});

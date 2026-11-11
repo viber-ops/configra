@@ -65,7 +65,17 @@ func (store *Store) ListVaultItems(ctx context.Context, query VaultQuery) (Inven
 	if !query.valid() || (query.Namespace != "" && !validResourceKey(query.Namespace)) || (query.Environment != "" && !validResourceKey(query.Environment)) {
 		return page, ErrValidation
 	}
+	// A search also matches the current revision's active Field keys, so a reference can be found by its last part.
+	search := query.Search
+	query.Search = ""
 	where, arguments := query.filter("item.resource_key", "item.archived_at", "CONCAT(item.namespace_key, '.', item.resource_key)", "item.display_name")
+	if search != "" {
+		where += ` AND (LOCATE(LOWER(?), LOWER(CONCAT_WS(' ', CONCAT(item.namespace_key, '.', item.resource_key), item.display_name))) > 0
+			OR EXISTS (SELECT 1 FROM vault_revision_fields AS field
+				WHERE field.item_id = item.id AND field.revision = item.current_revision AND field.archived = FALSE
+				  AND LOCATE(LOWER(?), LOWER(CONVERT(field.resource_key USING utf8mb4))) > 0))`
+		arguments = append(arguments, search, search)
+	}
 	if query.Namespace != "" {
 		where += ` AND item.namespace_key = ?`
 		arguments = append(arguments, query.Namespace)

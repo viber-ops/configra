@@ -14,7 +14,7 @@
     "properties": [
       {
         "name": "configra:bundle-files",
-        "value": "[{\"path\":\"assets/editors-BFSIzvQ3.js\",\"sha256\":\"3db16daf1509f1767fc81eec17bcf261aef7e9a168ad1b68790564fcdb40093d\"},{\"path\":\"assets/index-BG9nOOCz.js\",\"sha256\":\"e59b8d52b91dcd03ce3877b135705af2539f23213ad650729766f013827c8fe2\"},{\"path\":\"assets/index-CA5aDooK.css\",\"sha256\":\"afe138448864797bb95dbeda84338aeef832b8100884d1682f97556692e396c7\"}]"
+        "value": "[{\"path\":\"assets/editors-BOxr5vVq.js\",\"sha256\":\"26a3858b59aa4965413ec486b0479264abe84d09eff3efa43a4ad760d3a60aa6\"},{\"path\":\"assets/index-BUGWZenr.css\",\"sha256\":\"a4de5055a3110114eef3256bbf8bcd393712da5348ffe03ae0629a4c61e70ae3\"},{\"path\":\"assets/index-d_YXRnYy.js\",\"sha256\":\"2b72096b34d1088d878418f794519253f663f10a2a161374bceffac6255ee4cd\"}]"
       },
       {
         "name": "configra:notices-sha256",
