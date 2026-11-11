@@ -70,6 +70,13 @@ for new copyright holders, license statements and notes about copied code.
   GO-2026-6865, both on the server targets. Their legal and reviewed assembly
   files are byte-identical, the changed sources carry only their usual headers,
   and the package guards are unchanged.
+- **Dependency update (2026-11-11).** `github.com/go-jose/go-jose/v4` moves from
+  v4.1.7 to v4.1.9 (server targets) and `golang.org/x/oauth2` from v0.37.0 to
+  v0.38.0 (all targets). Their legal files are byte-identical, both with the
+  reviewed copies and with upstream at the tagged commits. go-jose adds ML-DSA
+  files under its usual Apache-2.0 header; they build only with Go 1.27, so the
+  Go 1.26.11 toolchain links the stubs. The twelve package guards are unchanged.
+  Secrets Store CSI Driver 1.6.2 is not taken: it requires Go 1.27.
 
 ## Follow-up — 2026-10-03 (v1.2.0)
 
