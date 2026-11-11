@@ -12,6 +12,10 @@ const vaultItems = {
     namespace_key: 'payments', key: 'storage', display_name: 'Payment storage', archived: false, revision: 1,
     snapshot: { fields: [{ key: 'bucket', name: 'Bucket', type: 'text' }, { key: 'service-account', name: 'Service account', type: 'file' }], variants: [variant(['staging'])] },
   },
+  'billing/clients-conf': {
+    namespace_key: 'billing', key: 'clients-conf', display_name: 'Clients', archived: false, revision: 1,
+    snapshot: { fields: [{ key: 'google-login', name: 'Google login', type: 'secret' }], variants: [variant(['production'])] },
+  },
   'legacy/old': {
     namespace_key: 'legacy', key: 'old', display_name: 'Old credentials', archived: true, revision: 2,
     snapshot: { fields: [{ key: 'token', name: 'Token', type: 'secret' }], variants: [variant(['production'])] },
@@ -161,4 +165,25 @@ test('a past revision has no way to insert a reference', async ({ page }) => {
 test('a viewer has no way to insert a reference', async ({ page }) => {
   await detailPage(page, { role: 'viewer' });
   await expect(page.getByRole('button', { name: 'Insert Vault reference' })).toHaveCount(0);
+});
+
+test('Items with the same key and name in different Namespaces stay apart, and Cancel changes nothing', async ({ page }) => {
+  await detailPage(page);
+  await caret(page, 2, 1);
+  await page.getByRole('button', { name: 'Insert Vault reference' }).click();
+  const picker = page.getByRole('region', { name: 'Insert Vault reference' });
+  const items = picker.getByRole('group', { name: 'Vault Items' });
+  await expect(items.getByRole('button', { name: /^Clients/ })).toHaveCount(2);
+  await expect(items.getByRole('button', { name: 'Clients billing.clients-conf' })).toBeVisible();
+  await expect(items.getByRole('button', { name: 'Clients order_service.clients-conf' })).toBeVisible();
+
+  await choose(page, 'billing.clients-conf', 'google-login');
+  await expect(picker.getByLabel('Reference')).toHaveText('{vault.billing.clients-conf.google-login}');
+  await picker.getByRole('button', { name: 'Cancel' }).click();
+  await expect(picker).toHaveCount(0);
+  await expectSource(page, source);
+
+  await choose(page, 'billing.clients-conf', 'google-login');
+  await page.getByRole('region', { name: 'Insert Vault reference' }).getByRole('button', { name: 'Insert', exact: true }).click();
+  await expectSource(page, 'database:\n  host: db.internal\n  password: "{vault.billing.clients-conf.google-login}"\n# shared settings\ncache:\n');
 });
