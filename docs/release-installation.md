@@ -60,7 +60,10 @@ build from the tagged source under your organization's software policy.
 
 ## Deployment checks
 
-v1.4.0 creates a Config in several Environments at once, inserts Vault
+v1.4.1 stores single-line Vault Text values without leading and trailing
+whitespace and fixes scoped writes to Items whose Fields are not in key order,
+with no schema or configuration change from v1.4.0; see the
+[patch notes](releases/v1.4.1.md). v1.4.0 creates a Config in several Environments at once, inserts Vault
 references from the Config editor, imports Vault Items from YAML, keeps Vault
 Fields in the order they were added and moves to Go 1.26.11, with no schema or
 configuration change from v1.3.1; see the [release notes](releases/v1.4.0.md).
