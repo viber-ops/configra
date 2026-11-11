@@ -62,7 +62,8 @@ func (server *server) auditRejections(mux *http.ServeMux, next http.Handler) htt
 			return
 		}
 		_, pattern := mux.Handler(request)
-		if pattern == "POST /v1/configs/validate" || pattern == "POST /v1/environments/{environment}/configs/{config}/transfer-preview" || pattern == "POST /v1/vault-items/{namespace}/{item}/impact-preview" {
+		if pattern == "POST /v1/configs/validate" || pattern == "POST /v1/environments/{environment}/configs/{config}/transfer-preview" || pattern == "POST /v1/vault-items/{namespace}/{item}/impact-preview" ||
+			pattern == "POST /v1/vault-items/import-preview" {
 			next.ServeHTTP(response, request)
 			return
 		}

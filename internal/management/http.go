@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"maps"
 	"mime"
@@ -24,6 +25,7 @@ import (
 	"github.com/viber-ops/configra/internal/storage/mysqlstore"
 	"github.com/viber-ops/configra/internal/vaultcrypto"
 	"github.com/viber-ops/configra/internal/vaultdoc"
+	"github.com/viber-ops/configra/internal/vaultimport"
 	managementweb "github.com/viber-ops/configra/web"
 )
 
@@ -119,6 +121,7 @@ func NewHandler(configs ConfigRepository, publisher machine.AccessPublisher, cli
 	mux.HandleFunc("POST /v1/environments/{environment}/configs/{config}/restore", server.restoreConfig)
 	mux.HandleFunc("POST /v1/environments/{environment}/configs/{config}/clone", server.cloneConfig)
 	mux.HandleFunc("GET /v1/vault-items", server.listVaultItems)
+	mux.HandleFunc("POST /v1/vault-items/import-preview", server.previewVaultImport)
 	mux.HandleFunc("GET /v1/vault-items/{namespace}/{item}", server.readVaultItem)
 	mux.HandleFunc("GET /v1/vault-items/{namespace}/{item}/usages", server.listVaultUsages)
 	mux.HandleFunc("POST /v1/vault-items/{namespace}/{item}/impact-preview", server.previewVaultImpact)
@@ -770,6 +773,72 @@ func (server *server) commitVaultItem(response http.ResponseWriter, request *htt
 		Snapshot:         body.Snapshot,
 	})
 	writeMutationResult(response, result, err)
+}
+
+// previewVaultImport checks a Vault Item import file (#55) without writing anything. The UI loads a clean draft into
+// the ordinary create form, which then uses PUT /v1/vault-items/{namespace}/{item}. Problems name a path and line and
+// never carry values.
+func (server *server) previewVaultImport(response http.ResponseWriter, request *http.Request) {
+	if _, ok := requireAdmin(response, request); !ok {
+		return
+	}
+	var body struct {
+		Content string `json:"content"`
+	}
+	if !decodeJSON(response, request, &body) {
+		return
+	}
+	if len(body.Content) > vaultimport.MaxBytes {
+		writeError(response, http.StatusRequestEntityTooLarge, "request_too_large")
+		return
+	}
+	draft, problems := vaultimport.Parse([]byte(body.Content))
+	if len(problems) == 0 {
+		var err error
+		if problems, err = server.vaultImportTargetProblems(request.Context(), draft); err != nil {
+			writeReadError(response, err)
+			return
+		}
+	}
+	preview := struct {
+		Problems []vaultimport.Problem `json:"problems"`
+		Draft    *vaultimport.Draft    `json:"draft,omitempty"`
+	}{Problems: problems}
+	if preview.Problems == nil {
+		preview.Problems = []vaultimport.Problem{}
+		preview.Draft = &draft
+	}
+	writeJSON(response, preview)
+}
+
+// vaultImportTargetProblems reports what would make the create fail: an Environment that is unknown or archived, or an
+// Item that already exists, archived or not. Imports never overwrite or merge into an existing Item.
+func (server *server) vaultImportTargetProblems(ctx context.Context, draft vaultimport.Draft) ([]vaultimport.Problem, error) {
+	var problems []vaultimport.Problem
+	for index, key := range draft.Environments {
+		page, err := server.configs.ListEnvironments(ctx, mysqlstore.EnvironmentQuery{InventoryQuery: mysqlstore.InventoryQuery{Limit: 1, Key: key, IncludeInactive: true}})
+		if err != nil {
+			return nil, err
+		}
+		path := fmt.Sprintf("environments[%d]", index)
+		found := slices.IndexFunc(page.Items, func(environment mysqlstore.Environment) bool { return environment.Key == key })
+		switch {
+		case found < 0:
+			problems = append(problems, vaultimport.Problem{Path: path, Line: draft.Line(path), Code: vaultimport.CodeEnvironmentUnknown})
+		case page.Items[found].Archived:
+			problems = append(problems, vaultimport.Problem{Path: path, Line: draft.Line(path), Code: vaultimport.CodeEnvironmentArchived})
+		}
+	}
+	existing, err := server.configs.ReadVaultItem(ctx, draft.NamespaceKey, draft.ItemKey, 0, false)
+	switch {
+	case err == nil && existing.Archived:
+		problems = append(problems, vaultimport.Problem{Path: "item", Line: draft.Line("item"), Code: vaultimport.CodeItemArchived})
+	case err == nil:
+		problems = append(problems, vaultimport.Problem{Path: "item", Line: draft.Line("item"), Code: vaultimport.CodeItemExists})
+	case !errors.Is(err, mysqlstore.ErrNotFound):
+		return nil, err
+	}
+	return problems, nil
 }
 
 func (server *server) restoreVaultItem(response http.ResponseWriter, request *http.Request) {
