@@ -14,11 +14,11 @@
     "properties": [
       {
         "name": "configra:bundle-files",
-        "value": "[{\"path\":\"assets/editors-DEfrZo39.js\",\"sha256\":\"0b31a5488f9db24772b6a1337046190d9c3bac919d16513b27534cdc5cc1f7ad\"},{\"path\":\"assets/index-6cV2iyJC.css\",\"sha256\":\"38fc043ce5e79b41490923c46ab6cc1c1c9f99f58f81603d729183d28ccc7ac8\"},{\"path\":\"assets/index-CbDdeCwn.js\",\"sha256\":\"b6c0b2f944106408a8e36036d1435891af467bc4ff76a7a28f4f8b51af96ee62\"}]"
+        "value": "[{\"path\":\"assets/editors-CYwXCBbu.js\",\"sha256\":\"8f39673d7d98511f5ddf52db6a899129660ee85c407a860052b152fe5d527503\"},{\"path\":\"assets/index-6cV2iyJC.css\",\"sha256\":\"38fc043ce5e79b41490923c46ab6cc1c1c9f99f58f81603d729183d28ccc7ac8\"},{\"path\":\"assets/index-BnPB0AIP.js\",\"sha256\":\"5a8c1123bca4b084709565852513aa77e7321fcbe6cd2a79dc884dcbba13470b\"}]"
       },
       {
         "name": "configra:notices-sha256",
-        "value": "e0ce7772160b1b053ba6820d3ad5b807cb1cbb8563dae2f57d86514c4ad46675"
+        "value": "c3fc40b7a588149cdc0ddb6756bfaf13ffdc6f77a39bacfe091bb26cca8746ac"
       }
     ]
   },
@@ -807,10 +807,10 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:npm/vite@8.3.5",
+      "bom-ref": "pkg:npm/vite@8.3.6",
       "name": "vite",
-      "version": "8.3.5",
-      "purl": "pkg:npm/vite@8.3.5",
+      "version": "8.3.6",
+      "purl": "pkg:npm/vite@8.3.6",
       "licenses": [
         {
           "license": {
@@ -821,13 +821,13 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/vite/-/vite-8.3.5.tgz"
+          "url": "https://registry.npmjs.org/vite/-/vite-8.3.6.tgz"
         }
       ],
       "properties": [
         {
           "name": "configra:npm:integrity",
-          "value": "sha512-z1YpjieJ9g0ebTmQpLBv/oq9E3F9EIlOe+7LahW8SrE3LTiG3udBRUXQOlYXP9b+IC2q2phHeVxj9xGlw34OEQ=="
+          "value": "sha512-UI7dK29NnS54Fk+mmo7o+jI6U8Fp7hDl+X5Q1k45WH+d4dSlbLVUETGQ+hfkNgvLQGyoElPj837nZyv4MBc0VA=="
         },
         {
           "name": "configra:bundled-modules",
@@ -901,7 +901,7 @@
         "pkg:npm/rolldown@1.2.16",
         "pkg:npm/scheduler@0.28.0",
         "pkg:npm/style-mod@4.1.3",
-        "pkg:npm/vite@8.3.5",
+        "pkg:npm/vite@8.3.6",
         "pkg:npm/w3c-keyname@2.2.8"
       ]
     }
