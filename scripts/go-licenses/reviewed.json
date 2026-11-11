@@ -270,8 +270,8 @@
     },
     {
       "module": "github.com/andybalholm/brotli",
-      "version": "v1.2.6",
-      "module_sum": "h1:ftYnfj6usCp+UGV5kSJ3+chpMQgU+gJf/AxsUQ52REI=",
+      "version": "v1.2.7",
+      "module_sum": "h1:UgafRPGMam5ySHfRkhthMqOFA6IFoeF3D7mWIDLjG5A=",
       "primary_license_identifiers": [
         "BSD-3-Clause",
         "MIT"
@@ -281,21 +281,21 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/andybalholm/brotli",
-        "hash": "451b9eb6fcc1f329d548f888b9ae2bc372ef434b"
+        "hash": "33c2a9884269798192b5ecf171288f98939dbe42"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "3d180008e36922a4e8daec11c34c7af264fed5962d07924aea928c38e8663c94",
-          "source": "https://github.com/andybalholm/brotli/blob/451b9eb6fcc1f329d548f888b9ae2bc372ef434b/LICENSE",
+          "source": "https://github.com/andybalholm/brotli/blob/33c2a9884269798192b5ecf171288f98939dbe42/LICENSE",
           "verified": true
         },
         {
           "path": "flate/LICENSE",
           "kind": "license",
           "sha256": "2d36597f7117c38b006835ae7f537487207d8ec407aa9d9980794b2030cbc067",
-          "source": "https://github.com/andybalholm/brotli/blob/451b9eb6fcc1f329d548f888b9ae2bc372ef434b/flate/LICENSE",
+          "source": "https://github.com/andybalholm/brotli/blob/33c2a9884269798192b5ecf171288f98939dbe42/flate/LICENSE",
           "verified": true
         }
       ],
@@ -1238,8 +1238,8 @@
     },
     {
       "module": "github.com/klauspost/compress",
-      "version": "v1.20.1",
-      "module_sum": "h1:T7kKElXUMXrUJ2E9QhQhxFtcK5rPyLdsGZvdbLMPdiQ=",
+      "version": "v1.20.2",
+      "module_sum": "h1:v5tiZvm1KGLyg5d5oXdXe3lsSPrbEUiKoXGia//I7Qo=",
       "primary_license_identifiers": [
         "BSD-3-Clause",
         "MIT",
@@ -1250,112 +1250,112 @@
         "kind": "vcs",
         "vcs": "git",
         "url": "https://github.com/klauspost/compress",
-        "hash": "5d880f230c38a0fc806b9ca1613103a44feff0ac"
+        "hash": "7f5d8528720c895a6106f201719f87eb030a565d"
       },
       "files": [
         {
           "path": "LICENSE",
           "kind": "license",
           "sha256": "0d9e582ee4bff57bf1189c9e514e6da7ce277f9cd3bc2d488b22fbb39a6d87cf",
-          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/LICENSE",
+          "source": "https://github.com/klauspost/compress/blob/7f5d8528720c895a6106f201719f87eb030a565d/LICENSE",
           "verified": true
         },
         {
           "path": "huff0/decompress_amd64.s",
           "kind": "assembly_review",
           "sha256": "604062261d8e148ceb70c1a234d576d3c3454b35d4a27c868146554343fef3e1",
-          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/huff0/decompress_amd64.s",
+          "source": "https://github.com/klauspost/compress/blob/7f5d8528720c895a6106f201719f87eb030a565d/huff0/decompress_amd64.s",
           "verified": true
         },
         {
           "path": "huff0/decompress_arm64.s",
           "kind": "assembly_review",
           "sha256": "0875a130e3c54cc8df095115ad352afe20bbe81aed0e0b7e1f8f566361bc4838",
-          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/huff0/decompress_arm64.s",
+          "source": "https://github.com/klauspost/compress/blob/7f5d8528720c895a6106f201719f87eb030a565d/huff0/decompress_arm64.s",
           "verified": true
         },
         {
           "path": "internal/cpuinfo/cpuinfo_amd64.s",
           "kind": "assembly_review",
           "sha256": "9ea28b6d2e9e2210f12ef7d44af4716a3dc148c4e214f23f001271fd100547b9",
-          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/internal/cpuinfo/cpuinfo_amd64.s",
+          "source": "https://github.com/klauspost/compress/blob/7f5d8528720c895a6106f201719f87eb030a565d/internal/cpuinfo/cpuinfo_amd64.s",
           "verified": true
         },
         {
           "path": "internal/snapref/LICENSE",
           "kind": "license",
           "sha256": "f69f157b0be75da373605dbc8bbf142e8924ee82d8f44f11bcaf351335bf98cf",
-          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/internal/snapref/LICENSE",
+          "source": "https://github.com/klauspost/compress/blob/7f5d8528720c895a6106f201719f87eb030a565d/internal/snapref/LICENSE",
           "verified": true
         },
         {
           "path": "s2/LICENSE",
           "kind": "copied_code_license",
           "sha256": "08683b14bda8ae3538abf19e1879e853a39e3b8276a8d673363b529d15a61c1a",
-          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/s2/LICENSE",
+          "source": "https://github.com/klauspost/compress/blob/7f5d8528720c895a6106f201719f87eb030a565d/s2/LICENSE",
           "verified": true
         },
         {
           "path": "snappy/AUTHORS",
           "kind": "related_authorship",
           "sha256": "f6f3821e64460346c1ed1a15fb32b94ad241617276b60726c1350ca315309463",
-          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/snappy/AUTHORS",
+          "source": "https://github.com/klauspost/compress/blob/7f5d8528720c895a6106f201719f87eb030a565d/snappy/AUTHORS",
           "verified": true
         },
         {
           "path": "zstd/fse_decoder_amd64.s",
           "kind": "assembly_review",
           "sha256": "d25ab2895d0e28f4fa5dc1312e496b050b401ec1bb270ec450fc8ca217806dea",
-          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/zstd/fse_decoder_amd64.s",
+          "source": "https://github.com/klauspost/compress/blob/7f5d8528720c895a6106f201719f87eb030a565d/zstd/fse_decoder_amd64.s",
           "verified": true
         },
         {
           "path": "zstd/fse_decoder_arm64.s",
           "kind": "assembly_review",
           "sha256": "403d041bd6ff6407e75cabb276afcc5c5fec64373b7bf39a483940a9553ba4ab",
-          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/zstd/fse_decoder_arm64.s",
+          "source": "https://github.com/klauspost/compress/blob/7f5d8528720c895a6106f201719f87eb030a565d/zstd/fse_decoder_arm64.s",
           "verified": true
         },
         {
           "path": "zstd/internal/xxhash/LICENSE.txt",
           "kind": "license",
           "sha256": "f566a9f97bacdaf00d9f21dd991e81dc11201c4e016c86b470799429a1c9a79c",
-          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/zstd/internal/xxhash/LICENSE.txt",
+          "source": "https://github.com/klauspost/compress/blob/7f5d8528720c895a6106f201719f87eb030a565d/zstd/internal/xxhash/LICENSE.txt",
           "verified": true
         },
         {
           "path": "zstd/internal/xxhash/xxhash_amd64.s",
           "kind": "assembly_review",
           "sha256": "a6dfc44ff0d1e7929cfbb1f4aaec208fd868c568a378902dfe519fbe3fd75b4e",
-          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/zstd/internal/xxhash/xxhash_amd64.s",
+          "source": "https://github.com/klauspost/compress/blob/7f5d8528720c895a6106f201719f87eb030a565d/zstd/internal/xxhash/xxhash_amd64.s",
           "verified": true
         },
         {
           "path": "zstd/internal/xxhash/xxhash_arm64.s",
           "kind": "assembly_review",
           "sha256": "6263de49d76ade89a73b4c5ff5131ef598132e7f6cb7101ae2d59601133fee39",
-          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/zstd/internal/xxhash/xxhash_arm64.s",
+          "source": "https://github.com/klauspost/compress/blob/7f5d8528720c895a6106f201719f87eb030a565d/zstd/internal/xxhash/xxhash_arm64.s",
           "verified": true
         },
         {
           "path": "zstd/matchlen_amd64.s",
           "kind": "assembly_provenance",
           "sha256": "f6983c33f36ef09e255c1d029158fa31adfaf6cbc56d264d3ff6431097cfbc0f",
-          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/zstd/matchlen_amd64.s",
+          "source": "https://github.com/klauspost/compress/blob/7f5d8528720c895a6106f201719f87eb030a565d/zstd/matchlen_amd64.s",
           "verified": true
         },
         {
           "path": "zstd/seqdec_amd64.s",
           "kind": "assembly_review",
           "sha256": "50e6a1c6a34b25058675d4608f36f37504acd2ba9973267b799311f2e178a700",
-          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/zstd/seqdec_amd64.s",
+          "source": "https://github.com/klauspost/compress/blob/7f5d8528720c895a6106f201719f87eb030a565d/zstd/seqdec_amd64.s",
           "verified": true
         },
         {
           "path": "zstd/seqdec_arm64.s",
           "kind": "assembly_review",
           "sha256": "97a0a29c7ce5d5bd5946212de91173eb5ad2c0da60b44231e5d2815bb56f094f",
-          "source": "https://github.com/klauspost/compress/blob/5d880f230c38a0fc806b9ca1613103a44feff0ac/zstd/seqdec_arm64.s",
+          "source": "https://github.com/klauspost/compress/blob/7f5d8528720c895a6106f201719f87eb030a565d/zstd/seqdec_arm64.s",
           "verified": true
         }
       ],
