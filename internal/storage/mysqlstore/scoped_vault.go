@@ -109,16 +109,7 @@ func (store *Store) prepareScopedVault(ctx context.Context, tx *sql.Tx, commit *
 	if len(fields) == 0 {
 		return ErrValidation
 	}
-	slices.SortFunc(fields, func(a, b vaultdoc.Field) int {
-		if a.Key < b.Key {
-			return -1
-		}
-		if a.Key > b.Key {
-			return 1
-		}
-		return 0
-	})
-	schemaChanged := !reflect.DeepEqual(fields, current.Snapshot.Fields)
+	schemaChanged := !sameVaultFields(fields, current.Snapshot.Fields)
 	if found && (schemaChanged || commit.ItemName != current.DisplayName) {
 		allowed, err := allVaultBindingsGranted(ctx, tx, request.Actor.ID, itemID, revision)
 		if err != nil {
@@ -161,6 +152,30 @@ func (store *Store) prepareScopedVault(ctx context.Context, tx *sql.Tx, commit *
 	}
 	commit.Snapshot = snapshot
 	return nil
+}
+
+// sameVaultFields reports whether two lists define the same Fields with the same names and types. Reads return Fields
+// in the order they were added (#54) while a scoped request may list them in any order, so order is ignored; Encode
+// and prepareVaultFields own ordering and duplicate checks.
+func sameVaultFields(left, right []vaultdoc.Field) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	byKey := make(map[string]vaultdoc.Field, len(right))
+	for _, field := range right {
+		byKey[field.Key] = field
+	}
+	if len(byKey) != len(right) {
+		return false
+	}
+	for _, field := range left {
+		other, found := byKey[field.Key]
+		if !found || other != field {
+			return false
+		}
+		delete(byKey, field.Key)
+	}
+	return true
 }
 
 // This read returns exactly one Environment, never the full Item snapshot.
