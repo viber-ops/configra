@@ -82,6 +82,12 @@ Vault 的 `fields` 为 `{key, name, type}` 数组；`values` 按 Field key 映�
 修改；每个 File 最长 5 MiB，Text/Secret 最长 512 KiB，整个快照明文最长 10 MiB，
 JSON 请求体最长 32 MiB。
 
+从 v1.4.1 起，本次请求提交的单行 Text 值会去掉首尾空白后保存，规则与管理页面相同
+（[说明](ui.md#vault-text-whitespace--vault-文本值的首尾空白)）。去掉首尾后仍含换行的
+Text、Secret 与 File 值，以及本次未提交的值，按原样保存。提交的值去掉首尾空白后与
+已存值相同时结果为 `no_change`，不会拆分共享的 Variant。结果不确定时请用相同请求体
+重试：Operation ID 校验的是实际发送的内容。
+
 值更新只影响所选环境；若 Variant 与其他环境共享，先拆分再更新。item 显示名称和
 字段定义是共享的：修改名称/定义、增加/删除字段或删除 item，必须拥有**全部绑定
 环境**的权限；无环境绑定的 Variant 也会阻止全局结构操作。其他值保留，新增加的

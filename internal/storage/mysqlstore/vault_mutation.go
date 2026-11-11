@@ -141,6 +141,12 @@ func (store *Store) commitVault(ctx context.Context, request VaultCommit) (Vault
 	}
 
 	snapshot := cloneVaultSnapshot(request.Snapshot)
+	if request.scoped == nil && request.action != "restore" {
+		// An Admin save submits the whole Item, so every single-line Text value in it is stored without edge
+		// whitespace (#62). Restore keeps the source revision byte for byte, and scoped writes normalize only the
+		// values they submit (prepareScopedVault). The idempotency digest above covers the bytes the client sent.
+		vaultdoc.NormalizeSnapshotText(snapshot)
+	}
 	for index := range snapshot.Variants {
 		if snapshot.Variants[index].ID == "" {
 			id, err := randomID()

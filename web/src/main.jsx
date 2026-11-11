@@ -4,6 +4,7 @@ import { AuthorityManagement, CertificateManagement, authorityLabel } from './se
 import { Sessions, sessionLabel } from './security/Sessions.jsx';
 import { request, managementError, ActionError, useInventory, InventoryPagination, useMutation, useMutationSet } from './management.jsx';
 import { validateTokenInput, tokenValidationMessage } from './token-validation.js';
+import { hasVaultEdgeSpace, normalizeVaultText } from './vault-text.js';
 import { CopyValue } from './CopyValue.jsx';
 import { Expiration, ExpiryInput, useCurrentTime } from './security/Lifetime.jsx';
 import './styles.css';
@@ -384,6 +385,12 @@ const messages = {
     signOut: 'Sign out',
     saveChanges: 'Save changes',
     saveItem: 'Save item',
+    textEdgeWhitespace: 'Leading and trailing whitespace is removed when you save.',
+    secretEdgeWhitespace: 'This Secret starts or ends with whitespace. Secrets are saved exactly as entered, so check it is intended.',
+    textCleanupSummary: 'Saving removes leading and trailing whitespace from these Text values:',
+    textCleanupNow: 'Remove now',
+    edgeWhitespaceBadge: 'Edge whitespace',
+    edgeWhitespaceTitle: 'This value starts or ends with whitespace. Editing and saving the Item removes it.',
     saveName: 'Save name',
     saveEnvironmentGrants: 'Save environment grants',
     saveConflict: 'This Config changed after you opened it. Reload before saving again.',
@@ -868,6 +875,12 @@ const messages = {
     signOut: '退出登录',
     saveChanges: '保存更改',
     saveItem: '保存 Item',
+    textEdgeWhitespace: '保存时会去掉首尾空白。',
+    secretEdgeWhitespace: '此 Secret 首尾有空白字符。Secret 会按原样保存，请确认是否需要。',
+    textCleanupSummary: '保存时将去掉以下文本值的首尾空白：',
+    textCleanupNow: '立即清理',
+    edgeWhitespaceBadge: '首尾有空白',
+    edgeWhitespaceTitle: '此值首尾有空白，编辑并保存该 Item 时会被去掉。',
     saveName: '保存名称',
     saveEnvironmentGrants: '保存 Environment 授权',
     saveConflict: '打开后该 Config 已发生变化，请重新加载再保存。',
@@ -2147,6 +2160,9 @@ function validateVaultDraft(draft, t) {
 function VaultSnapshotEditor({ draft, onChange, namespaceKey, itemKey, t }) {
   const [selected, setSelected] = useState(draft.variants[0]?.id || '');
   const [revealed, setRevealed] = useState({});
+  // The Text value being typed in is left out of the whitespace notices, so they neither flicker while someone types a
+  // space nor vanish on blur and move the Save button between mousedown and click.
+  const [focused, setFocused] = useState('');
   const [fileError, setFileError] = useState('');
   useEffect(() => {
     if (!draft.variants.some(variant => variant.id === selected)) setSelected(draft.variants[0]?.id || '');
@@ -2204,6 +2220,28 @@ function VaultSnapshotEditor({ draft, onChange, namespaceKey, itemKey, t }) {
     ...current,
     variants: current.variants.map(variant => variant.id === selected ? { ...variant, values: { ...variant.values, [fieldID]: value } } : variant),
   }));
+  // Apply the server's Text rule (#62) to the draft, never to the DOM value, so tabbing through an untouched
+  // multi-line value leaves it, and the editor's dirty state, alone.
+  const normalizeText = (variantID, fieldIDs) => onChange(current => {
+    const textFields = new Set(current.fields.filter(field => field.type === 'text' && (!fieldIDs || fieldIDs.includes(field._id))).map(field => field._id));
+    let changed = false;
+    const variants = current.variants.map(variant => {
+      if (variantID && variant.id !== variantID) return variant;
+      const values = { ...variant.values };
+      for (const fieldID of textFields) {
+        const text = values[fieldID]?.text;
+        if (typeof text === 'string' && normalizeVaultText(text) !== text) {
+          values[fieldID] = { text: normalizeVaultText(text) };
+          changed = true;
+        }
+      }
+      return { ...variant, values };
+    });
+    return changed ? { ...current, variants } : current;
+  });
+  const cleanup = draft.fields.filter(field => field.type === 'text').flatMap(field => draft.variants
+    .map((variant, index) => ({ field, variant, index }))
+    .filter(({ variant }) => focused !== `${variant.id}-${field._id}` && typeof variant.values[field._id]?.text === 'string' && normalizeVaultText(variant.values[field._id].text) !== variant.values[field._id].text));
   const selectFile = (field, file) => {
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) {
@@ -2250,15 +2288,24 @@ function VaultSnapshotEditor({ draft, onChange, namespaceKey, itemKey, t }) {
           const value = selectedVariant.values[field._id];
           const name = field.name || `${t.fields} ${index + 1}`;
           const valueLabel = `${t.variant} ${selectedIndex + 1} ${t.valueFor.replace('{field}', name)}`;
+          const editKey = `${selected}-${field._id}`;
+          const textNotice = field.type === 'text' && focused !== editKey && normalizeVaultText(value?.text || '') !== (value?.text || '');
           return <div className="vault-value-editor" key={field._id}>
             <div><strong>{name}</strong><code>{field.key || '—'}</code><span>{field.type}</span></div>
-            {field.type === 'text' && <textarea required aria-label={valueLabel} maxLength={512 * 1024} rows="2" value={value?.text || ''} onChange={event => setValue(field._id, { text: event.target.value })} />}
-            {field.type === 'secret' && <div className="vault-secret-editor"><input required aria-label={valueLabel} maxLength={512 * 1024} type={revealed[`${selected}-${field._id}`] ? 'text' : 'password'} value={value?.text || ''} onChange={event => setValue(field._id, { text: event.target.value })} /><button type="button" onClick={() => setRevealed(current => ({ ...current, [`${selected}-${field._id}`]: !current[`${selected}-${field._id}`] }))}>{revealed[`${selected}-${field._id}`] ? t.hide : t.reveal}</button><button type="button" disabled={!value?.text} onClick={() => copy(value.text)}>{t.copy}</button></div>}
+            {field.type === 'text' && <textarea aria-label={valueLabel} aria-describedby={textNotice ? `${editKey}-edge` : undefined} maxLength={512 * 1024} rows="2" value={value?.text || ''} onChange={event => setValue(field._id, { text: event.target.value })} onFocus={() => setFocused(editKey)} onBlur={() => { setFocused(''); normalizeText(selected, [field._id]); }} />}
+            {textNotice && <small className="vault-value-hint" id={`${editKey}-edge`}>{t.textEdgeWhitespace}</small>}
+            {field.type === 'secret' && <div className="vault-secret-editor"><input required aria-label={valueLabel} aria-describedby={hasVaultEdgeSpace(value?.text || '') ? `${selected}-${field._id}-edge` : undefined} maxLength={512 * 1024} type={revealed[`${selected}-${field._id}`] ? 'text' : 'password'} value={value?.text || ''} onChange={event => setValue(field._id, { text: event.target.value })} /><button type="button" onClick={() => setRevealed(current => ({ ...current, [`${selected}-${field._id}`]: !current[`${selected}-${field._id}`] }))}>{revealed[`${selected}-${field._id}`] ? t.hide : t.reveal}</button><button type="button" disabled={!value?.text} onClick={() => copy(value.text)}>{t.copy}</button></div>}
+            {field.type === 'secret' && hasVaultEdgeSpace(value?.text || '') && <small className="vault-value-hint warning" id={`${selected}-${field._id}-edge`}>{t.secretEdgeWhitespace}</small>}
             {field.type === 'file' && <div className="vault-file-editor"><label className="vault-file-picker"><input required={!value?.file} aria-label={valueLabel} type="file" onChange={event => selectFile(field, event.target.files[0])} /><span>{value?.file ? t.replaceFile : t.chooseFile}</span></label><strong>{value?.file?.filename || t.noFileSelected}</strong><small>{value?.file?.content_type || '—'}</small></div>}
           </div>;
         })}</div>
       </div>}
     </section>
+    {cleanup.length > 0 && <div className="vault-text-cleanup" role="status">
+      <p>{t.textCleanupSummary}</p>
+      <ul>{cleanup.map(({ field, variant, index }) => <li key={`${variant.id}-${field._id}`}><code>{field.key || field.name || '—'}</code><span>{variant.environments.length ? variant.environments.join(', ') : `${t.variant} ${index + 1}`}</span></li>)}</ul>
+      <button className="secondary-action compact-action" type="button" onClick={() => normalizeText('', null)}>{t.textCleanupNow}</button>
+    </div>}
     {fileError && <p className="inline-error" role="alert">{fileError}</p>}
   </div>;
 }
@@ -2680,6 +2727,7 @@ function VaultField({ field, namespaceKey, itemKey, value, revealed, setRevealed
       </div>
       <div className="field-current" role="cell">
         {field.type === 'text' && <span>{value?.text ?? '—'}</span>}
+        {field.type === 'text' && typeof value?.text === 'string' && normalizeVaultText(value.text) !== value.text && <span className="status warning" title={t.edgeWhitespaceTitle}>{t.edgeWhitespaceBadge}</span>}
         {field.type === 'secret' && value?.text !== undefined && <><label className="source-label" htmlFor={`vault-${field.key}`}>{field.name}</label><input id={`vault-${field.key}`} type={revealed ? 'text' : 'password'} readOnly value={value.text} /><button className="field-icon-button" type="button" title={`${revealed ? t.hide : t.reveal} ${field.name}`} aria-label={`${revealed ? t.hide : t.reveal} ${field.name}`} aria-pressed={revealed} onClick={() => setRevealed(!revealed)}><Icon name={revealed ? 'eyeOff' : 'eye'} /></button><button type="button" aria-label={`${t.copyValue} ${field.name}`} onClick={() => copy(value.text)}>{t.copy}</button></>}
         {field.type === 'secret' && value?.text === undefined && <span>••••••••</span>}
         {field.type === 'file' && <><span>{value?.file?.filename || '—'}</span>{value?.file && <button type="button" aria-label={`${t.download} ${field.name}`} onClick={() => downloadFile(value.file)}>{t.download}</button>}</>}

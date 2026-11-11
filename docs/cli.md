@@ -61,6 +61,14 @@ configractl vault item delete deployment obsolete \
   --expected-revision 7 --operation-id archive-20261003-item --json
 ```
 
+`vault field put --type text` values follow the server's Text rule: a single-line
+value, such as one piped through `echo`, is stored without leading and trailing
+whitespace, while multi-line text keeps every byte. Secret values are stored
+exactly as given, so `vault field put --type secret` writes
+`{"warning":"secret_edge_whitespace"}` to stderr, without the value, when the input
+starts or ends with whitespace or a line break, and still stores it. Use
+`printf '%s'` or a file without a final newline when the Secret must not end in one.
+
 `vault item put` accepts the SDK/API item document (`display_name`, `fields`,
 `values`); the explicit CLI flags supply its Operation ID and expected revision.
 Use this command to submit all 17 File fields as one existing Vault Item snapshot.
@@ -75,7 +83,10 @@ the new state and choosing a new Operation ID; automatic overwrite is unsupporte
 下载默认只写入不存在的 0600 文件；不会覆盖已有文件。上传通过 `--file` 或 stdin
 提供内容，不把秘密放进参数。需要向 stdout 返回敏感内容时，必须同时指定
 `--output - --reveal`；此时不要将 stdout 发送到 CI 日志。普通 stdout 仅输出
-无值元数据，`--json` 使用紧凑 JSON；stderr 只包含固定错误码和退出码。
+无值元数据，`--json` 使用紧凑 JSON；stderr 只包含固定错误码和退出码，以及固定的警告码。
+`vault field put --type text` 的单行值（例如经 `echo` 传入）会去掉首尾空白，多行文本按原样
+保存；Secret 按原样保存，输入首尾有空白或换行时 stderr 输出
+`{"warning":"secret_edge_whitespace"}`（不含值）。
 
 ## Complete releases / 整套发布
 

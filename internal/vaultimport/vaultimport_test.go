@@ -63,6 +63,31 @@ func TestParseDefaultsTheDisplayNameToTheItemKey(t *testing.T) {
 	}
 }
 
+// The draft carries the values the create form will store: single-line Text loses edge whitespace, Secret and
+// multi-line Text keep every byte (#62).
+func TestParseNormalizesTextValuesLikeTheServer(t *testing.T) {
+	source := "namespace: a\nitem: b\nenvironments: [x]\nfields:\n" +
+		"  - {key: url, type: text, value: \" \\thttp://service.example.com:8918\\u3000\\r\\n\"}\n" +
+		"  - {key: company, type: text, value: \"XOOM INTERNET LIMITED\"}\n" +
+		"  - {key: blank, type: text, value: \"  \"}\n" +
+		"  - {key: certificate, type: text, value: \"line one\\nline two\\n\"}\n" +
+		"  - {key: password, type: secret, value: \" p@ss \"}\n"
+	draft, problems := Parse([]byte(source))
+	if len(problems) != 0 {
+		t.Fatalf("problems = %+v", problems)
+	}
+	want := map[string]string{
+		"url":         "http://service.example.com:8918",
+		"company":     "XOOM INTERNET LIMITED",
+		"blank":       "",
+		"certificate": "line one\nline two\n",
+		"password":    " p@ss ",
+	}
+	if !reflect.DeepEqual(draft.Values, want) {
+		t.Fatalf("values = %q", draft.Values)
+	}
+}
+
 func TestParseNineteenFields(t *testing.T) {
 	var source strings.Builder
 	source.WriteString("namespace: order_service\nitem: clients-conf\nenvironments: [hk47]\nfields:\n")

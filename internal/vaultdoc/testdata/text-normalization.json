@@ -1,0 +1,78 @@
+[
+ {
+  "input": " http://service.example.com:8918 ",
+  "want": "http://service.example.com:8918"
+ },
+ {
+  "input": "\thttp://service.example.com:8918\r\n",
+  "want": "http://service.example.com:8918"
+ },
+ {
+  "input": "\u3000http://service.example.com:8918\u3000",
+  "want": "http://service.example.com:8918"
+ },
+ {
+  "input": "\u00a0\u2009value\u202f\u205f",
+  "want": "value"
+ },
+ {
+  "input": "\ufeffvalue\u200b",
+  "want": "value"
+ },
+ {
+  "input": "\u0085value\u2028\u2029",
+  "want": "value"
+ },
+ {
+  "input": "\u000b\fvalue\u1680\u200a",
+  "want": "value"
+ },
+ {
+  "input": "XOOM INTERNET LIMITED",
+  "want": "XOOM INTERNET LIMITED"
+ },
+ {
+  "input": "  XOOM  INTERNET  LIMITED  ",
+  "want": "XOOM  INTERNET  LIMITED"
+ },
+ {
+  "input": "a\u2028b ",
+  "want": "a\u2028b"
+ },
+ {
+  "input": "http://service.example.com:8918",
+  "want": "http://service.example.com:8918"
+ },
+ {
+  "input": "",
+  "want": ""
+ },
+ {
+  "input": " \t\r\n\u3000 ",
+  "want": ""
+ },
+ {
+  "input": "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n",
+  "want": "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n"
+ },
+ {
+  "input": " a\nb ",
+  "want": " a\nb "
+ },
+ {
+  "input": "line one\r\nline two\r\n",
+  "want": "line one\r\nline two\r\n"
+ },
+ {
+  "input": "  key: value\n  other: value\n",
+  "want": "  key: value\n  other: value\n"
+ },
+ {
+  "input": "\u200cvalue\u200d",
+  "want": "\u200cvalue\u200d"
+ },
+ {
+  "input": "\u180evalue",
+  "want": "\u180evalue"
+ }
+]
