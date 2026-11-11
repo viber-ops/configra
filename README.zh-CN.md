@@ -6,7 +6,7 @@
 
 Configra 是面向研发与运维的自托管配置服务。如果你正在多个仓库、部署脚本和集群之间反复复制配置，它可以提供统一工作台：管理多环境 YAML / JSON、引用共享 Vault 值，再通过 Go SDK 或 Kubernetes 交给应用。
 
-> 当前稳定版为 **v1.3.1**。请使用文档指定的标签，并在自己的部署环境验证入口、容量和恢复流程。
+> 当前稳定版为 **v1.4.0**。请使用文档指定的标签，并在自己的部署环境验证入口、容量和恢复流程。
 
 ![Configra Vault 工作台：资源导航、条目、环境变体与字段详情](https://viber-ops.github.io/assets/configra/vault-light.png)
 
@@ -43,7 +43,7 @@ database:
 准备 Docker Compose、Go 1.26.11、Node.js 24、npm、Make 和 OpenSSL：
 
 ```sh
-git clone --branch v1.3.1 https://github.com/viber-ops/configra.git
+git clone --branch v1.4.0 https://github.com/viber-ops/configra.git
 git clone --branch v1.2.0 https://github.com/viber-ops/configra-go.git
 cd configra
 make local-run
@@ -78,9 +78,9 @@ v1.0.1 新增后端列表分页、只读恢复检查和[维护窗口内的主密
 项目原创代码采用 [Apache-2.0](LICENSE)，第三方组件保留各自的许可证与声明。
 贡献方式见 [CONTRIBUTING.md](CONTRIBUTING.md)，安全问题请通过 [SECURITY.md](SECURITY.md) 中的私密渠道报告。
 
-## v1.3.1 改进与自动化写入
+## v1.4.0 改进与自动化写入
 
-v1.3.1 让 Config 页面始终显示当前版本，修复手机上的页面横向溢出和并发写入偶发的 503 错误，并更新 Go、Kubernetes 与界面依赖；从 v1.3.0 升级无需数据库结构迁移或配置修改，SDK 保持 v1.2.0。[补丁说明](docs/releases/v1.3.1.md)。v1.3.0 改进 Config 复制与模板（写入前按目标环境检查），引导替换即将过期的 API Token，会话结束时保留正在编辑的内容，并支持在冷启动配置中设置管理员会话时长。[发布与升级说明](docs/releases/v1.3.0.md)。
+v1.4.0 支持新建 Config 时一次写入多个环境，在 Config 编辑器中直接插入 Vault 引用，从 YAML 一次导入 Vault Item，Vault 字段保持添加顺序，并升级到 Go 1.26.11 修复安全问题；从 v1.3.1 升级无需数据库结构迁移或配置修改，SDK 保持 v1.2.0。[发布说明](docs/releases/v1.4.0.md)。v1.3.1 让 Config 页面始终显示当前版本，修复手机上的页面横向溢出和并发写入偶发的 503 错误，并更新 Go、Kubernetes 与界面依赖；从 v1.3.0 升级无需数据库结构迁移或配置修改，SDK 保持 v1.2.0。[补丁说明](docs/releases/v1.3.1.md)。v1.3.0 改进 Config 复制与模板（写入前按目标环境检查），引导替换即将过期的 API Token，会话结束时保留正在编辑的内容，并支持在冷启动配置中设置管理员会话时长。[发布与升级说明](docs/releases/v1.3.0.md)。
 
 [有范围的写令牌](docs/scoped-write-tokens.zh-CN.md) 由 OIDC 登录且具有 MFA 证明的管理员签发。operator 通过 9443 的 Token + mTLS 写 Config/Vault（含文件），并签发/吊销继承白名单的只读部署凭据。默认只读 Token 仍覆盖环境；写令牌及其部署凭据额外按 Config/namespace 白名单收窄权限。参阅 [升级与 schema 3 → 4 迁移](docs/releases/v1.2.0.md)。
 

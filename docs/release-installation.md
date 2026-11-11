@@ -60,10 +60,12 @@ build from the tagged source under your organization's software policy.
 
 ## Deployment checks
 
-v1.3.1 keeps the current version in view on Config pages, fixes their phone
-layout, stops rare 503 responses to concurrent automation writes and updates
-dependencies, with no schema or configuration change from
-v1.3.0; see the [patch notes](releases/v1.3.1.md). v1.3.0 adds checked Config
+v1.4.0 creates a Config in several Environments at once, inserts Vault
+references from the Config editor, imports Vault Items from YAML, keeps Vault
+Fields in the order they were added and moves to Go 1.26.11, with no schema or
+configuration change from v1.3.1; see the [release notes](releases/v1.4.0.md).
+v1.3.1 fixed the Config page layout and rare 503 responses to concurrent
+automation writes ([patch notes](releases/v1.3.1.md)). v1.3.0 adds checked Config
 copies and templates, guided API Token replacement and optional administrator
 session limits, with no schema change from v1.2.2; see the
 [release notes](releases/v1.3.0.md). The v1.2.0 baseline adds `configractl`, consistent release sets and operational controls; follow
