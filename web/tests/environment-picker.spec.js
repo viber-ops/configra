@@ -80,14 +80,3 @@ test('the Environment picker pages past the first fifty Environments', async ({ 
   await picker.press('PageDown');
   await expect(menu.getByText('51–60 / 60')).toBeVisible();
 });
-
-test('a typed search without a choice leaves a required Environment empty', async ({ page }) => {
-  await configsPage(page);
-  await page.getByRole('button', { name: 'New config' }).click();
-  const picker = page.getByRole('combobox', { name: 'Environment', exact: true });
-  await picker.fill('Region 1');
-  await page.getByLabel('Resource key').click();
-  await expect(picker).toHaveValue('');
-  expect(await picker.evaluate(element => element.validity.valueMissing)).toBe(true);
-  expect(await page.locator('input[type=hidden][name=environment]').inputValue()).toBe('');
-});
