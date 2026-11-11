@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { chooseEnvironment } from './environment.js';
+import { chooseEnvironment, checkEnvironments } from './environment.js';
 import { inventoryPage } from './inventory.js';
 
 async function mockIdentity(page, role = 'admin') {
@@ -305,7 +305,7 @@ test('administrator creates, archives, and restores a Config identity', async ({
 
   await page.getByRole('button', { name: 'New config' }).click();
   if (process.env.CONFIGRA_CONFIG_CREATE_SCREENSHOT) await page.screenshot({ path: process.env.CONFIGRA_CONFIG_CREATE_SCREENSHOT, fullPage: true });
-  await chooseEnvironment(page, 'Environment', 'production');
+  await checkEnvironments(page, 'Environments', ['production']);
   await page.getByLabel('Resource key').fill('payment');
   await page.getByLabel('Display name').fill('Payment service');
   await page.getByLabel('Format').selectOption('yaml');

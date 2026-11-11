@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { chooseEnvironment } from './environment.js';
+import { checkEnvironments } from './environment.js';
 import { inventoryPage } from './inventory.js';
 
 const configs = Array.from({ length: 60 }, (_, index) => {
@@ -56,7 +56,7 @@ test('a template never overwrites typed content without an explicit choice', asy
 test('New Config from this template opens the form with the template and its environment', async ({ page }) => {
   await configsPage(page, '#/configs?new=1&template=service-0007&template_environment=staging');
   await expectSource(page, 'name: service-0007\nenvironment: staging\n');
-  await expect(page.getByRole('combobox', { name: 'Environment', exact: true })).toHaveValue('Staging · staging');
+  await expect(page.getByRole('group', { name: 'Environments', exact: true }).getByRole('checkbox', { name: / staging$/ })).toBeChecked();
   await expect.poll(() => page.evaluate(() => window.location.hash)).toBe('#/configs');
 });
 
@@ -69,7 +69,7 @@ test('creating a Config retries a lost response with the same operation ID', asy
     return route.fulfill({ json: { outcome: 'success', revision: 1 } });
   });
   await page.getByRole('button', { name: 'New config' }).click();
-  await chooseEnvironment(page, 'Environment', 'production');
+  await checkEnvironments(page, 'Environments', ['production']);
   await page.getByLabel('Resource key').fill('payment');
   await page.getByLabel('Display name').fill('Payment service');
   await page.getByLabel('Configuration source').fill('port: 6379\n');

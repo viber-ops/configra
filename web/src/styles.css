@@ -714,6 +714,17 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .config-create-form > label, .vault-editor-form > label, .clone-form > label { display: grid; gap: 6px; font-size: 12px; font-weight: 700; }
 .config-create-form input, .config-create-form select, .vault-editor-form input, .clone-form input { width: 100%; min-height: 40px; border: 1px solid var(--line-strong); border-radius: 4px; padding: 7px 10px; background: var(--surface); }
 .config-create-form .form-source, .vault-editor-form .form-source { grid-column: 1 / -1; }
+/* Several target Environments (#50): the picker and the per-target list span the form. */
+.config-create-form > .vault-environment-picker, .config-create-form > .config-batch { grid-column: 1 / -1; }
+/* The form's full-width input rule must not stretch the Environment checkboxes. */
+.config-create-form .choice-grid input[type="checkbox"] { width: auto; min-height: 0; margin: 0; padding: 0; }
+.config-batch a { color: var(--blue); text-decoration: underline; text-underline-offset: 2px; }
+.config-batch { display: grid; gap: 10px; border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; background: var(--surface); }
+.config-batch p { margin: 0; }
+.config-batch ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.config-batch li { display: grid; grid-template-columns: minmax(90px, max-content) minmax(0, 1fr); align-items: baseline; gap: 12px; font-size: 12px; }
+.config-batch li > code { font: 700 11px ui-monospace, "SFMono-Regular", Consolas, monospace; }
+.config-batch li .config-warning-list { margin-top: 6px; }
 .config-create-form .form-source { display: grid; gap: 6px; font-size: 12px; font-weight: 700; }
 .config-create-form .config-code-editor { height: 300px; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--editor-surface); }
 .config-create-form textarea, .vault-editor-form textarea { width: 100%; min-height: 250px; resize: vertical; border: 1px solid var(--line-strong); border-radius: 4px; padding: 14px; background: var(--surface); color: var(--ink); font: 13px/1.65 ui-monospace, "SFMono-Regular", Consolas, monospace; }

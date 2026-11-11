@@ -2,7 +2,7 @@ import React, { lazy, Suspense, useDeferredValue, useEffect, useId, useMemo, use
 import { createRoot } from 'react-dom/client';
 import { AuthorityManagement, CertificateManagement, authorityLabel } from './security/Certificates.jsx';
 import { Sessions, sessionLabel } from './security/Sessions.jsx';
-import { request, managementError, ActionError, useInventory, InventoryPagination, useMutation } from './management.jsx';
+import { request, managementError, ActionError, useInventory, InventoryPagination, useMutation, useMutationSet } from './management.jsx';
 import { validateTokenInput, tokenValidationMessage } from './token-validation.js';
 import { CopyValue } from './CopyValue.jsx';
 import { Expiration, ExpiryInput, useCurrentTime } from './security/Lifetime.jsx';
@@ -134,6 +134,15 @@ const messages = {
     loadTemplate: 'Load template',
     editedCopyNote: 'Edited content is saved as a new first version, not as a copy of the source revision.',
     alreadyHasConfig: 'already has this Config',
+    batchTargets: 'Target Environments',
+    batchCreateNote: 'Batch create: each Environment gets its own first version with this content. Later edits in one Environment are not synchronised to the others.',
+    createInEnvironments: 'Create in {count} Environments',
+    retryFailedEnvironments: 'Retry failed Environments',
+    batchConflict: 'Already has this Config, so it is not written.',
+    batchCreated: 'Created v{revision}',
+    batchWriting: 'Writing…',
+    batchCheckFailed: 'Could not check this Environment; the write still validates the content.',
+    chooseEnvironments: 'Choose at least one Environment.',
     preflightChecking: 'Checking against {environment}…',
     preflightClear: 'Checked against {environment}: every Vault reference has a value there.',
     preflightWarnings: 'Checked against {environment}: these Vault references have no value there yet.',
@@ -559,6 +568,15 @@ const messages = {
     loadTemplate: '加载模板',
     editedCopyNote: '编辑后的内容将作为新的首个版本保存，而不是源 Revision 的副本。',
     alreadyHasConfig: '已有此 Config',
+    batchTargets: '目标环境',
+    batchCreateNote: '本次为批量创建：每个环境各自创建内容相同的第一个版本，之后在某个环境中的修改不会自动同步到其他环境。',
+    createInEnvironments: '在 {count} 个环境中创建',
+    retryFailedEnvironments: '重试失败的环境',
+    batchConflict: '已有同名 Config，不会写入。',
+    batchCreated: '已创建 v{revision}',
+    batchWriting: '写入中…',
+    batchCheckFailed: '无法检查该环境；写入时仍会校验内容。',
+    chooseEnvironments: '请至少选择一个环境。',
     preflightChecking: '正在按 {environment} 检查…',
     preflightClear: '已按 {environment} 检查：所有 Vault 引用在该环境都有值。',
     preflightWarnings: '已按 {environment} 检查：以下 Vault 引用在该环境尚无值。',
@@ -1718,7 +1736,13 @@ function Configs({ principal, filters = new URLSearchParams(), t }) {
   const [initialPage, setInitialPage] = useState(() => Math.max(1, Number.parseInt(filters.get('page'), 10) || 1));
   const [createFormat, setCreateFormat] = useState('yaml');
   const [createContent, setCreateContent] = useState('');
-  const [createEnvironment, setCreateEnvironment] = useState(templateLink?.environment || '');
+  const [createEnvironments, setCreateEnvironments] = useState(templateLink?.environment ? [templateLink.environment] : []);
+  const [createKey, setCreateKey] = useState('');
+  // Creating in several Environments at once (#50): a per-target preflight, then per-target results.
+  const [batchMutate, resetBatch] = useMutationSet(request);
+  const [batch, setBatch] = useState(null);
+  const [preflight, setPreflight] = useState({});
+  const batchCreate = createEnvironments.length > 1;
   const state = useInventory(`/v1/configs?${new URLSearchParams({ status: statusFilter, environment: environmentFilter, q: query, unbound: String(filters.get('unbound') === 'true') })}`, refresh, initialPage);
   const filterKey = filters.toString();
   useEffect(() => {
@@ -1730,14 +1754,59 @@ function Configs({ principal, filters = new URLSearchParams(), t }) {
     setEnvironmentFilter(filters.get('environment') || '');
     setInitialPage(Math.max(1, Number.parseInt(filters.get('page'), 10) || 1));
   }, [filterKey]);
+  // Check the content against every target before writing: syntax errors block, missing Vault values are listed per
+  // Environment, and an Environment that already has this Config is a conflict that is never written.
+  useEffect(() => {
+    if (!batchCreate || !createContent.trim()) { setPreflight({}); return undefined; }
+    let live = true;
+    const keyValid = /^[a-z][a-z0-9_-]{0,62}$/.test(createKey);
+    setPreflight(Object.fromEntries(createEnvironments.map(environment => [environment, { status: 'checking' }])));
+    const timer = window.setTimeout(() => {
+      for (const environment of createEnvironments) {
+        Promise.all([
+          request('/v1/configs/validate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ environment, format: createFormat, content: createContent }) }),
+          keyValid ? request(`/v1/environments?${new URLSearchParams({ config: createKey, key: environment, limit: '1' })}`) : Promise.resolve({ items: [] }),
+        ]).then(([checked, existing]) => live && setPreflight(current => ({ ...current, [environment]: existing.items.some(item => item.key === environment)
+          ? { status: 'conflict' } : { status: 'ready', warnings: checked.warnings || [] } })))
+          .catch(error => live && setPreflight(current => ({ ...current, [environment]: error.status === 422
+            ? { status: 'invalid', error: managementError(error, t, t.config_document_invalid) } : { status: 'failed' } })));
+      }
+    }, 350);
+    return () => { live = false; window.clearTimeout(timer); };
+  }, [batchCreate, createEnvironments.join(','), createKey, createFormat, createContent]);
+  // Any change to the request is a new intent: forget results and operations.
+  useEffect(() => { setBatch(null); resetBatch(); }, [createEnvironments.join(','), createKey, createFormat, createContent]);
+  const createInEnvironments = async body => {
+    let results = { ...(batch || {}) };
+    for (const environment of createEnvironments) if (preflight[environment]?.status === 'conflict') results[environment] = { status: 'conflict' };
+    // Each target is written on its own, so successes stand when another target fails. A retry repeats only the
+    // failures, with the operation each one first used, so an applied write replays rather than writing again.
+    const targets = createEnvironments.filter(environment => !['created', 'conflict'].includes(results[environment]?.status));
+    for (const environment of targets) results[environment] = { status: 'writing' };
+    setBatch(results);
+    let created = false;
+    for (const environment of targets) {
+      try {
+        const result = await batchMutate(`/v1/environments/${encodeURIComponent(environment)}/configs/${encodeURIComponent(createKey)}`, body, 'PUT');
+        results = { ...results, [environment]: { status: 'created', revision: result.revision, warnings: result.warnings || [] } };
+        created = true;
+      } catch (error) {
+        results = { ...results, [environment]: error.status === 409 ? { status: 'conflict' } : { status: 'failed', error: createError(error, t, t.saveFailed) } };
+      }
+      setBatch(results);
+    }
+    if (created) setRefresh(value => value + 1);
+  };
   const create = async event => {
     event.preventDefault();
     setError(null);
     const data = new FormData(event.currentTarget);
     if (!createContent.trim()) return setError({ message: t.saveFailed });
+    if (!createEnvironments.length) return setError({ message: t.chooseEnvironments });
+    if (batchCreate) return createInEnvironments({ name: data.get('display_name'), expected_revision: 0, format: createFormat, content: createContent });
     try {
       // The same request keeps its operation ID, so a retry after a lost response replays instead of conflicting.
-      const result = await createMutate(`/v1/environments/${encodeURIComponent(data.get('environment'))}/configs/${encodeURIComponent(data.get('key'))}`,
+      const result = await createMutate(`/v1/environments/${encodeURIComponent(createEnvironments[0])}/configs/${encodeURIComponent(createKey)}`,
         { name: data.get('display_name'), expected_revision: 0, format: createFormat, content: createContent }, 'PUT');
       setWarnings(result.warnings || []);
       setCreating(false);
@@ -1759,17 +1828,19 @@ function Configs({ principal, filters = new URLSearchParams(), t }) {
   };
   return (
     <ResourcePage className="config-index-page" eyebrow="CFG / canonical YAML + JSON" title={t.configs} body={t.configBody}
-      action={principal.role === 'admin' && <button className="primary-action compact-action" type="button" onClick={() => { setCreating(value => !value); setCreateSession(value => value + 1); setTemplateSeed(null); setLoadedTemplate(null); resetCreate(); setCreateFormat('yaml'); setCreateContent(''); setWarnings([]); }}>{t.newConfig}</button>}>
+      action={principal.role === 'admin' && <button className="primary-action compact-action" type="button" onClick={() => { setCreating(value => !value); setCreateSession(value => value + 1); setTemplateSeed(null); setLoadedTemplate(null); resetCreate(); setCreateFormat('yaml'); setCreateContent(''); setCreateKey(''); setCreateEnvironments([]); setWarnings([]); }}>{t.newConfig}</button>}>
       {creating && <form className="config-create-form" onSubmit={create}>
-        <EnvironmentSelect label={t.environment} name="environment" required value={createEnvironment} onChange={setCreateEnvironment} t={t} />
-        <label>{t.resourceKey}<input name="key" required maxLength="63" pattern="[a-z][a-z0-9_-]{0,62}" autoComplete="off" /></label>
+        <EnvironmentChoices label={t.environments} checked={environment => createEnvironments.includes(environment.key)}
+          onChange={(key, on) => setCreateEnvironments(current => on ? [...current.filter(item => item !== key), key] : current.filter(item => item !== key))} t={t} />
+        <label>{t.resourceKey}<input name="key" required maxLength="63" pattern="[a-z][a-z0-9_-]{0,62}" autoComplete="off" value={createKey} onChange={event => setCreateKey(event.target.value)} /></label>
         <label>{t.displayName}<input name="display_name" required maxLength="255" autoComplete="off" /></label>
         <label>{t.format}<select name="format" value={createFormat} onChange={event => setCreateFormat(event.target.value)}><option value="yaml">YAML</option><option value="json">JSON</option></select></label>
         <ConfigTemplatePicker key={createSession} initialConfig={templateSeed?.config} initialEnvironment={templateSeed?.environment}
           replaceable={!createContent.trim() || createContent === loadedTemplate}
           onLoad={template => { setCreateFormat(template.format); setCreateContent(template.content); setLoadedTemplate(template.content); }} t={t} />
         <div className="form-source"><span>{t.configurationSource}</span><ConfigCodeEditor label={t.configurationSource} value={createContent} format={createFormat} readOnly={false} onChange={setCreateContent} /></div>
-        <div className="form-actions"><ActionError error={error} t={t} /><button className="primary-action compact-action" type="submit" disabled={!createContent.trim()}>{t.createConfig}</button></div>
+        {batchCreate && <ConfigBatchTargets environments={createEnvironments} preflight={preflight} batch={batch} configKey={createKey} t={t} />}
+        <div className="form-actions"><ActionError error={error} t={t} /><ConfigCreateButton environments={createEnvironments} content={createContent} preflight={preflight} batch={batch} t={t} /></div>
       </form>}
       <div className="config-index">
           {filters.get('unbound') === 'true' && <p>{t.noActiveConfigContext} · <a href="#/configs">{t.configs}</a></p>}
@@ -1809,6 +1880,45 @@ function Configs({ principal, filters = new URLSearchParams(), t }) {
       {!creating && error && <p className="inline-error"><ActionError error={error} t={t} /></p>}
     </ResourcePage>
   );
+}
+
+function ConfigCreateButton({ environments, content, preflight, batch, t }) {
+  if (environments.length < 2) return <button className="primary-action compact-action" type="submit" disabled={!content.trim()}>{t.createConfig}</button>;
+  const results = Object.values(batch || {});
+  const writing = results.some(result => result.status === 'writing');
+  const failures = results.some(result => result.status === 'failed');
+  const checks = environments.map(environment => preflight[environment]?.status);
+  const writable = environments.filter(environment => preflight[environment]?.status !== 'conflict').length;
+  const blocked = !content.trim() || writing || checks.includes('checking') || checks.includes(undefined) || checks.includes('invalid') || writable === 0 || (batch && !failures);
+  return <button className="primary-action compact-action" type="submit" disabled={blocked}>
+    {failures ? t.retryFailedEnvironments : t.createInEnvironments.replace('{count}', writable)}
+  </button>;
+}
+
+function ConfigBatchTargets({ environments, preflight, batch, configKey, t }) {
+  const invalid = Object.values(preflight).find(check => check.status === 'invalid');
+  return <section className="config-batch" aria-label={t.batchTargets}>
+    <p className="muted-note">{t.batchCreateNote}</p>
+    {invalid && <ActionError error={invalid.error} t={t} />}
+    <ul>{environments.map(environment => {
+      const result = batch?.[environment];
+      const check = preflight[environment] || { status: 'checking' };
+      const open = <a href={`#/configs/${configKey}/${environment}`}>{t.openTargetConfig}</a>;
+      return <li key={environment} data-environment={environment}><code>{environment}</code><div role="status">
+        {result?.status === 'writing' && <span className="muted-note">{t.batchWriting}</span>}
+        {result?.status === 'created' && <><span className="success-note">{t.batchCreated.replace('{revision}', result.revision)}</span> {open}
+          {result.warnings.length > 0 && <div className="config-warning-list"><ConfigWarningLines warnings={result.warnings} t={t} /></div>}</>}
+        {result?.status === 'conflict' && <><span>{t.batchConflict}</span> {open}</>}
+        {result?.status === 'failed' && <ActionError error={result.error} t={t} />}
+        {!result && check.status === 'checking' && <span className="muted-note">{t.preflightChecking.replace('{environment}', environment)}</span>}
+        {!result && check.status === 'conflict' && <><span>{t.batchConflict}</span> {open}</>}
+        {!result && check.status === 'failed' && <span className="muted-note">{t.batchCheckFailed}</span>}
+        {!result && check.status === 'ready' && (check.warnings.length
+          ? <div className="config-warning-list"><strong>{t.preflightWarnings.replace('{environment}', environment)}</strong><ConfigWarningLines warnings={check.warnings} t={t} /></div>
+          : <span className="muted-note">{t.preflightClear.replace('{environment}', environment)}</span>)}
+      </div></li>;
+    })}</ul>
+  </section>;
 }
 
 function ConfigHome({ configKey, preferredEnvironment = '', t }) {
