@@ -16,7 +16,7 @@ extracting. Checksums detect corruption, not an independently compromised releas
 account. `BUILD.json` records the exact source commit and target.
 
 `LICENSE` and `NOTICE` apply to original Configra source. The Kubernetes module
-also carries its own copies. `licenses/go1.26.10/` retains reviewed Go runtime and
+also carries its own copies. `licenses/go1.26.11/` retains reviewed Go runtime and
 standard-library notices, including source-embedded terms; its `SOURCE.md`
 identifies the exact source and scope. `licenses/configra-modules/` and
 `licenses/configra-kubernetes-modules/` retain dependency texts and source-access

@@ -160,7 +160,7 @@ kubernetes-service-test: image kubernetes-image
 
 $(VEGETA):
 	@mkdir -p '$(dir $(VEGETA))'
-	GOTOOLCHAIN=go1.26.10 GOBIN='$(abspath $(dir $(VEGETA)))' \
+	GOTOOLCHAIN=go1.26.11 GOBIN='$(abspath $(dir $(VEGETA)))' \
 		go install github.com/tsenart/vegeta/v12@$(VEGETA_VERSION)
 
 .PHONY: load-smoke load-test

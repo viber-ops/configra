@@ -65,6 +65,11 @@ for new copyright holders, license statements and notes about copied code.
   twelve targets. One line in `resolve.go` changes, so that a literal `"<<"` is
   quoted on encode. LICENSE and NOTICE are byte-identical, and the package
   guards are unchanged.
+- **Security update (2026-11-10).** `github.com/andybalholm/brotli` moves to v1.2.7
+  for GO-2026-6888 and `github.com/klauspost/compress` to v1.20.2 for
+  GO-2026-6865, both on the server targets. Their legal and reviewed assembly
+  files are byte-identical, the changed sources carry only their usual headers,
+  and the package guards are unchanged.
 
 ## Follow-up — 2026-10-03 (v1.2.0)
 
