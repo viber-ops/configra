@@ -50,7 +50,9 @@ func TestScopedValueWriteIgnoresFieldOrder(t *testing.T) {
 	if err != nil || result.Revision != 2 {
 		t.Fatal("dev-only token could not change a dev value", result, err)
 	}
-	result, err = store.WriteScopedVault(ctx, ScopedVaultWrite{OperationID: "order-put-item", Actor: writer, EnvironmentKey: "dev", NamespaceKey: "ops", ItemKey: "app", ExpectedRevision: 2, Action: "put_item", Fields: fields, Values: values("dev-3")})
+	// The same Fields listed in another order are still the same structure, and do not reorder the shared Item.
+	permuted := []vaultdoc.Field{fields[2], fields[0], fields[1]}
+	result, err = store.WriteScopedVault(ctx, ScopedVaultWrite{OperationID: "order-put-item", Actor: writer, EnvironmentKey: "dev", NamespaceKey: "ops", ItemKey: "app", ExpectedRevision: 2, Action: "put_item", Fields: permuted, Values: values("dev-3")})
 	if err != nil || result.Revision != 3 {
 		t.Fatal("dev-only token could not replace dev values", result, err)
 	}

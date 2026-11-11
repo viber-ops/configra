@@ -132,12 +132,17 @@ func TestVaultTextValuesAreStoredWithoutEdgeWhitespace(t *testing.T) {
 		t.Fatal("scoped normalization wrote through the request")
 	}
 
-	// A Config referencing the Field resolves the stored value.
-	if _, err := store.CommitConfig(ctx, ConfigCommit{OperationID: "trim-config", Actor: admin, EnvironmentKey: "dev", ConfigKey: "server", ConfigName: "Server", Format: configdoc.YAML, Content: []byte("url: \"{vault.ops.app.url}\"\ncompany: \"{vault.ops.app.company}\"\n")}); err != nil {
+	// A Config referencing the Fields resolves the stored values, including a value of only whitespace as "", and
+	// validation does not warn about the empty one.
+	if _, err := store.CommitConfig(ctx, ConfigCommit{OperationID: "trim-config", Actor: admin, EnvironmentKey: "dev", ConfigKey: "server", ConfigName: "Server", Format: configdoc.YAML, Content: []byte("url: \"{vault.ops.app.url}\"\ncompany: \"{vault.ops.app.company}\"\nblank: \"{vault.ops.app.blank}\"\n")}); err != nil {
 		t.Fatal(err)
 	}
+	validation, err := store.ValidateConfig(ctx, ConfigValidation{EnvironmentKey: "dev", Format: configdoc.YAML, Content: []byte("blank: \"{vault.ops.app.blank}\"\n")})
+	if err != nil || len(validation.Warnings) != 0 {
+		t.Fatal("validation of an empty Text reference", validation.Warnings, err)
+	}
 	resolved, err := store.ReadResolvedConfig(ctx, "dev", "server", "")
-	if err != nil || resolved.Content != "url: \"http://service.example.com:8918\"\ncompany: \"XOOM INTERNET LIMITED\"\n" {
+	if err != nil || resolved.Content != "url: \"http://service.example.com:8918\"\ncompany: \"XOOM INTERNET LIMITED\"\nblank: \"\"\n" {
 		t.Fatalf("resolved Config = %q, %v", resolved.Content, err)
 	}
 
