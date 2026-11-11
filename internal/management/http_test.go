@@ -1,6 +1,7 @@
 package management_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -23,6 +24,7 @@ import (
 	"github.com/viber-ops/configra/internal/storage/mysqlstore"
 	"github.com/viber-ops/configra/internal/vaultcrypto"
 	"github.com/viber-ops/configra/internal/vaultdoc"
+	"github.com/viber-ops/configra/internal/vaultimport"
 )
 
 func TestViewerReadsIdentityAndEnvironmentList(t *testing.T) {
@@ -1481,5 +1483,67 @@ func TestMeReportsTheSessionLimitsForTheBrowser(t *testing.T) {
 		if _, present := body[field]; present {
 			t.Fatalf("%s present without a session: %#v", field, body)
 		}
+	}
+}
+
+func TestVaultImportPreviewChecksTheFileAndTargetsWithoutWriting(t *testing.T) {
+	const file = "namespace: order_service\nitem: clients-conf\nenvironments: [hk47, hk180, old]\nfields:\n" +
+		"  - {key: lvl-data, type: text, value: \"https://lvl.example.com\"}\n  - {key: token, type: secret, value: \"secret-sentinel\"}\n"
+	preview := func(repository *recordingConfigWriter, role humanauth.Role, content string) *httptest.ResponseRecorder {
+		t.Helper()
+		body, _ := json.Marshal(map[string]string{"content": content})
+		request := httptest.NewRequest(http.MethodPost, "https://configra.test/v1/vault-items/import-preview", bytes.NewReader(body))
+		request.Header.Set("Content-Type", "application/json")
+		request = request.WithContext(humanauth.WithPrincipal(request.Context(), humanauth.Principal{Subject: "admin-1", Role: role}))
+		response := httptest.NewRecorder()
+		management.NewHandler(repository, nil, nil).ServeHTTP(response, request)
+		return response
+	}
+
+	repository := &recordingConfigWriter{vaultReadErr: mysqlstore.ErrNotFound, environments: []mysqlstore.Environment{
+		{Key: "hk47"}, {Key: "hk180"}, {Key: "old", Archived: true},
+	}}
+	response := preview(repository, humanauth.RoleAdmin, file)
+	if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("preview = %d %q", response.Code, response.Body.String())
+	}
+	if got := response.Body.String(); got != `{"problems":[{"path":"environments[2]","line":3,"code":"environment_archived"}]}`+"\n" {
+		t.Fatalf("archived Environment preview = %s", got)
+	}
+	if len(repository.vaultCommits) != 0 || len(repository.vaultReads) != 1 || repository.vaultReads[0] != (vaultRead{"order_service", "clients-conf", 0, false}) {
+		t.Fatalf("commits = %d, reads = %#v", len(repository.vaultCommits), repository.vaultReads)
+	}
+
+	repository.environments = repository.environments[:2]
+	response = preview(repository, humanauth.RoleAdmin, strings.Replace(file, ", old]", "]", 1))
+	var clean struct {
+		Problems []vaultimport.Problem `json:"problems"`
+		Draft    vaultimport.Draft     `json:"draft"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &clean); err != nil || len(clean.Problems) != 0 {
+		t.Fatalf("clean preview = %d %s", response.Code, response.Body.String())
+	}
+	if clean.Draft.ItemKey != "clients-conf" || len(clean.Draft.Fields) != 2 || clean.Draft.Fields[1].Type != vaultdoc.Secret || clean.Draft.Values["lvl-data"] != "https://lvl.example.com" {
+		t.Fatalf("draft = %+v", clean.Draft)
+	}
+
+	repository.vaultReadErr, repository.vaultItem = nil, mysqlstore.VaultItem{Archived: true}
+	response = preview(repository, humanauth.RoleAdmin, strings.Replace(file, ", old]", "]", 1))
+	if got := response.Body.String(); got != `{"problems":[{"path":"item","line":2,"code":"item_archived"}]}`+"\n" {
+		t.Fatalf("existing Item preview = %s", got)
+	}
+
+	// Problems in the file never echo its values.
+	broken := strings.Replace(file, "type: secret", "type: password", 1)
+	response = preview(&recordingConfigWriter{}, humanauth.RoleAdmin, broken)
+	if got := response.Body.String(); got != `{"problems":[{"path":"fields[1].type","line":6,"code":"unsupported_type"}]}`+"\n" || strings.Contains(got, "secret-sentinel") {
+		t.Fatalf("invalid file preview = %s", got)
+	}
+
+	if response := preview(&recordingConfigWriter{}, humanauth.RoleViewer, file); response.Code != http.StatusForbidden {
+		t.Fatalf("viewer preview = %d", response.Code)
+	}
+	if response := preview(&recordingConfigWriter{}, humanauth.RoleAdmin, strings.Repeat("#", vaultimport.MaxBytes+1)); response.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("oversized preview = %d", response.Code)
 	}
 }

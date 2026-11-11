@@ -299,6 +299,57 @@ archive requests do not require this preview or its confirmation.
 修改草稿会清除之前的确认。这个提示不会锁住其他人的配置操作；检查之后引用仍可能
 变化。直接调用 `PUT`、恢复版本或归档接口，不强制执行这一步检查。
 
+### Vault import from YAML / 从 YAML 导入 Vault Item
+
+**Import YAML** on the Vault page creates one new Item with one Variant from a
+file. Paste the YAML or choose a `.yml`/`.yaml` file (the same text gives the
+same result), or start from **Download template**:
+
+```yaml
+namespace: order_service
+item: clients-conf
+display_name: order_service_clients_conf   # optional, defaults to item
+environments:                               # existing, active Environments sharing these values
+  - hk47
+fields:
+  - key: lvl-data
+    name: LVL data service                  # optional, defaults to key
+    type: text                              # text or secret
+    value: "https://lvl.example.com/api/v1/lvl"
+```
+
+**Check file** sends the text to an Admin-only read that writes nothing:
+
+```http
+POST /v1/vault-items/import-preview
+Content-Type: application/json
+
+{"content":"namespace: order_service\n..."}
+```
+
+It returns `{"problems": [], "draft": {...}}` for a clean file, or only
+`{"problems": [{"path": "fields[2].key", "line": 14, "code": "duplicate_field"}]}`.
+Parsing is strict and bounded to 1 MiB, 1000 Fields and 256 Environments:
+- unknown or repeated keys, anchors and aliases, a second document, a non-string
+  or missing `value` (write `""` for an empty one), `file` Fields, invalid keys
+  and oversized values are problems;
+- an unknown or archived Environment, and an existing Item with the same
+  Namespace and key (archived or not), are problems too.
+
+Problems carry a path, a line and a code, never a value, and nothing about the
+file is logged or audited. A clean draft fills the ordinary create form, in file
+order and with Secret values hidden, for review and changes. **Create Vault
+item** then writes the whole Item with the usual `PUT`, idempotency, audit and
+redirect to the new Item. Checking the file again replaces the form.
+
+Vault 页面的“导入 YAML”用一个文件创建一个新的 Item 和一个 Variant。可以粘贴或选择
+`.yml`/`.yaml` 文件（内容相同则结果相同），也可以先“下载模板”。“检查文件”只读、
+不写入：未知或重复的键、锚点与别名、多个文档、非字符串或缺失的 `value`（空值写
+`""`）、File 字段、非法标识、超大值、不存在或已归档的环境，以及同 Namespace 与键的
+已有 Item（包括已归档）都会按路径和行号列出，报错中不包含值。检查通过后，结果按文件
+顺序填入现有的创建表单（Secret 默认隐藏），核对或调整后点击“创建 Vault Item”，通过
+现有的 `PUT` 一次写入，沿用幂等、审计和创建后跳转。
+
 ### Token grant edits / Token 授权修改
 
 The UI saves grant edits with an incremental request:

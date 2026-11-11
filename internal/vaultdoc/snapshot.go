@@ -242,3 +242,9 @@ func validResourceKey(value string) bool {
 	}
 	return true
 }
+
+// ValidResourceKey reports whether value is a Namespace, Item, Field or Environment key: 1–63 bytes, starting with a
+// lowercase letter, then lowercase letters, digits, underscores or hyphens.
+func ValidResourceKey(value string) bool {
+	return validResourceKey(value)
+}

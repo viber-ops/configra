@@ -178,6 +178,45 @@ const messages = {
     createConfig: 'Create config',
     createEnvironment: 'Create environment',
     createVaultItem: 'Create Vault item',
+    importVaultItem: 'Import YAML',
+    importVaultTitle: 'Import a Vault Item from YAML',
+    importVaultBody: 'One file creates one new Item with one Variant shared by the Environments it lists. Checking the file writes nothing; it fills the form below for review.',
+    importVaultSource: 'Import file (YAML)',
+    importVaultChooseFile: 'Choose .yml or .yaml file',
+    importVaultTemplate: 'Download template',
+    importVaultCheck: 'Check file',
+    importVaultChecking: 'Checking…',
+    importVaultProblems: 'Fix these problems in the file, then check it again:',
+    importVaultLoaded: 'Loaded {item} from the file: {fields} Fields for {environments}. Review the form, then create the Item.',
+    importVaultEditFile: 'Edit the file',
+    importVaultReplaceNote: 'Checking the file again replaces what is in the form.',
+    importVaultTooLarge: 'The file is larger than 1 MiB.',
+    importLine: 'line {line}',
+    importProblem_too_large: 'The file is larger than 1 MiB.',
+    importProblem_syntax: 'This is not valid YAML.',
+    importProblem_empty: 'The file is empty.',
+    importProblem_multiple_documents: 'Only one YAML document is allowed.',
+    importProblem_alias: 'Anchors and aliases are not supported. Write the value out.',
+    importProblem_expected_mapping: 'Expected key: value pairs here.',
+    importProblem_expected_list: 'Expected a list here.',
+    importProblem_expected_string: 'Expected a string. Put the value in quotes.',
+    importProblem_unknown_key: 'Unknown key.',
+    importProblem_duplicate_key: 'This key appears more than once.',
+    importProblem_missing: 'Required, but missing.',
+    importProblem_missing_value: 'Missing value. Write "" for an empty value.',
+    importProblem_invalid_key: 'Use 1–63 characters: a lowercase letter, then lowercase letters, digits, _ or -.',
+    importProblem_invalid_name: 'Names must be 1–255 bytes.',
+    importProblem_unsupported_type: 'Type must be text or secret.',
+    importProblem_file_type: 'File Fields cannot be imported. Add them in the editor after the import.',
+    importProblem_duplicate_field: 'Another Field already uses this key.',
+    importProblem_duplicate_environment: 'This Environment is listed twice.',
+    importProblem_empty_list: 'The list is empty.',
+    importProblem_too_many: 'Too many entries: at most 256 Environments and 1000 Fields.',
+    importProblem_value_too_large: 'The value is larger than 512 KiB.',
+    importProblem_environment_unknown: 'No Environment has this key.',
+    importProblem_environment_archived: 'This Environment is archived.',
+    importProblem_item_exists: 'An Item with this Namespace and key already exists. Import only creates new Items.',
+    importProblem_item_archived: 'An archived Item already uses this Namespace and key. Import only creates new Items.',
     createAPIToken: 'Create API token',
     clientCertificates: 'Client certificates',
     certificateName: 'Certificate name',
@@ -623,6 +662,45 @@ const messages = {
     createConfig: '创建 Config',
     createEnvironment: '创建环境',
     createVaultItem: '创建 Vault Item',
+    importVaultItem: '导入 YAML',
+    importVaultTitle: '从 YAML 导入 Vault Item',
+    importVaultBody: '一个文件创建一个新的 Item 和一个 Variant，由文件中列出的环境共用。检查文件不会写入任何数据，只会把结果填入下方的表单供核对。',
+    importVaultSource: '导入文件（YAML）',
+    importVaultChooseFile: '选择 .yml 或 .yaml 文件',
+    importVaultTemplate: '下载模板',
+    importVaultCheck: '检查文件',
+    importVaultChecking: '检查中…',
+    importVaultProblems: '请修正文件中的以下问题，然后重新检查：',
+    importVaultLoaded: '已从文件载入 {item}：{fields} 个字段，环境 {environments}。请核对表单后创建 Item。',
+    importVaultEditFile: '修改文件',
+    importVaultReplaceNote: '重新检查文件会替换表单中的内容。',
+    importVaultTooLarge: '文件超过 1 MiB。',
+    importLine: '第 {line} 行',
+    importProblem_too_large: '文件超过 1 MiB。',
+    importProblem_syntax: 'YAML 语法错误。',
+    importProblem_empty: '文件为空。',
+    importProblem_multiple_documents: '只允许一个 YAML 文档。',
+    importProblem_alias: '不支持锚点和别名，请直接写出值。',
+    importProblem_expected_mapping: '此处应为“键: 值”形式。',
+    importProblem_expected_list: '此处应为列表。',
+    importProblem_expected_string: '此处应为字符串，请给值加上引号。',
+    importProblem_unknown_key: '未知的配置项。',
+    importProblem_duplicate_key: '该键重复出现。',
+    importProblem_missing: '缺少必填项。',
+    importProblem_missing_value: '缺少 value。空值请写 ""。',
+    importProblem_invalid_key: '请使用 1–63 个字符：以小写字母开头，其后为小写字母、数字、_ 或 -。',
+    importProblem_invalid_name: '名称须为 1–255 字节。',
+    importProblem_unsupported_type: 'type 只能是 text 或 secret。',
+    importProblem_file_type: '不支持导入 File 字段，请在导入后通过编辑器添加。',
+    importProblem_duplicate_field: '已有字段使用该键。',
+    importProblem_duplicate_environment: '该环境重复列出。',
+    importProblem_empty_list: '列表为空。',
+    importProblem_too_many: '条目过多：最多 256 个环境、1000 个字段。',
+    importProblem_value_too_large: '值超过 512 KiB。',
+    importProblem_environment_unknown: '不存在该键的环境。',
+    importProblem_environment_archived: '该环境已归档。',
+    importProblem_item_exists: '该 Namespace 与键的 Item 已存在。导入只创建新的 Item。',
+    importProblem_item_archived: '已归档的 Item 使用了该 Namespace 与键。导入只创建新的 Item。',
     createAPIToken: '创建 API Token',
     clientCertificates: '客户端证书',
     certificateName: '证书名称',
@@ -2185,11 +2263,89 @@ function VaultSnapshotEditor({ draft, onChange, namespaceKey, itemKey, t }) {
   </div>;
 }
 
+const vaultImportTemplate = `# Configra Vault Item import: one new Item with one Variant.
+# Every value is a quoted string; write "" for an empty value.
+namespace: order_service
+item: clients-conf
+display_name: Order service clients    # optional, defaults to item
+environments:                           # existing, active Environments that share these values
+  - hk47
+fields:
+  - key: lvl-data
+    name: LVL data service              # optional, defaults to key
+    type: text                          # text or secret
+    value: "https://lvl.example.com/api/v1/lvl"
+  - key: google-login
+    name: Google login service
+    type: secret
+    value: "replace-me"
+`;
+
+// A checked import file (#55) becomes an ordinary new-Item draft, so the usual create form reviews and writes it.
+function vaultDraftFromImport(imported) {
+  const fields = imported.fields.map(field => ({ ...field, _id: vaultEditorID(), _existing: false }));
+  return {
+    fields,
+    variants: [{ id: vaultEditorID(), environments: [...imported.environments], values: Object.fromEntries(fields.map(field => [field._id, { text: imported.values[field.key] }])) }],
+  };
+}
+
+function importProblemMessage(problem, t) {
+  if (problem.code === 'missing' && problem.path.endsWith('.value')) return t.importProblem_missing_value;
+  return t[`importProblem_${problem.code}`] || problem.code;
+}
+
+function VaultImportPanel({ source, onSourceChange, onLoad, onClose, replacing, t }) {
+  const [state, setState] = useState({ status: 'idle' });
+  const edit = value => { onSourceChange(value); setState({ status: 'idle' }); };
+  const chooseFile = async file => {
+    if (!file) return;
+    if (file.size > 1024 * 1024) return setState({ status: 'failed', error: { message: t.importVaultTooLarge } });
+    edit(await file.text());
+  };
+  const check = async () => {
+    setState({ status: 'checking' });
+    try {
+      const preview = await request('/v1/vault-items/import-preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: source }) });
+      if (preview.problems.length) return setState({ status: 'problems', problems: preview.problems });
+      setState({ status: 'idle' });
+      onLoad(preview.draft);
+    } catch (error) {
+      setState({ status: 'failed', error: managementError(error, t, t.operationFailed) });
+    }
+  };
+  const downloadTemplate = () => {
+    const url = URL.createObjectURL(new Blob([vaultImportTemplate], { type: 'application/yaml' }));
+    const link = document.createElement('a');
+    link.href = url; link.download = 'vault-item-import.yaml';
+    document.body.append(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  return <section className="vault-import-panel" aria-label={t.importVaultTitle}>
+    <div className="vault-editor-heading"><h2>{t.importVaultTitle}</h2><button className="secondary-action compact-action" type="button" onClick={downloadTemplate}>{t.importVaultTemplate}</button></div>
+    <p className="muted-note">{t.importVaultBody}{replacing && ` ${t.importVaultReplaceNote}`}</p>
+    <textarea aria-label={t.importVaultSource} spellCheck="false" autoComplete="off" wrap="off" rows="14" value={source} placeholder={vaultImportTemplate} onChange={event => edit(event.target.value)} />
+    {state.status === 'problems' && <div className="vault-import-problems" role="alert"><strong>{t.importVaultProblems}</strong><ul>{state.problems.map((problem, index) => <li key={index}>
+      {problem.line > 0 && <span>{t.importLine.replace('{line}', problem.line)}</span>}{problem.path && <code>{problem.path}</code>}<span>{importProblemMessage(problem, t)}</span>
+    </li>)}</ul></div>}
+    {state.status === 'failed' && <ActionError error={state.error} t={t} />}
+    <div className="vault-import-actions">
+      <label className="vault-file-picker"><input type="file" accept=".yml,.yaml,application/yaml,text/yaml" aria-label={t.importVaultChooseFile} onChange={event => { chooseFile(event.target.files[0]); event.target.value = ''; }} /><span>{t.importVaultChooseFile}</span></label>
+      <div className="row-actions"><button type="button" onClick={onClose}>{t.cancel}</button><button className="primary-action compact-action" type="button" disabled={!source.trim() || state.status === 'checking'} onClick={check}>{state.status === 'checking' ? t.importVaultChecking : t.importVaultCheck}</button></div>
+    </div>
+  </section>;
+}
+
 function VaultItems({ principal, filters = new URLSearchParams(), t }) {
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState(null);
   const [newNamespaceKey, setNewNamespaceKey] = useState('');
   const [newItemKey, setNewItemKey] = useState('');
+  const [newDisplayName, setNewDisplayName] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [importSource, setImportSource] = useState('');
+  const [imported, setImported] = useState(null);
+  const [draftSession, setDraftSession] = useState(0);
   const [namespaceFilter, setNamespaceFilter] = useState(() => filters.get('namespace') || '');
   const [environmentFilter, setEnvironmentFilter] = useState(() => filters.get('environment') || '');
   const [search, setSearch] = useState(() => filters.get('q') || '');
@@ -2211,8 +2367,23 @@ function VaultItems({ principal, filters = new URLSearchParams(), t }) {
       setDraft(newVaultDraft());
       setNewNamespaceKey('');
       setNewItemKey('');
+      setNewDisplayName('');
+      setDraftSession(value => value + 1);
     }
+    setImported(null);
     setCreating(value => !value);
+    setError(null);
+  };
+  const loadImport = draft => {
+    resetCreate();
+    setDraft(vaultDraftFromImport(draft));
+    setNewNamespaceKey(draft.namespace_key);
+    setNewItemKey(draft.item_key);
+    setNewDisplayName(draft.display_name);
+    setDraftSession(value => value + 1);
+    setImported({ item: `${draft.namespace_key}.${draft.item_key}`, fields: draft.fields.length, environments: draft.environments.join(', ') });
+    setImporting(false);
+    setCreating(true);
     setError(null);
   };
   const create = async event => {
@@ -2229,6 +2400,8 @@ function VaultItems({ principal, filters = new URLSearchParams(), t }) {
       resetCreate();
       setCreating(false);
       setDraft(null);
+      setImported(null);
+      setImportSource('');
       window.location.hash = `/vault/${newNamespaceKey}/${newItemKey}`;
     } catch (error) {
       setError(createError(error, t, t.operationFailed));
@@ -2245,10 +2418,12 @@ function VaultItems({ principal, filters = new URLSearchParams(), t }) {
   };
   return (
     <ResourcePage eyebrow="VLT / encrypted revisions" title={t.vault} body={t.vaultBody}
-      action={principal.role === 'admin' && <button className="primary-action compact-action" type="button" onClick={toggleCreate}>{t.newVaultItem}</button>}>
+      action={principal.role === 'admin' && <div className="resource-heading-actions"><button className="secondary-action compact-action" type="button" aria-pressed={importing} onClick={() => setImporting(value => !value)}>{t.importVaultItem}</button><button className="primary-action compact-action" type="button" onClick={toggleCreate}>{t.newVaultItem}</button></div>}>
+      {importing && <VaultImportPanel source={importSource} onSourceChange={setImportSource} onLoad={loadImport} onClose={() => setImporting(false)} replacing={creating} t={t} />}
       {creating && draft && <form className="vault-structured-form" onSubmit={create}>
-        <section className="vault-item-basics"><div className="vault-editor-heading"><h2>{t.itemDetails}</h2></div><div className="vault-item-identity"><label>{t.namespace}<input required maxLength="63" pattern="[a-z][a-z0-9_-]{0,62}" autoComplete="off" value={newNamespaceKey} onChange={event => setNewNamespaceKey(event.target.value)} /><small>{t.namespaceHint}</small></label><label>{t.resourceKey}<input required maxLength="63" pattern="[a-z][a-z0-9_-]{0,62}" autoComplete="off" value={newItemKey} onChange={event => setNewItemKey(event.target.value)} /><small>{t.resourceKeyHint}</small></label><label>{t.displayName}<input name="display_name" required maxLength="255" autoComplete="off" /></label></div></section>
-        <VaultSnapshotEditor draft={draft} onChange={setDraft} namespaceKey={newNamespaceKey} itemKey={newItemKey} t={t} />
+        {imported && <p className="vault-import-loaded" role="status"><span>{t.importVaultLoaded.replace('{item}', imported.item).replace('{fields}', imported.fields).replace('{environments}', imported.environments)}</span>{!importing && <button type="button" onClick={() => setImporting(true)}>{t.importVaultEditFile}</button>}</p>}
+        <section className="vault-item-basics"><div className="vault-editor-heading"><h2>{t.itemDetails}</h2></div><div className="vault-item-identity"><label>{t.namespace}<input required maxLength="63" pattern="[a-z][a-z0-9_-]{0,62}" autoComplete="off" value={newNamespaceKey} onChange={event => setNewNamespaceKey(event.target.value)} /><small>{t.namespaceHint}</small></label><label>{t.resourceKey}<input required maxLength="63" pattern="[a-z][a-z0-9_-]{0,62}" autoComplete="off" value={newItemKey} onChange={event => setNewItemKey(event.target.value)} /><small>{t.resourceKeyHint}</small></label><label>{t.displayName}<input name="display_name" required maxLength="255" autoComplete="off" value={newDisplayName} onChange={event => setNewDisplayName(event.target.value)} /></label></div></section>
+        <VaultSnapshotEditor key={draftSession} draft={draft} onChange={setDraft} namespaceKey={newNamespaceKey} itemKey={newItemKey} t={t} />
         <div className="vault-editor-footer"><ActionError error={error} t={t} /><div className="row-actions"><button type="button" onClick={toggleCreate}>{t.cancel}</button><button className="primary-action compact-action" type="submit">{t.createVaultItem}</button></div></div>
       </form>}
       <div className="vault-index-tools">

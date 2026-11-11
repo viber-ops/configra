@@ -635,6 +635,22 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .binding-row > div { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 3px; }
 .history-row time { color: var(--muted); font-size: 10px; text-align: right; }
 .vault-structured-form { display: grid; gap: 14px; margin-bottom: 22px; }
+.resource-heading-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; }
+.resource-heading .resource-heading-actions > button { min-height: 38px; margin: 0; }
+.vault-import-panel { display: grid; gap: 12px; margin-bottom: 18px; border: 1px solid var(--line); border-radius: 6px; padding: 15px; background: var(--surface); }
+.vault-import-panel h2 { margin: 0; font-size: 15px; }
+.vault-import-panel > .muted-note { margin: 0; max-width: 760px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.vault-import-panel textarea { width: 100%; min-height: 260px; border: 1px solid var(--line-strong); border-radius: 4px; padding: 10px 12px; background: var(--editor-surface); color: var(--ink); font: 12px/1.55 ui-monospace, "SFMono-Regular", Consolas, monospace; overflow-x: auto; overflow-wrap: normal; resize: vertical; tab-size: 2; white-space: pre; }
+.vault-import-panel textarea::placeholder { color: var(--disabled); }
+.vault-import-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.vault-import-actions .vault-file-picker span { min-height: 32px; font-size: 12px; }
+.vault-import-problems { border: 1px solid var(--danger-line); border-radius: 5px; padding: 10px 12px; background: var(--danger-soft); color: var(--ink); font-size: 12px; }
+.vault-import-problems ul { display: grid; gap: 5px; margin: 8px 0 0; padding: 0; list-style: none; }
+.vault-import-problems li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.vault-import-problems li > span:first-child:not(:last-child) { min-width: 58px; color: var(--danger); font-weight: 700; }
+.vault-import-problems code { color: var(--amber-ink); font-size: 11px; }
+.vault-import-loaded { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; margin: 0; border: 1px solid var(--green-line); border-radius: 6px; padding: 10px 13px; background: var(--green-soft); color: var(--ink); font-size: 12px; }
+.vault-import-loaded button { border: 0; background: transparent; color: var(--blue); cursor: pointer; font: inherit; font-weight: 700; }
 .vault-detail-editor { margin-top: 18px; }
 .vault-usage-panel { margin: 14px 0; padding: 15px; }
 .vault-usage-panel > .section-heading { align-items: flex-start; margin-bottom: 12px; }
@@ -1015,7 +1031,7 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
   .inventory-cell:last-child { border-bottom: 0; }
   .revision-rail { grid-template-columns: 1fr; }
   .resource-heading { display: block; }
-  .resource-heading .primary-action { margin-top: 22px; }
+  .resource-heading .primary-action, .resource-heading-actions { margin-top: 22px; }
   .resource-grid, .create-panel { grid-template-columns: 1fr; }
   .config-context-grid { grid-template-columns: 1fr; }
   .config-home-summary { grid-template-columns: 1fr; }
