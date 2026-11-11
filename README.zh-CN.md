@@ -40,7 +40,7 @@ database:
 
 ## 开始体验
 
-准备 Docker Compose、Go 1.26.10、Node.js 24、npm、Make 和 OpenSSL：
+准备 Docker Compose、Go 1.26.11、Node.js 24、npm、Make 和 OpenSSL：
 
 ```sh
 git clone --branch v1.3.1 https://github.com/viber-ops/configra.git
