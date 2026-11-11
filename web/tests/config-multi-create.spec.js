@@ -9,7 +9,7 @@ const environments = [
   { key: 'retired', display_name: 'Retired', archived: true },
 ];
 
-async function configsPage(page, { failFirstWriteIn } = {}) {
+async function configsPage(page, { failFirstWriteIn, invalid = false } = {}) {
   const writes = [];
   await page.route('**/v1/me', route => route.fulfill({ json: { subject: 'admin-1', role: 'admin' } }));
   await page.route(/\/v1\/configs(\?|$)/, route => route.fulfill({ body: inventoryPage(route, []) }));
@@ -21,6 +21,7 @@ async function configsPage(page, { failFirstWriteIn } = {}) {
   });
   await page.route('**/v1/configs/validate', route => {
     const { environment } = route.request().postDataJSON();
+    if (invalid) return route.fulfill({ status: 422, json: { error: { code: 'config_document_invalid', request_id: 'req-422' } } });
     return route.fulfill({ json: { format: 'yaml', warnings: environment === 'hk47' ? [{ code: 'missing_vault_environment_variant', namespace_key: 'platform', item_key: 'nats', field_key: 'url' }] : [] } });
   });
   await page.route(/\/v1\/environments\/[^/]+\/configs\/[^/?]+$/, route => {
@@ -93,4 +94,15 @@ test('one Environment keeps the single create', async ({ page }) => {
   await page.getByRole('button', { name: 'Create config' }).click();
   await expect(page.locator('.config-create-form')).toHaveCount(0);
   expect(writes.map(write => write.environment)).toEqual(['hk47']);
+});
+
+test('a document that does not validate blocks the whole batch', async ({ page }) => {
+  const writes = await configsPage(page, { invalid: true });
+  await checkEnvironments(page, 'Environments', ['hk180', 'hk47']);
+  await fillConfig(page);
+  const targets = page.getByRole('region', { name: 'Target Environments' });
+  await expect(targets.getByRole('alert')).toContainText('Check its YAML/JSON syntax');
+  await expect(targets.getByRole('alert')).toContainText('req-422');
+  await expect(page.getByRole('button', { name: 'Create in 2 Environments' })).toBeDisabled();
+  expect(writes).toHaveLength(0);
 });
