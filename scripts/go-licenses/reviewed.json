@@ -9,8 +9,8 @@
       "goos": "darwin",
       "goarch": "amd64",
       "goamd64": "v1",
-      "package_count": 360,
-      "package_paths_sha256": "9ba640c6e4d5c75972402380ad4cb5184a358b011267e3d4033cb6242a9de540"
+      "package_count": 361,
+      "package_paths_sha256": "8aa0a17acd68a002698cafbc607a114f3d9d968fd29a051531bf278c3e5b0de1"
     },
     {
       "target": "configra-kubernetes/darwin/amd64",
@@ -29,8 +29,8 @@
       "goos": "darwin",
       "goarch": "arm64",
       "goarm64": "v8.0",
-      "package_count": 358,
-      "package_paths_sha256": "86166e9d2218af9492e5c992e4eabbfc0f7f0f9bf351f8aa86b640128f38a036"
+      "package_count": 359,
+      "package_paths_sha256": "24d979ff03119a0af323f5d813ad57fe29788c8e7a1aea919812e6c25612fded"
     },
     {
       "target": "configra-kubernetes/darwin/arm64",
@@ -49,8 +49,8 @@
       "goos": "linux",
       "goarch": "amd64",
       "goamd64": "v1",
-      "package_count": 363,
-      "package_paths_sha256": "14dc127bf3c59ed18d2eaa86bca7d7b8bda767a49e9f984418308cc7b8aa3070"
+      "package_count": 364,
+      "package_paths_sha256": "bfc8919352505f08fd8e3f90177c099f77aea48792a4e283629cfb269100a5e5"
     },
     {
       "target": "configra-kubernetes/linux/amd64",
@@ -69,8 +69,8 @@
       "goos": "linux",
       "goarch": "arm64",
       "goarm64": "v8.0",
-      "package_count": 361,
-      "package_paths_sha256": "42cd08f7a2799af6759092dab48838e292f92ae00f7677447538d2e85cf6cc46"
+      "package_count": 362,
+      "package_paths_sha256": "0cb2f839d79c677970d8eadcc2fe1f54472474358a2314f3711ea492c6189804"
     },
     {
       "target": "configra-kubernetes/linux/arm64",
