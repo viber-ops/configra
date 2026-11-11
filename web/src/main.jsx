@@ -134,6 +134,17 @@ const messages = {
     loadTemplate: 'Load template',
     editedCopyNote: 'Edited content is saved as a new first version, not as a copy of the source revision.',
     alreadyHasConfig: 'already has this Config',
+    insertVaultReference: 'Insert Vault reference',
+    vaultReferenceSearch: 'Search Namespace, Item, name or Field key',
+    vaultReferenceItems: 'Vault Items',
+    vaultReferenceFields: 'Fields',
+    vaultReferenceChooseItem: 'Choose a Vault Item to see its Fields.',
+    vaultReferenceFile: 'File Fields are read through their own endpoint and cannot be inserted as a value.',
+    vaultReferenceArchived: 'This Item is archived, so its references do not resolve. Restore it first.',
+    vaultReferenceNoVariant: 'No Variant covers {environment} yet, so this reference will not resolve there until one does.',
+    vaultReferenceBound: 'A Variant covers {environment}.',
+    vaultReferencePlacement: 'Put the cursor where a value goes, inside empty quotes, or select a whole value, then insert again.',
+    insert: 'Insert',
     preflightChecking: 'Checking against {environment}…',
     preflightClear: 'Checked against {environment}: every Vault reference has a value there.',
     preflightWarnings: 'Checked against {environment}: these Vault references have no value there yet.',
@@ -559,6 +570,17 @@ const messages = {
     loadTemplate: '加载模板',
     editedCopyNote: '编辑后的内容将作为新的首个版本保存，而不是源 Revision 的副本。',
     alreadyHasConfig: '已有此 Config',
+    insertVaultReference: '插入 Vault 引用',
+    vaultReferenceSearch: '搜索 Namespace、Item、名称或字段键',
+    vaultReferenceItems: 'Vault Item',
+    vaultReferenceFields: '字段',
+    vaultReferenceChooseItem: '选择一个 Vault Item 以查看其字段。',
+    vaultReferenceFile: 'File 字段通过单独的接口读取，不能作为值插入。',
+    vaultReferenceArchived: '该 Item 已归档，其引用无法解析。请先恢复。',
+    vaultReferenceNoVariant: '{environment} 尚无对应的 Variant，在添加之前该引用在此环境无法解析。',
+    vaultReferenceBound: '{environment} 有对应的 Variant。',
+    vaultReferencePlacement: '请将光标放在值的位置、空引号内，或选中整个值，然后再插入。',
+    insert: '插入',
     preflightChecking: '正在按 {environment} 检查…',
     preflightClear: '已按 {environment} 检查：所有 Vault 引用在该环境都有值。',
     preflightWarnings: '已按 {environment} 检查：以下 Vault 引用在该环境尚无值。',
@@ -2811,6 +2833,8 @@ function AuditPage({ principal, t }) {
 
 
 function ConfigDetail({ principal, configKey, environmentKey, t }) {
+  const editorController = useRef(null);
+  const [pickingReference, setPickingReference] = useState(false);
   const [state, setState] = useState({ status: 'loading' });
   const [source, setSource] = useState('');
   const [tab, setTab] = useState('raw');
@@ -2981,8 +3005,9 @@ function ConfigDetail({ principal, configKey, environmentKey, t }) {
             inspection.status === 'loading' ? <div className="collection-state"><span className="loading-line" /></div>
               : inspection.status === 'failed' ? <p className="inline-error" role="alert">{t.operationFailed}</p>
                 : <section className="editor-panel">
-                  <div className="editor-toolbar"><span>{viewedFormat.toUpperCase()}</span><div className="editor-toolbar-actions"><code>{t.revision} {viewedRevision}</code><CopyValue value={viewedContent} label={t.copyConfiguration} display={t.copyContent} t={t} /></div></div>
-                  <ConfigCodeEditor label={viewingCurrent ? t.configurationSource : t.revisionLabel.replace('{revision}', viewedRevision)} value={viewedContent} format={viewedFormat} readOnly={!viewingCurrent || principal.role !== 'admin'} onChange={value => { setSource(value); setSaveError(null); setValidation({ status: 'idle', warnings: [] }); }} />
+                  <div className="editor-toolbar"><span>{viewedFormat.toUpperCase()}</span><div className="editor-toolbar-actions"><code>{t.revision} {viewedRevision}</code>{principal.role === 'admin' && viewingCurrent && <button type="button" aria-pressed={pickingReference} onClick={() => setPickingReference(value => !value)}>{t.insertVaultReference}</button>}<CopyValue value={viewedContent} label={t.copyConfiguration} display={t.copyContent} t={t} /></div></div>
+                  {principal.role === 'admin' && viewingCurrent && pickingReference && <VaultReferencePicker environmentKey={environmentKey} onInsert={reference => editorController.current?.insertReference(reference)} onClose={() => setPickingReference(false)} t={t} />}
+                  <ConfigCodeEditor controller={editorController} label={viewingCurrent ? t.configurationSource : t.revisionLabel.replace('{revision}', viewedRevision)} value={viewedContent} format={viewedFormat} readOnly={!viewingCurrent || principal.role !== 'admin'} onChange={value => { setSource(value); setSaveError(null); setValidation({ status: 'idle', warnings: [] }); }} />
                   {principal.role === 'admin' && viewingCurrent && <div className="editor-actions">
                     <div className="editor-feedback" role="status">
                       {validation.status === 'saved' ? t.savedRevision.replace('{revision}', validation.revision) : validation.status === 'ready' && validation.warnings.length === 0 ? t.formatComplete : ''}
@@ -3295,6 +3320,72 @@ function ConfigCopy({ path, config, newConfig, existingEnvironments, t }) {
     {edited && showChanges && <ConfigDiffEditor source={config.content} target={diffTarget} sourceFormat={config.format} targetFormat={config.format}
       sourceLabel={`${config.environment_key}/${config.config_key}@v${config.revision}`} targetLabel={t.editedCopy} t={t} />}
     <ConfigCodeEditor label={t.source} readOnly={newConfig} value={content} format={config.format} onChange={value => { setContent(value); change(); }} />
+  </section>;
+}
+
+// Chooses a Vault Field and inserts its reference into the Config being edited (#51). It reads Item metadata only;
+// values stay behind the separate, explicitly authorised values endpoint.
+function VaultReferencePicker({ environmentKey, onInsert, onClose, t }) {
+  const [search, setSearch] = useState('');
+  const items = useInventory(`/v1/vault-items?${new URLSearchParams({ status: 'all', q: search })}`);
+  const [selected, setSelected] = useState(null);
+  const [detail, setDetail] = useState({ status: 'idle' });
+  const [field, setField] = useState(null);
+  const [placementError, setPlacementError] = useState(false);
+  useEffect(() => {
+    if (!selected) return undefined;
+    let live = true;
+    setDetail({ status: 'loading' });
+    setField(null);
+    request(`/v1/vault-items/${encodeURIComponent(selected.namespace_key)}/${encodeURIComponent(selected.key)}`)
+      .then(item => live && setDetail({ status: 'ready', item }))
+      .catch(error => live && setDetail({ status: 'failed', error: managementError(error, t, t.loadFailed) }));
+    return () => { live = false; };
+  }, [selected?.namespace_key, selected?.key]);
+  const item = detail.status === 'ready' ? detail.item : null;
+  const bound = Boolean(item?.snapshot.variants.some(variant => variant.environments.includes(environmentKey)));
+  const reference = selected && field ? `{vault.${selected.namespace_key}.${selected.key}.${field.key}}` : '';
+  const insert = () => {
+    if (!onInsert(reference)) return setPlacementError(true);
+    onClose();
+  };
+  return <section className="vault-reference-picker" aria-label={t.insertVaultReference}>
+    <div className="vault-reference-columns">
+      <div className="vault-reference-items">
+        <input type="search" aria-label={t.vaultReferenceSearch} placeholder={t.vaultReferenceSearch} value={search} onChange={event => setSearch(event.target.value)} autoFocus />
+        <div className="vault-reference-list" role="group" aria-label={t.vaultReferenceItems}>{items.items.map(entry => {
+          const key = `${entry.namespace_key}.${entry.key}`;
+          const active = selected && `${selected.namespace_key}.${selected.key}` === key;
+          return <button type="button" aria-pressed={Boolean(active)} key={key} onClick={() => { setSelected(entry); setPlacementError(false); }}>
+            <strong title={entry.display_name}>{entry.display_name}</strong><code>{key}</code>{entry.archived && <small>{t.statusArchived}</small>}
+          </button>;
+        })}</div>
+        {items.status === 'loading' && <span className="loading-line" role="status" aria-busy="true" />}
+        {items.status === 'ready' && !items.items.length && <p className="muted-note">{t.noResources}</p>}
+        <InventoryPagination collection={items} t={t} hideSinglePage />
+      </div>
+      <div className="vault-reference-fields">
+        {!selected && <p className="muted-note">{t.vaultReferenceChooseItem}</p>}
+        {detail.status === 'loading' && <span className="loading-line" role="status" aria-busy="true" />}
+        {detail.status === 'failed' && <ActionError error={detail.error} t={t} />}
+        {item && <>
+          <p className={bound ? 'muted-note' : 'vault-reference-warning'} role="status">{(bound ? t.vaultReferenceBound : t.vaultReferenceNoVariant).replace('{environment}', environmentKey)}</p>
+          {item.archived && <p className="vault-reference-warning" role="alert">{t.vaultReferenceArchived}</p>}
+          <div className="vault-reference-list" role="group" aria-label={t.vaultReferenceFields}>{item.snapshot.fields.map(entry => <button type="button" key={entry.key}
+            aria-pressed={field?.key === entry.key} disabled={entry.type === 'file' || item.archived} title={entry.type === 'file' ? t.vaultReferenceFile : undefined}
+            onClick={() => { setField(entry); setPlacementError(false); }}>
+            <strong>{entry.name}</strong><code>{entry.key}</code><small>{entry.type}</small>
+          </button>)}</div>
+          {item.snapshot.fields.some(entry => entry.type === 'file') && <p className="muted-note">{t.vaultReferenceFile}</p>}
+        </>}
+      </div>
+    </div>
+    <div className="vault-reference-actions">
+      <code aria-label={t.reference}>{reference || '—'}</code>
+      {placementError && <p className="vault-reference-warning" role="alert">{t.vaultReferencePlacement}</p>}
+      <button type="button" onClick={onClose}>{t.cancel}</button>
+      <button className="primary-action compact-action" type="button" disabled={!reference || item?.archived} onClick={insert}>{t.insert}</button>
+    </div>
   </section>;
 }
 

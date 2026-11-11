@@ -49,6 +49,29 @@ The API/storage invariants remain in the [design](design.md), [terminology](../C
 and [production acceptance matrix](production-readiness.md). This page describes
 presentation and navigation, not additional permission boundaries.
 
+## Vault references in Configs / 在 Config 中插入 Vault 引用
+
+While editing the current version of a Config, an Admin can use **Insert Vault
+reference** in the editor toolbar. Search by Namespace, Item key, name or Field
+key, choose an Item, then a Text or Secret Field. The picker reads Item metadata
+only; it never loads Field values. It says whether a Variant covers the current
+Environment, keeps File Fields out (they are read through their own endpoint)
+and refuses archived Items, whose references do not resolve.
+
+The reference is inserted as one edit that **Undo** removes. It goes inside an
+empty pair of quotes, replaces a selected whole value, or starts a new quoted
+value after `key:`, `-`, `[` or `,`. It is never spliced into a key, a comment,
+a nested block or the middle of a value; the picker asks you to move the cursor
+instead. Saving still runs the usual reference checks.
+
+编辑 Config 当前版本时，Admin 可以使用编辑器工具栏中的“插入 Vault 引用”。按
+Namespace、Item 键、名称或字段键搜索，选择 Item 后再选择 Text 或 Secret 字段。
+选择器只读取 Item 元数据，不会加载字段值；它会提示当前 Environment 是否有对应
+的 Variant，File 字段不可选（通过单独的接口读取），已归档的 Item 不可插入（其引用
+无法解析）。插入是一次可撤销的编辑：放在空引号内、替换选中的完整值，或在
+`key:`、`-`、`[`、`,` 之后作为新的带引号的值；不会插入键、注释、嵌套块或值的中间，
+此时会提示调整光标。保存时仍执行常规的引用检查。
+
 ## Revision history / 历史版本
 
 Open a Config or Vault Item and select **History**. Each page shows up to 50
@@ -173,7 +196,8 @@ records; bounded response size is not a constant-time query guarantee.
 
 - `q` is a case-insensitive literal substring, at most 256 bytes. `%` and `_`
   are not wildcards. Config search also matches bound environment keys; Vault
-  search includes `namespace.key`. It never searches secret values or source.
+  search includes `namespace.key` and the Field keys of each Item's current
+  revision. It never searches Field values, secret values or source.
 - `key` is exact (Token: public ID; CA: ID; certificate: SHA-256 fingerprint);
   combine it with `namespace` for Vault identity.
 - Default lists exclude archived/revoked rows. Use `include_archived=true` or
