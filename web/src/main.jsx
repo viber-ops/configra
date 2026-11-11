@@ -1429,9 +1429,9 @@ function Shell({ principal, language, setLanguage, theme, setTheme, t }) {
           ? <EnvironmentDetail environmentKey={currentRoute.segments[1]} t={t} />
           : route === 'environments' && <Environments principal={principal} t={t} />}
         {route === 'configs' && currentRoute.segments.length >= 3
-          ? <div className="resource-explorer"><ResourceRail refresh={inventoryRevision} section="configs" selected={currentRoute.segments[1]} t={t} /><div className="resource-explorer-detail"><ConfigDetail key={`${currentRoute.segments[1]}/${currentRoute.segments[2]}`} principal={principal} configKey={currentRoute.segments[1]} environmentKey={currentRoute.segments[2]} t={t} /></div></div>
+          ? <div className="resource-explorer"><ResourceRail refresh={inventoryRevision} section="configs" selected={currentRoute.segments[1]} preferredEnvironment={currentRoute.segments[2]} t={t} /><div className="resource-explorer-detail"><ConfigDetail key={`${currentRoute.segments[1]}/${currentRoute.segments[2]}`} principal={principal} configKey={currentRoute.segments[1]} environmentKey={currentRoute.segments[2]} t={t} /></div></div>
           : route === 'configs' && currentRoute.segments.length === 2
-            ? <ConfigHome configKey={currentRoute.segments[1]} t={t} />
+            ? <ConfigHome configKey={currentRoute.segments[1]} preferredEnvironment={currentRoute.query.get('environment') || ''} t={t} />
             : route === 'configs' && <Configs principal={principal} filters={currentRoute.query} t={t} />}
         {route === 'vault' && currentRoute.segments.length >= 3
           ? <div className="resource-explorer"><ResourceRail refresh={inventoryRevision} section="vault" selected={`${currentRoute.segments[1]}/${currentRoute.segments[2]}`} t={t} /><div className="resource-explorer-detail"><VaultDetail key={`${currentRoute.segments[1]}/${currentRoute.segments[2]}`} principal={principal} namespaceKey={currentRoute.segments[1]} itemKey={currentRoute.segments[2]} t={t} /></div></div>
@@ -1447,7 +1447,8 @@ function Shell({ principal, language, setLanguage, theme, setTheme, t }) {
   );
 }
 
-function ResourceRail({ section, selected, refresh, t }) {
+// On a Config detail page the rail carries the Environment being viewed, so ConfigHome can keep it.
+function ResourceRail({ section, selected, preferredEnvironment = '', refresh, t }) {
   const [query, setQuery] = useState('');
   const collection = useInventory(`/v1/${section === 'vault' ? 'vault-items' : section}?q=${encodeURIComponent(query)}`, refresh);
   const visible = collection.items;
@@ -1456,7 +1457,8 @@ function ResourceRail({ section, selected, refresh, t }) {
     <label><span className="visually-hidden">{t[section]} {t.search}</span><input type="search" placeholder={t.locale.startsWith('zh') ? '筛选条目…' : 'Filter items…'} value={query} onChange={event => setQuery(event.target.value)} /></label>
     <div className="resource-rail-items">{visible.map(item => {
       const key = section === 'vault' ? `${item.namespace_key}/${item.key}` : item.key;
-      return <a className={key === selected ? 'selected' : ''} aria-current={key === selected ? 'true' : undefined} href={`#/${section}/${key}`} key={key}>
+      const href = section === 'configs' && preferredEnvironment ? `#/configs/${key}?environment=${preferredEnvironment}` : `#/${section}/${key}`;
+      return <a className={key === selected ? 'selected' : ''} aria-current={key === selected ? 'true' : undefined} href={href} key={key}>
         <span className="resource-symbol" data-kind={section}><Icon name={section} /></span><span><strong title={item.display_name}>{item.display_name}</strong><code>{section === 'vault' ? `${item.namespace_key}.` : ''}{item.key}</code></span>
       </a>;
     })}{visible.length === 0 && collection.status !== 'failed' && <p className="rail-empty">{collection.status === 'loading' ? '…' : t.noResources}</p>}</div>
@@ -1919,10 +1921,18 @@ function ConfigBatchTargets({ environments, preflight, batch, configKey, t }) {
   </section>;
 }
 
-function ConfigHome({ configKey, t }) {
+function ConfigHome({ configKey, preferredEnvironment = '', t }) {
   const state = useInventory(`/v1/configs?include_archived=true&key=${encodeURIComponent(configKey)}`);
   const [search, setSearch] = useState('');
   const environments = useInventory(`/v1/environments?include_archived=true&config=${encodeURIComponent(configKey)}&q=${encodeURIComponent(search)}`);
+  // Switching Configs keeps the Environment being viewed only when this Config has a version there in an active
+  // Environment; otherwise the choice stays with the user (never a silent switch to another Environment).
+  const preferred = useInventory(preferredEnvironment ? `/v1/environments?config=${encodeURIComponent(configKey)}&key=${encodeURIComponent(preferredEnvironment)}` : null);
+  const forward = Boolean(preferredEnvironment) && preferred.status === 'ready' && preferred.items.some(item => item.key === preferredEnvironment && item.revision > 0);
+  useEffect(() => {
+    if (forward) window.location.replace(`#/configs/${configKey}/${preferredEnvironment}`);
+  }, [forward, configKey, preferredEnvironment]);
+  if (preferredEnvironment && (preferred.status === 'loading' || forward)) return <div className="page"><span className="loading-line" aria-busy="true" /></div>;
 
   if (state.status !== 'ready') return <><CollectionState state={state} t={t} /><InventoryPagination collection={state} t={t} /></>;
   if (!state.items.length) return <Pending route={`configs/${configKey}`} t={t} />;
@@ -2165,6 +2175,7 @@ function VaultItems({ principal, filters = new URLSearchParams(), t }) {
   const [confirming, setConfirming] = useState('');
   const [error, setError] = useState(null);
   const [refresh, setRefresh] = useState(0);
+  const [createMutate, resetCreate] = useMutation(request);
   const state = useInventory(`/v1/vault-items?${new URLSearchParams({ status: statusFilter, namespace: namespaceFilter, environment: environmentFilter, q: search })}`, refresh);
   const filterKey = filters.toString();
   useEffect(() => {
@@ -2190,14 +2201,13 @@ function VaultItems({ principal, filters = new URLSearchParams(), t }) {
     if (validationError) return setError({ message: validationError });
     const snapshot = serializeVaultDraft(draft);
     try {
-      await request(`/v1/vault-items/${encodeURIComponent(newNamespaceKey)}/${encodeURIComponent(newItemKey)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify({ display_name: data.get('display_name'), expected_revision: 0, snapshot }),
-      });
+      // The same submission keeps its operation ID, so a retry after a lost response replays instead of conflicting.
+      await createMutate(`/v1/vault-items/${encodeURIComponent(newNamespaceKey)}/${encodeURIComponent(newItemKey)}`,
+        { display_name: data.get('display_name'), expected_revision: 0, snapshot }, 'PUT');
+      resetCreate();
       setCreating(false);
       setDraft(null);
-      setRefresh(value => value + 1);
+      window.location.hash = `/vault/${newNamespaceKey}/${newItemKey}`;
     } catch (error) {
       setError(createError(error, t, t.operationFailed));
     }
