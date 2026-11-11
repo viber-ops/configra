@@ -34,6 +34,12 @@ match the npm registry. `@codemirror/language` now depends on
 module of it is assigned to an emitted chunk and it is not part of this
 inventory. The build gate will require its review if that changes.
 
+On 2026-11-11 Vite moved from 8.3.5 to 8.3.6 (Rolldown unchanged). The npm
+archive matches the lockfile integrity, and `LICENSE.md` is byte-identical to the
+reviewed copy. The only emitted change is the module-preload helper, which now
+removes its load and error listeners after they fire. `@playwright/test` 1.65.0 is
+a test-only dependency and is not part of the emitted UI.
+
 When upgrading a package or changing asset-generation paths, inspect the actual
 build inputs and upstream licenses before updating this review. Unknown modules,
 versions, generated helpers, or changed legal files must not be silently accepted.
