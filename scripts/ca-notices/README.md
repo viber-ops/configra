@@ -28,7 +28,7 @@ for the legal scopes and source identities.
 
 ```sh
 # From the source checkout:
-GOTOOLCHAIN=go1.26.10 GOWORK=off GOFLAGS=-mod=readonly \
+GOTOOLCHAIN=go1.26.11 GOWORK=off GOFLAGS=-mod=readonly \
   go test -race ./scripts/ca-notices
 make image-license-test
 ```

@@ -5,7 +5,7 @@ executable can target any of the four supported release platforms; it is not run
 
 ```sh
 # From the Configra checkout:
-GOTOOLCHAIN=go1.26.10 GOWORK=off GOFLAGS=-mod=readonly \
+GOTOOLCHAIN=go1.26.11 GOWORK=off GOFLAGS=-mod=readonly \
   go build -o .cache/release-tools/configra-go-licenses ./scripts/go-licenses
 .cache/release-tools/configra-go-licenses \
   -binary /absolute/path/to/configra \
@@ -51,7 +51,7 @@ package can bring a nested license or source-embedded attribution.
    schema; keep the remaining whole-artifact acceptance requirements in scope.
 
 ```sh
-GOTOOLCHAIN=go1.26.10 GOWORK=off GOFLAGS=-mod=readonly \
+GOTOOLCHAIN=go1.26.11 GOWORK=off GOFLAGS=-mod=readonly \
   go test -race ./scripts/go-licenses
 make image-license-test
 ```
@@ -61,4 +61,4 @@ while emitting Unknown findings. Segmentio's MIT-0 resolution is bound to its
 reviewed module/version/sum and exact LICENSE bytes; there is no blanket Unknown
 exception.
 
-The Go 1.26.10 patch review is recorded in [2026-11-04 verification](../../docs/verification/2026-11-04.md); it left all twelve package-selection digests and curated runtime notice bytes unchanged. Later dependency reviews are dated follow-ups in the [transitive review](../../docs/research/transitive-go-license-inventory.md).
+The Go 1.26.11 patch review is recorded in [2026-11-10 verification](../../docs/verification/2026-11-10.md); like the 1.26.10 review ([2026-11-04](../../docs/verification/2026-11-04.md)), it left all twelve package-selection digests and curated runtime notice bytes unchanged. Later dependency reviews are dated follow-ups in the [transitive review](../../docs/research/transitive-go-license-inventory.md).
