@@ -649,6 +649,14 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .vault-import-problems li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
 .vault-import-problems li > span:first-child:not(:last-child) { min-width: 58px; color: var(--danger); font-weight: 700; }
 .vault-import-problems code { color: var(--amber-ink); font-size: 11px; }
+.vault-import-choice { display: grid; justify-items: start; gap: 8px; border: 1px solid var(--line-strong); border-radius: 5px; padding: 11px 13px; background: var(--fog); color: var(--ink); font-size: 12px; line-height: 1.5; }
+.vault-import-choice p { margin: 0; }
+.vault-import-choice dl { display: grid; gap: 4px; margin: 0; }
+.vault-import-choice dl > div { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.vault-import-choice dt { color: var(--muted); }
+.vault-import-choice dd { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; font-weight: 700; }
+.vault-import-mode { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0; color: var(--muted); font-size: 12px; }
+.vault-import-mode button, .vault-environment-moved button { border: 0; padding: 0; background: transparent; color: var(--blue); cursor: pointer; font: inherit; font-weight: 700; }
 .vault-import-loaded { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; margin: 0; border: 1px solid var(--green-line); border-radius: 6px; padding: 10px 13px; background: var(--green-soft); color: var(--ink); font-size: 12px; }
 .vault-import-loaded button { border: 0; background: transparent; color: var(--blue); cursor: pointer; font: inherit; font-weight: 700; }
 .vault-detail-editor { margin-top: 18px; }
@@ -694,6 +702,10 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .vault-reference-preview button { position: absolute; right: 7px; bottom: 7px; border: 0; background: transparent; color: var(--blue); cursor: pointer; font-size: 10px; font-weight: 700; }
 .vault-variant-workspace { display: grid; grid-template-columns: 220px minmax(0, 1fr); overflow: hidden; }
 .vault-editor-variants { display: grid; align-content: start; gap: 8px; border-right: 1px solid var(--line); padding: 13px; background: var(--fog); }
+.vault-variant-source { display: grid; gap: 4px; color: var(--muted); font-size: 10px; font-weight: 700; }
+.vault-variant-source select { width: 100%; min-height: 30px; border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 8px; background: var(--surface); color: var(--ink); font-size: 11px; }
+.vault-environment-moved { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: -6px 0 14px; color: var(--amber-ink); font-size: 11px; line-height: 1.45; }
+.choice-grid .choice-note { border-radius: 3px; padding: 0 5px; background: var(--amber-soft); color: var(--amber-ink); font-size: 10px; font-weight: 700; }
 .vault-editor-variants > .vault-editor-heading button { border: 0; background: transparent; color: var(--blue); cursor: pointer; font-size: 11px; font-weight: 700; }
 .vault-editor-variant { display: grid; gap: 7px; border: 1px solid var(--line); border-left: 3px solid transparent; border-radius: 5px; padding: 12px; background: var(--surface); text-align: left; cursor: pointer; }
 .vault-editor-variant[aria-pressed="true"] { border-left-color: var(--amber); background: var(--amber-soft); }
@@ -1011,6 +1023,7 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
   .vault-variant-workspace { grid-template-columns: 1fr; }
   .vault-editor-variants { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
   .vault-editor-variants > .vault-editor-heading { min-width: 150px; }
+  .vault-variant-source { min-width: 170px; }
   .vault-editor-variant { min-width: 180px; }
   .overview-layout { grid-template-columns: 1fr; }
   .overview-side { position: static; }

@@ -116,7 +116,7 @@ test('problems are listed by line and path, keep the file and load nothing', asy
     'line 12fields[1].typeType must be text or secret.',
     'line 15fields[2].valueMissing value. Write "" for an empty value.',
     'line 4environments[1]This Environment is archived.',
-    'line 2itemAn Item with this Namespace and key already exists. Import only creates new Items.',
+    'line 2itemAn Item with this Namespace and key already exists. Once the other problems are fixed, the file can add a Variant to it.',
   ]);
   await expect(panel(page).getByLabel('Import file (YAML)')).toHaveValue(file);
   await expect(page.locator('.vault-structured-form')).toHaveCount(0);

@@ -1533,6 +1533,66 @@ func TestVaultImportPreviewChecksTheFileAndTargetsWithoutWriting(t *testing.T) {
 		t.Fatalf("existing Item preview = %s", got)
 	}
 
+	// An active Item is a problem for a new-Item import, and the target of an added Variant (#67).
+	active := strings.Replace(file, ", old]", "]", 1)
+	repository.vaultItem = mysqlstore.VaultItem{DisplayName: "Clients", Revision: 7, Snapshot: vaultdoc.Snapshot{
+		Fields:   []vaultdoc.Field{{Key: "token", Name: "Token", Type: vaultdoc.Secret}, {Key: "lvl-data", Name: "LVL data", Type: vaultdoc.Text}},
+		Variants: []vaultdoc.Variant{{ID: "a", Environments: []string{"prod"}}},
+	}}
+	if got := preview(repository, humanauth.RoleAdmin, active).Body.String(); got != `{"problems":[{"path":"item","line":2,"code":"item_exists"}]}`+"\n" {
+		t.Fatalf("existing Item preview = %s", got)
+	}
+	addVariant := func(content string) string {
+		t.Helper()
+		body, _ := json.Marshal(map[string]string{"content": content, "target": "existing_item"})
+		request := httptest.NewRequest(http.MethodPost, "https://configra.test/v1/vault-items/import-preview", bytes.NewReader(body))
+		request.Header.Set("Content-Type", "application/json")
+		request = request.WithContext(humanauth.WithPrincipal(request.Context(), humanauth.Principal{Subject: "admin-1", Role: humanauth.RoleAdmin}))
+		response := httptest.NewRecorder()
+		management.NewHandler(repository, nil, nil).ServeHTTP(response, request)
+		if response.Code != http.StatusOK {
+			t.Fatalf("add-Variant preview = %d %q", response.Code, response.Body.String())
+		}
+		return response.Body.String()
+	}
+	// The draft carries the stored display name, Field names and Field order, and the revision that was checked.
+	if got := addVariant(active); got != `{"problems":[],"draft":{"namespace_key":"order_service","item_key":"clients-conf","display_name":"Clients","environments":["hk47","hk180"],`+
+		`"fields":[{"key":"token","name":"Token","type":"secret"},{"key":"lvl-data","name":"LVL data","type":"text"}],`+
+		`"values":{"lvl-data":"https://lvl.example.com","token":"secret-sentinel"}},"existing":{"revision":7,"variants":1}}`+"\n" {
+		t.Fatalf("add-Variant preview = %s", got)
+	}
+	repository.vaultItem.Snapshot.Variants[0].Environments = []string{"hk180"}
+	repository.vaultItem.Snapshot.Fields = append(repository.vaultItem.Snapshot.Fields, vaultdoc.Field{Key: "region", Type: vaultdoc.Text})
+	if got := addVariant(active); got != `{"problems":[{"path":"fields","line":4,"code":"field_missing","key":"region"},{"path":"environments[1]","line":3,"code":"environment_bound"}]}`+"\n" ||
+		strings.Contains(got, "secret-sentinel") {
+		t.Fatalf("mismatched add-Variant preview = %s", got)
+	}
+	repository.vaultItem.Archived = true
+	if got := addVariant(active); got != `{"problems":[{"path":"item","line":2,"code":"item_archived"}]}`+"\n" {
+		t.Fatalf("archived add-Variant preview = %s", got)
+	}
+	repository.vaultReadErr = mysqlstore.ErrNotFound
+	if got := addVariant(active); got != `{"problems":[{"path":"item","line":2,"code":"item_not_found"}]}`+"\n" {
+		t.Fatalf("missing add-Variant preview = %s", got)
+	}
+	if len(repository.vaultCommits) != 0 {
+		t.Fatalf("a preview wrote %d times", len(repository.vaultCommits))
+	}
+	for _, read := range repository.vaultReads {
+		if read != (vaultRead{"order_service", "clients-conf", 0, false}) {
+			t.Fatalf("a preview read values: %#v", read)
+		}
+	}
+	body, _ := json.Marshal(map[string]string{"content": active, "target": "overwrite"})
+	invalid := httptest.NewRequest(http.MethodPost, "https://configra.test/v1/vault-items/import-preview", bytes.NewReader(body))
+	invalid = invalid.WithContext(humanauth.WithPrincipal(invalid.Context(), humanauth.Principal{Subject: "admin-1", Role: humanauth.RoleAdmin}))
+	invalid.Header.Set("Content-Type", "application/json")
+	rejected := httptest.NewRecorder()
+	management.NewHandler(repository, nil, nil).ServeHTTP(rejected, invalid)
+	if rejected.Code != http.StatusBadRequest {
+		t.Fatalf("unknown target = %d", rejected.Code)
+	}
+
 	// Problems in the file never echo its values.
 	broken := strings.Replace(file, "type: secret", "type: password", 1)
 	response = preview(&recordingConfigWriter{}, humanauth.RoleAdmin, broken)
