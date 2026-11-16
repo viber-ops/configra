@@ -60,6 +60,9 @@ build from the tagged source under your organization's software policy.
 
 ## Deployment checks
 
+v1.5.0 adds a Variant to an existing Vault Item by copying another Variant or
+importing YAML, with no schema or configuration change from v1.4.1; see the
+[release notes](releases/v1.5.0.md).
 v1.4.1 stores single-line Vault Text values without leading and trailing
 whitespace and fixes scoped writes to Items whose Fields are not in key order,
 with no schema or configuration change from v1.4.0; see the
