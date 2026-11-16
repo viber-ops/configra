@@ -80,13 +80,14 @@ test('a new Variant can start as a copy of another Variant, with its own ID and 
   const picker = page.locator('.vault-environment-picker');
   await expect(picker.locator('label', { hasText: 'hk47' })).toContainText('Variant 1');
   await expect(picker.locator('label', { hasText: 'hk180' }).locator('.choice-note')).toHaveCount(0);
-  await page.getByLabel('Variant 3 Staging staging').check();
-  const moved = page.getByRole('status').filter({ hasText: 'staging moved here from Variant 2' });
+  await page.getByLabel('Variant 3 Production prod').check();
+  const moved = page.getByRole('status').filter({ hasText: 'prod moved here from Variant 2' });
   await expect(moved).toBeVisible();
   await moved.getByRole('button', { name: 'Undo' }).click();
   await expect(moved).toHaveCount(0);
-  await expect(page.getByLabel('Variant 3 Staging staging')).not.toBeChecked();
-  await expect(picker.locator('label', { hasText: 'staging' })).toContainText('Variant 2');
+  await expect(page.getByLabel('Variant 3 Production prod')).not.toBeChecked();
+  await expect(picker.locator('label', { hasText: 'prod' })).toContainText('Variant 2');
+  // Undo puts the Environment back where it was, so the other Variant is saved unchanged (asserted on the write below).
 
   await page.getByLabel('Variant 3 HK 180 hk180').check();
   await page.getByLabel('Variant 3 LVL data value').fill('https://lvl-test.example.com/api/v1/lvl');

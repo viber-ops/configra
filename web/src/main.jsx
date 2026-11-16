@@ -2265,7 +2265,7 @@ function VaultSnapshotEditor({ draft, onChange, namespaceKey, itemKey, initialVa
   };
   const setEnvironment = (environment, checked) => {
     const holder = checked ? draft.variants.find(variant => variant.id !== selected && variant.environments.includes(environment)) : null;
-    setMoved(current => holder ? { environment, from: holder.id, to: selected } : current?.environment === environment ? null : current);
+    setMoved(current => holder ? { environment, from: holder.id, index: holder.environments.indexOf(environment), to: selected } : current?.environment === environment ? null : current);
     moveEnvironment(environment, checked);
   };
   const undoMove = () => {
@@ -2273,7 +2273,7 @@ function VaultSnapshotEditor({ draft, onChange, namespaceKey, itemKey, initialVa
       ...current,
       variants: current.variants.map(variant => ({
         ...variant,
-        environments: variant.id === moved.from ? [...variant.environments.filter(key => key !== moved.environment), moved.environment] : variant.environments.filter(key => key !== moved.environment),
+        environments: variant.id === moved.from ? variant.environments.filter(key => key !== moved.environment).toSpliced(moved.index, 0, moved.environment) : variant.environments.filter(key => key !== moved.environment),
       })),
     }));
     setMoved(null);
@@ -2540,6 +2540,8 @@ function VaultItems({ principal, filters = new URLSearchParams(), t }) {
     setCreating(true);
     setError(null);
   };
+  // A file checked for an Item whose page never opened its editor is dropped here.
+  useEffect(() => { pendingVaultVariantImport = null; }, []);
   const addImportedVariant = imported => {
     pendingVaultVariantImport = imported;
     setImporting(false);
@@ -2642,7 +2644,10 @@ function VaultDetail({ principal, namespaceKey, itemKey, t }) {
         setViewedRevision(item.revision);
         setInspection({ status: 'idle' });
       })
-      .catch(() => live && setState({ status: 'failed' }));
+      .catch(() => {
+        pendingVaultVariantImport = null;
+        if (live) setState({ status: 'failed' });
+      });
     return () => { live = false; };
   }, [namespaceKey, itemKey, refresh]);
   useEffect(() => {

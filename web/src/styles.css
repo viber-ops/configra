@@ -1021,9 +1021,8 @@ td time { color: var(--muted); font-size: 12px; white-space: nowrap; }
   .vault-definition-row { grid-template-columns: 1fr 1fr 120px; }
   .vault-reference-preview { grid-column: 1 / -1; }
   .vault-variant-workspace { grid-template-columns: 1fr; }
-  .vault-editor-variants { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
-  .vault-editor-variants > .vault-editor-heading { min-width: 150px; }
-  .vault-variant-source { min-width: 170px; }
+  .vault-editor-variants { display: flex; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--line); }
+  .vault-editor-variants > .vault-editor-heading, .vault-variant-source { flex: 0 0 100%; }
   .vault-editor-variant { min-width: 180px; }
   .overview-layout { grid-template-columns: 1fr; }
   .overview-side { position: static; }
