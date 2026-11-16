@@ -775,50 +775,69 @@ func (server *server) commitVaultItem(response http.ResponseWriter, request *htt
 	writeMutationResult(response, result, err)
 }
 
-// previewVaultImport checks a Vault Item import file (#55) without writing anything. The UI loads a clean draft into
-// the ordinary create form, which then uses PUT /v1/vault-items/{namespace}/{item}. Problems name a path and line and
-// never carry values.
+// previewVaultImport checks a Vault Item import file without writing anything. By default the file creates a new Item
+// (#55) and the UI loads a clean draft into the create form. With target "existing_item" the file adds one Variant to
+// the Item it names (#67): the draft carries that Item's own Fields, and existing tells the UI which revision was
+// checked. Either way the write is the ordinary PUT /v1/vault-items/{namespace}/{item}. Problems name a path and line
+// and never carry values.
 func (server *server) previewVaultImport(response http.ResponseWriter, request *http.Request) {
 	if _, ok := requireAdmin(response, request); !ok {
 		return
 	}
 	var body struct {
 		Content string `json:"content"`
+		Target  string `json:"target"`
 	}
 	if !decodeJSON(response, request, &body) {
+		return
+	}
+	if body.Target != "" && body.Target != "new_item" && body.Target != "existing_item" {
+		writeError(response, http.StatusBadRequest, "invalid_request")
 		return
 	}
 	if len(body.Content) > vaultimport.MaxBytes {
 		writeError(response, http.StatusRequestEntityTooLarge, "request_too_large")
 		return
 	}
-	draft, problems := vaultimport.Parse([]byte(body.Content))
-	if len(problems) == 0 {
-		var err error
-		if problems, err = server.vaultImportTargetProblems(request.Context(), draft); err != nil {
-			writeReadError(response, err)
-			return
-		}
+	type existingItem struct {
+		Revision uint64 `json:"revision"`
+		Variants int    `json:"variants"`
 	}
 	preview := struct {
 		Problems []vaultimport.Problem `json:"problems"`
 		Draft    *vaultimport.Draft    `json:"draft,omitempty"`
-	}{Problems: problems}
-	if preview.Problems == nil {
+		Existing *existingItem         `json:"existing,omitempty"`
+	}{}
+	draft, problems := vaultimport.Parse([]byte(body.Content))
+	if len(problems) == 0 {
+		var existing *mysqlstore.VaultItem
+		var err error
+		if draft, existing, problems, err = server.vaultImportTargetProblems(request.Context(), draft, body.Target == "existing_item"); err != nil {
+			writeReadError(response, err)
+			return
+		}
+		if len(problems) == 0 && existing != nil {
+			preview.Existing = &existingItem{Revision: existing.Revision, Variants: len(existing.Snapshot.Variants)}
+		}
+	}
+	preview.Problems = problems
+	if len(problems) == 0 {
 		preview.Problems = []vaultimport.Problem{}
 		preview.Draft = &draft
 	}
 	writeJSON(response, preview)
 }
 
-// vaultImportTargetProblems reports what would make the create fail: an Environment that is unknown or archived, or an
-// Item that already exists, archived or not. Imports never overwrite or merge into an existing Item.
-func (server *server) vaultImportTargetProblems(ctx context.Context, draft vaultimport.Draft) ([]vaultimport.Problem, error) {
+// vaultImportTargetProblems reports what would make the save fail. Every Environment must exist and be active. A new
+// Item must not exist yet, archived or not. An added Variant needs an active Item whose Fields the file matches
+// exactly; the Item is read without values, and the returned draft carries its Fields. Imports never overwrite a
+// Variant or move an Environment.
+func (server *server) vaultImportTargetProblems(ctx context.Context, draft vaultimport.Draft, addVariant bool) (vaultimport.Draft, *mysqlstore.VaultItem, []vaultimport.Problem, error) {
 	var problems []vaultimport.Problem
 	for index, key := range draft.Environments {
 		page, err := server.configs.ListEnvironments(ctx, mysqlstore.EnvironmentQuery{InventoryQuery: mysqlstore.InventoryQuery{Limit: 1, Key: key, IncludeInactive: true}})
 		if err != nil {
-			return nil, err
+			return draft, nil, nil, err
 		}
 		path := fmt.Sprintf("environments[%d]", index)
 		found := slices.IndexFunc(page.Items, func(environment mysqlstore.Environment) bool { return environment.Key == key })
@@ -829,16 +848,28 @@ func (server *server) vaultImportTargetProblems(ctx context.Context, draft vault
 			problems = append(problems, vaultimport.Problem{Path: path, Line: draft.Line(path), Code: vaultimport.CodeEnvironmentArchived})
 		}
 	}
+	item := func(code string) {
+		problems = append(problems, vaultimport.Problem{Path: "item", Line: draft.Line("item"), Code: code})
+	}
 	existing, err := server.configs.ReadVaultItem(ctx, draft.NamespaceKey, draft.ItemKey, 0, false)
 	switch {
-	case err == nil && existing.Archived:
-		problems = append(problems, vaultimport.Problem{Path: "item", Line: draft.Line("item"), Code: vaultimport.CodeItemArchived})
-	case err == nil:
-		problems = append(problems, vaultimport.Problem{Path: "item", Line: draft.Line("item"), Code: vaultimport.CodeItemExists})
-	case !errors.Is(err, mysqlstore.ErrNotFound):
-		return nil, err
+	case errors.Is(err, mysqlstore.ErrNotFound):
+		if addVariant {
+			item(vaultimport.CodeItemNotFound)
+		}
+	case err != nil:
+		return draft, nil, nil, err
+	case existing.Archived:
+		item(vaultimport.CodeItemArchived)
+	case !addVariant:
+		item(vaultimport.CodeItemExists)
+	default:
+		matched, mismatches := draft.ForExistingItem(existing.DisplayName, existing.Snapshot)
+		if problems = append(problems, mismatches...); len(problems) == 0 {
+			return matched, &existing, nil, nil
+		}
 	}
-	return problems, nil
+	return draft, nil, problems, nil
 }
 
 func (server *server) restoreVaultItem(response http.ResponseWriter, request *http.Request) {

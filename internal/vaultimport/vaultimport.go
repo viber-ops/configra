@@ -1,4 +1,5 @@
-// Package vaultimport reads the YAML file an administrator uses to create one Vault Item with one Variant (#55).
+// Package vaultimport reads the YAML file an administrator uses to create one Vault Item with one Variant (#55), or to
+// add one Variant to an existing Item (#67).
 //
 // The file is a description of an Item, not a Vault value:
 //
@@ -66,12 +67,21 @@ const (
 	CodeEnvironmentArchived  = "environment_archived"
 	CodeItemExists           = "item_exists"
 	CodeItemArchived         = "item_archived"
+	// The codes below are reported only when the file adds a Variant to an existing Item (#67).
+	CodeItemNotFound      = "item_not_found"
+	CodeItemHasFileField  = "item_has_file_field"
+	CodeFieldMissing      = "field_missing"
+	CodeFieldUnknown      = "field_unknown"
+	CodeFieldTypeMismatch = "field_type_mismatch"
+	CodeEnvironmentBound  = "environment_bound"
 )
 
 type Problem struct {
 	Path string `json:"path"`
 	Line int    `json:"line,omitempty"`
 	Code string `json:"code"`
+	// Key names a Field of the existing Item that the file leaves out. It is a Field key, never a value.
+	Key string `json:"key,omitempty"`
 }
 
 // Draft is a valid import, in file order. Values are keyed by Field key.
@@ -88,6 +98,53 @@ type Draft struct {
 // Line is the line of a path in the imported file, or 0.
 func (draft Draft) Line(path string) int {
 	return draft.lines[path]
+}
+
+// ForExistingItem checks the file against the Item it adds a Variant to (#67) and returns the draft that would be
+// saved: the Item's own display name, Field names and Field order, with the file's values.
+//
+// The file must give a value for every Field of the Item, with the same type, and nothing else; a value is never taken
+// from another Variant. An Item with a File Field cannot take a Variant this way, and an Environment that one of the
+// Item's Variants already serves is never moved.
+func (draft Draft) ForExistingItem(displayName string, snapshot vaultdoc.Snapshot) (Draft, []Problem) {
+	var problems []Problem
+	add := func(path, code, key string) {
+		if len(problems) < MaxProblems {
+			problems = append(problems, Problem{Path: path, Line: draft.lines[path], Code: code, Key: key})
+		}
+	}
+	types := make(map[string]vaultdoc.FieldType, len(snapshot.Fields))
+	for _, field := range snapshot.Fields {
+		types[field.Key] = field.Type
+		if field.Type == vaultdoc.File {
+			add("item", CodeItemHasFileField, field.Key)
+		}
+	}
+	for index, field := range draft.Fields {
+		path := fmt.Sprintf("fields[%d]", index)
+		switch existing, ok := types[field.Key]; {
+		case !ok:
+			add(path+".key", CodeFieldUnknown, "")
+		case existing != vaultdoc.File && existing != field.Type:
+			add(path+".type", CodeFieldTypeMismatch, "")
+		}
+	}
+	for _, field := range snapshot.Fields {
+		if _, ok := draft.Values[field.Key]; !ok && field.Type != vaultdoc.File {
+			add("fields", CodeFieldMissing, field.Key)
+		}
+	}
+	for index, environment := range draft.Environments {
+		if slices.ContainsFunc(snapshot.Variants, func(variant vaultdoc.Variant) bool { return slices.Contains(variant.Environments, environment) }) {
+			add(fmt.Sprintf("environments[%d]", index), CodeEnvironmentBound, "")
+		}
+	}
+	if len(problems) > 0 {
+		return Draft{}, problems
+	}
+	draft.DisplayName = displayName
+	draft.Fields = slices.Clone(snapshot.Fields)
+	return draft, nil
 }
 
 var syntaxLine = regexp.MustCompile(`line (\d+)`)
@@ -218,6 +275,9 @@ func (reader *reader) name(parent *yaml.Node, entries map[string]entry, path, na
 
 func (reader *reader) list(parent *yaml.Node, entries map[string]entry, name string, maximum int) []*yaml.Node {
 	found, ok := entries[name]
+	if ok {
+		reader.lines[name] = found.key.Line
+	}
 	switch {
 	case !ok || (found.value.Kind == yaml.ScalarNode && found.value.ShortTag() == "!!null"):
 		line := parent.Line

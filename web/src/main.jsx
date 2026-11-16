@@ -181,7 +181,25 @@ const messages = {
     createVaultItem: 'Create Vault item',
     importVaultItem: 'Import YAML',
     importVaultTitle: 'Import a Vault Item from YAML',
-    importVaultBody: 'One file creates one new Item with one Variant shared by the Environments it lists. Checking the file writes nothing; it fills the form below for review.',
+    importVaultBody: 'One file describes one Variant shared by the Environments it lists. It creates a new Item, or adds that Variant to an Item that already exists. Checking the file writes nothing.',
+    importVaultCheckVariant: 'Check as a new Variant',
+    importVaultExistsChoice: 'An Item with this Namespace and key already exists. The file can add a new Variant to it instead; its existing Variants, values and references stay as they are.',
+    importVaultAddVariant: 'Add as a new Variant',
+    importVaultAsNewItem: 'Check as a new Item',
+    importVaultVariantMode: 'Checking the file as a new Variant for an existing Item.',
+    importVaultVariantReady: 'Ready to add a Variant to {item} ({name}), now at v{revision} with {variants} Variant(s).',
+    importVaultVariantEnvironments: 'Environments for the new Variant',
+    importVaultVariantFields: 'Fields with a value from the file',
+    importVaultVariantKept: 'Display names and Field order stay as stored. Nothing is saved yet: the editor opens with the new Variant for review, and Save Item writes it.',
+    importVaultReview: 'Review in the editor',
+    importVariantLoaded: 'Added a Variant for {environments} from the file, with {fields} Fields. Nothing is saved until you save the Item.',
+    importVariantStale: 'The Item changed after the file was checked, so nothing was loaded. Import the file again from the Vault page.',
+    newVariantValues: 'Values for a new Variant',
+    newVariantBlank: 'Blank',
+    newVariantCopy: 'Copy {variant} · {environments}',
+    variantUnbound: 'no Environment',
+    environmentMoved: '{environment} moved here from {variant}, which no longer serves it.',
+    undo: 'Undo',
     importVaultSource: 'Import file (YAML)',
     importVaultChooseFile: 'Choose .yml or .yaml file',
     importVaultTemplate: 'Download template',
@@ -216,8 +234,14 @@ const messages = {
     importProblem_value_too_large: 'The value is larger than 512 KiB.',
     importProblem_environment_unknown: 'No Environment has this key.',
     importProblem_environment_archived: 'This Environment is archived.',
-    importProblem_item_exists: 'An Item with this Namespace and key already exists. Import only creates new Items.',
-    importProblem_item_archived: 'An archived Item already uses this Namespace and key. Import only creates new Items.',
+    importProblem_item_exists: 'An Item with this Namespace and key already exists. Once the other problems are fixed, the file can add a Variant to it.',
+    importProblem_item_archived: 'An archived Item uses this Namespace and key. Import cannot create it again or add a Variant to it.',
+    importProblem_item_not_found: 'No Item has this Namespace and key, so there is nothing to add a Variant to.',
+    importProblem_item_has_file_field: 'This Item has a File Field, so a Variant cannot be added from a file. Add the Variant in the editor.',
+    importProblem_field_missing: 'The Item has this Field, but the file gives it no value. Write "" for an empty value.',
+    importProblem_field_unknown: 'The Item has no Field with this key. Import does not add Fields to an existing Item.',
+    importProblem_field_type_mismatch: 'The Item stores this Field with a different type.',
+    importProblem_environment_bound: 'A Variant of this Item already serves this Environment. Import does not move or overwrite it.',
     createAPIToken: 'Create API token',
     clientCertificates: 'Client certificates',
     certificateName: 'Certificate name',
@@ -263,7 +287,7 @@ const messages = {
     boundEnvironments: 'Bound environments',
     environmentRevisions: 'Environment revisions',
     environmentBinding: 'Environment binding',
-    environmentMoveHint: 'Selecting an Environment here moves it from any other Variant.',
+    environmentMoveHint: 'An Environment belongs to one Variant. One held by another Variant is labelled; selecting it here moves it.',
     inventory: 'Managed resources',
     itemDetails: 'Item details',
     globalSearch: 'Workspace search',
@@ -671,7 +695,25 @@ const messages = {
     createVaultItem: '创建 Vault Item',
     importVaultItem: '导入 YAML',
     importVaultTitle: '从 YAML 导入 Vault Item',
-    importVaultBody: '一个文件创建一个新的 Item 和一个 Variant，由文件中列出的环境共用。检查文件不会写入任何数据，只会把结果填入下方的表单供核对。',
+    importVaultBody: '一个文件描述一个 Variant，由文件中列出的环境共用：可以创建新的 Item，也可以向已有 Item 新增这个 Variant。检查文件不会写入任何数据。',
+    importVaultCheckVariant: '按新增 Variant 检查',
+    importVaultExistsChoice: '该 Namespace 与键的 Item 已存在。可以改为向它新增一个 Variant；已有的 Variant、值和引用保持不变。',
+    importVaultAddVariant: '向已有 Item 新增 Variant',
+    importVaultAsNewItem: '按新建 Item 检查',
+    importVaultVariantMode: '当前按“向已有 Item 新增 Variant”检查文件。',
+    importVaultVariantReady: '可以向 {item}（{name}）新增 Variant。当前为 v{revision}，已有 {variants} 个 Variant。',
+    importVaultVariantEnvironments: '新 Variant 绑定的环境',
+    importVaultVariantFields: '文件提供了值的字段',
+    importVaultVariantKept: '显示名称和字段顺序以已保存的为准。目前尚未保存：编辑器会带着新 Variant 打开供核对，点击“保存 Item”后才写入。',
+    importVaultReview: '在编辑器中核对',
+    importVariantLoaded: '已从文件新增 Variant：环境 {environments}，{fields} 个字段。保存 Item 之前不会写入。',
+    importVariantStale: '检查文件之后 Item 已发生变化，未载入任何内容。请回到 Vault 页面重新导入。',
+    newVariantValues: '新 Variant 的初始值',
+    newVariantBlank: '空白',
+    newVariantCopy: '复制 {variant} · {environments}',
+    variantUnbound: '未绑定环境',
+    environmentMoved: '{environment} 已从 {variant} 移到当前 Variant，{variant} 不再包含它。',
+    undo: '撤销',
     importVaultSource: '导入文件（YAML）',
     importVaultChooseFile: '选择 .yml 或 .yaml 文件',
     importVaultTemplate: '下载模板',
@@ -706,8 +748,14 @@ const messages = {
     importProblem_value_too_large: '值超过 512 KiB。',
     importProblem_environment_unknown: '不存在该键的环境。',
     importProblem_environment_archived: '该环境已归档。',
-    importProblem_item_exists: '该 Namespace 与键的 Item 已存在。导入只创建新的 Item。',
-    importProblem_item_archived: '已归档的 Item 使用了该 Namespace 与键。导入只创建新的 Item。',
+    importProblem_item_exists: '该 Namespace 与键的 Item 已存在。修正其他问题后，可以向它新增 Variant。',
+    importProblem_item_archived: '已归档的 Item 使用了该 Namespace 与键。不能通过导入重建它，也不能向它新增 Variant。',
+    importProblem_item_not_found: '不存在该 Namespace 与键的 Item，无法新增 Variant。',
+    importProblem_item_has_file_field: '该 Item 含有 File 字段，不能通过文件新增 Variant。请在编辑器中新增。',
+    importProblem_field_missing: 'Item 中有这个字段，但文件没有给出它的值。空值请写 ""。',
+    importProblem_field_unknown: 'Item 中没有这个键的字段。导入不会向已有 Item 新增字段。',
+    importProblem_field_type_mismatch: 'Item 中该字段的类型与文件不一致。',
+    importProblem_environment_bound: '该 Item 已有 Variant 绑定了这个环境。导入不会移动或覆盖它。',
     createAPIToken: '创建 API Token',
     clientCertificates: '客户端证书',
     certificateName: '证书名称',
@@ -753,7 +801,7 @@ const messages = {
     boundEnvironments: '绑定的 Environment',
     environmentRevisions: 'Environment Revision',
     environmentBinding: 'Environment 绑定',
-    environmentMoveHint: '在这里选择 Environment 时，会自动从其他 Variant 移入当前 Variant。',
+    environmentMoveHint: '一个环境只属于一个 Variant。已属于其他 Variant 的环境带有标注；在这里勾选会把它移入当前 Variant。',
     inventory: '托管资源',
     itemDetails: 'Item 信息',
     globalSearch: '工作区搜索',
@@ -1169,14 +1217,14 @@ function EnvironmentSelect({ label, value, onChange, name, required = false, sco
   </div>;
 }
 
-function EnvironmentChoices({ label, scope = '', checked, onChange, t, invalid = false, describedBy }) {
+function EnvironmentChoices({ label, scope = '', checked, onChange, t, invalid = false, describedBy, note }) {
   const [search, setSearch] = useState('');
   const collection = useInventory(`/v1/environments?include_archived=true&q=${encodeURIComponent(search)}${scope}`);
   return <fieldset className="vault-environment-picker" aria-invalid={invalid || undefined} aria-describedby={describedBy}><legend>{label}</legend>
     <input type="search" aria-label={`${label} · ${t.search}`} placeholder={t.search} value={search} onChange={event => setSearch(event.target.value)} />
     <div className="choice-grid">{collection.items.map(environment => <label className={environment.archived ? 'choice-disabled' : ''} key={environment.key}>
       <input type="checkbox" checked={checked(environment)} disabled={environment.archived && !checked(environment)} aria-label={`${label} ${environment.display_name} ${environment.key}`} onChange={event => onChange(environment.key, event.target.checked)} />
-      <span>{environment.display_name}<code>{environment.key}</code>{environment.archived && <small>{t.statusArchived}</small>}</span>
+      <span>{environment.display_name}<code>{environment.key}</code>{note?.(environment) && <small className="choice-note">{note(environment)}</small>}{environment.archived && <small>{t.statusArchived}</small>}</span>
     </label>)}</div>
     {collection.status === 'loading' && <span className="loading-line" role="status" aria-busy="true" />}
     {collection.status === 'ready' && !collection.items.length && <p>{t.noResources}</p>}
@@ -2157,8 +2205,11 @@ function validateVaultDraft(draft, t) {
   return new Blob([JSON.stringify(serializeVaultDraft(draft))]).size > 10 * 1024 * 1024 ? t.snapshotIncomplete : '';
 }
 
-function VaultSnapshotEditor({ draft, onChange, namespaceKey, itemKey, t }) {
-  const [selected, setSelected] = useState(draft.variants[0]?.id || '');
+function VaultSnapshotEditor({ draft, onChange, namespaceKey, itemKey, initialVariant = '', t }) {
+  const [selected, setSelected] = useState(initialVariant || draft.variants[0]?.id || '');
+  // A new Variant starts blank or as a one-time copy of another Variant's values (#66).
+  const [copyFrom, setCopyFrom] = useState('');
+  const [moved, setMoved] = useState(null);
   const [revealed, setRevealed] = useState({});
   // The Text value being typed in is left out of the whitespace notices, so they neither flicker while someone types a
   // space nor vanish on blur and move the Save button between mousedown and click.
@@ -2197,17 +2248,37 @@ function VaultSnapshotEditor({ draft, onChange, namespaceKey, itemKey, t }) {
   }));
   const addVariant = () => {
     const id = vaultEditorID();
-    onChange(current => ({
-      ...current,
-      variants: [...current.variants, { id, environments: [], values: Object.fromEntries(current.fields.map(field => [field._id, emptyVaultValue(field.type)])) }],
-    }));
+    // The copy has its own ID and no Environments, so it never takes over the source's bindings.
+    onChange(current => {
+      const source = current.variants.find(variant => variant.id === copyFrom);
+      return {
+        ...current,
+        variants: [...current.variants, { id, environments: [], values: Object.fromEntries(current.fields.map(field => [field._id, source ? structuredClone(source.values[field._id]) : emptyVaultValue(field.type)])) }],
+      };
+    });
     setSelected(id);
+    setCopyFrom('');
   };
   const removeVariant = variantID => {
     onChange(current => ({ ...current, variants: current.variants.filter(variant => variant.id !== variantID) }));
     setSelected(draft.variants.find(variant => variant.id !== variantID)?.id || '');
   };
-  const setEnvironment = (environment, checked) => onChange(current => ({
+  const setEnvironment = (environment, checked) => {
+    const holder = checked ? draft.variants.find(variant => variant.id !== selected && variant.environments.includes(environment)) : null;
+    setMoved(current => holder ? { environment, from: holder.id, index: holder.environments.indexOf(environment), to: selected } : current?.environment === environment ? null : current);
+    moveEnvironment(environment, checked);
+  };
+  const undoMove = () => {
+    onChange(current => ({
+      ...current,
+      variants: current.variants.map(variant => ({
+        ...variant,
+        environments: variant.id === moved.from ? variant.environments.filter(key => key !== moved.environment).toSpliced(moved.index, 0, moved.environment) : variant.environments.filter(key => key !== moved.environment),
+      })),
+    }));
+    setMoved(null);
+  };
+  const moveEnvironment = (environment, checked) => onChange(current => ({
     ...current,
     variants: current.variants.map(variant => ({
       ...variant,
@@ -2239,6 +2310,11 @@ function VaultSnapshotEditor({ draft, onChange, namespaceKey, itemKey, t }) {
     });
     return changed ? { ...current, variants } : current;
   });
+  const heldBy = environment => {
+    const index = draft.variants.findIndex(variant => variant.id !== selected && variant.environments.includes(environment.key));
+    return index < 0 ? '' : `${t.variant} ${index + 1}`;
+  };
+  const movedFrom = moved && moved.to === selected && selectedVariant?.environments.includes(moved.environment) ? draft.variants.findIndex(variant => variant.id === moved.from) : -1;
   const cleanup = draft.fields.filter(field => field.type === 'text').flatMap(field => draft.variants
     .map((variant, index) => ({ field, variant, index }))
     .filter(({ variant }) => focused !== `${variant.id}-${field._id}` && typeof variant.values[field._id]?.text === 'string' && normalizeVaultText(variant.values[field._id].text) !== variant.values[field._id].text));
@@ -2279,11 +2355,16 @@ function VaultSnapshotEditor({ draft, onChange, namespaceKey, itemKey, t }) {
     <section className="vault-variant-workspace">
       <aside className="vault-editor-variants">
         <div className="vault-editor-heading"><h3>{t.variants}</h3><button type="button" onClick={addVariant}>{t.addVariant}</button></div>
+        <label className="vault-variant-source"><span>{t.newVariantValues}</span><select value={draft.variants.some(variant => variant.id === copyFrom) ? copyFrom : ''} onChange={event => setCopyFrom(event.target.value)}>
+          <option value="">{t.newVariantBlank}</option>
+          {draft.variants.map((variant, index) => <option key={variant.id} value={variant.id}>{t.newVariantCopy.replace('{variant}', `${t.variant} ${index + 1}`).replace('{environments}', variant.environments.join(', ') || t.variantUnbound)}</option>)}
+        </select></label>
         {draft.variants.map((variant, index) => <button className="vault-editor-variant" type="button" key={variant.id} aria-pressed={variant.id === selected} onClick={() => setSelected(variant.id)}><strong>{t.variant} {index + 1}</strong><span>{variant.environments.map(environment => <code key={environment}>{environment}</code>)}</span><small>{draft.fields.length}/{draft.fields.length} {t.fields}</small></button>)}
       </aside>
       {selectedVariant && <div className="vault-variant-form">
         <div className="vault-editor-heading"><div><h3>{t.variant} {selectedIndex + 1}</h3><p>{t.environmentMoveHint}</p></div><button className="danger-link" type="button" disabled={draft.variants.length === 1} onClick={() => removeVariant(selectedVariant.id)}>{t.removeVariant}</button></div>
-        <EnvironmentChoices label={`${t.variant} ${selectedIndex + 1}`} checked={environment => selectedVariant.environments.includes(environment.key)} onChange={setEnvironment} t={t} />
+        <EnvironmentChoices label={`${t.variant} ${selectedIndex + 1}`} checked={environment => selectedVariant.environments.includes(environment.key)} onChange={setEnvironment} note={heldBy} t={t} />
+        {movedFrom >= 0 && <p className="vault-environment-moved" role="status"><span>{t.environmentMoved.replace('{environment}', moved.environment).replaceAll('{variant}', `${t.variant} ${movedFrom + 1}`)}</span><button type="button" onClick={undoMove}>{t.undo}</button></p>}
         <div className="vault-editor-values"><h4>{t.value}</h4>{draft.fields.map((field, index) => {
           const value = selectedVariant.values[field._id];
           const name = field.name || `${t.fields} ${index + 1}`;
@@ -2310,7 +2391,8 @@ function VaultSnapshotEditor({ draft, onChange, namespaceKey, itemKey, t }) {
   </div>;
 }
 
-const vaultImportTemplate = `# Configra Vault Item import: one new Item with one Variant.
+const vaultImportTemplate = `# Configra Vault Item import: one Variant, for a new Item or added to an existing Item.
+# For an existing Item, list every one of its Fields with the same type; names and order stay as stored.
 # Every value is a quoted string; write "" for an empty value.
 namespace: order_service
 item: clients-conf
@@ -2337,24 +2419,39 @@ function vaultDraftFromImport(imported) {
   };
 }
 
+// A checked file that adds a Variant to an existing Item (#67) waits here, in memory only, for that Item's page to
+// open its editor. It holds values, so it is taken once and never written to storage or the URL.
+let pendingVaultVariantImport = null;
+
+// The preview can be older than the snapshot the editor loaded, so the Fields and bindings are compared again.
+function vaultVariantImportFits(snapshot, imported) {
+  return snapshot.fields.length === imported.fields.length
+    && snapshot.fields.every(field => field.type !== 'file' && imported.fields.some(candidate => candidate.key === field.key && candidate.type === field.type) && typeof imported.values[field.key] === 'string')
+    && !snapshot.variants.some(variant => variant.environments.some(environment => imported.environments.includes(environment)));
+}
+
 function importProblemMessage(problem, t) {
   if (problem.code === 'missing' && problem.path.endsWith('.value')) return t.importProblem_missing_value;
   return t[`importProblem_${problem.code}`] || problem.code;
 }
 
-function VaultImportPanel({ source, onSourceChange, onLoad, onClose, replacing, t }) {
+function VaultImportPanel({ source, onSourceChange, onLoad, onAddVariant, onClose, replacing, t }) {
   const [state, setState] = useState({ status: 'idle' });
+  // Adding to an existing Item is always the administrator's explicit choice, never inferred from the file.
+  const [target, setTarget] = useState('new_item');
   const edit = value => { onSourceChange(value); setState({ status: 'idle' }); };
   const chooseFile = async file => {
     if (!file) return;
     if (file.size > 1024 * 1024) return setState({ status: 'failed', error: { message: t.importVaultTooLarge } });
     edit(await file.text());
   };
-  const check = async () => {
+  const check = async (mode = target) => {
+    setTarget(mode);
     setState({ status: 'checking' });
     try {
-      const preview = await request('/v1/vault-items/import-preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: source }) });
+      const preview = await request('/v1/vault-items/import-preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(mode === 'existing_item' ? { content: source, target: mode } : { content: source }) });
       if (preview.problems.length) return setState({ status: 'problems', problems: preview.problems });
+      if (mode === 'existing_item') return setState({ status: 'variant', draft: preview.draft, existing: preview.existing });
       setState({ status: 'idle' });
       onLoad(preview.draft);
     } catch (error) {
@@ -2368,17 +2465,27 @@ function VaultImportPanel({ source, onSourceChange, onLoad, onClose, replacing, 
     document.body.append(link); link.click(); link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
+  const onlyExists = state.status === 'problems' && state.problems.every(problem => problem.code === 'item_exists');
   return <section className="vault-import-panel" aria-label={t.importVaultTitle}>
     <div className="vault-editor-heading"><h2>{t.importVaultTitle}</h2><button className="secondary-action compact-action" type="button" onClick={downloadTemplate}>{t.importVaultTemplate}</button></div>
     <p className="muted-note">{t.importVaultBody}{replacing && ` ${t.importVaultReplaceNote}`}</p>
     <textarea aria-label={t.importVaultSource} spellCheck="false" autoComplete="off" wrap="off" rows="14" value={source} placeholder={vaultImportTemplate} onChange={event => edit(event.target.value)} />
-    {state.status === 'problems' && <div className="vault-import-problems" role="alert"><strong>{t.importVaultProblems}</strong><ul>{state.problems.map((problem, index) => <li key={index}>
-      {problem.line > 0 && <span>{t.importLine.replace('{line}', problem.line)}</span>}{problem.path && <code>{problem.path}</code>}<span>{importProblemMessage(problem, t)}</span>
+    {target === 'existing_item' && <p className="vault-import-mode"><span>{t.importVaultVariantMode}</span><button type="button" onClick={() => { setTarget('new_item'); setState({ status: 'idle' }); }}>{t.importVaultAsNewItem}</button></p>}
+    {onlyExists && <div className="vault-import-choice" role="status"><p>{t.importVaultExistsChoice}</p><button className="secondary-action compact-action" type="button" onClick={() => check('existing_item')}>{t.importVaultAddVariant}</button></div>}
+    {state.status === 'variant' && <div className="vault-import-choice" role="status">
+      <p><strong>{t.importVaultVariantReady.replace('{item}', `${state.draft.namespace_key}.${state.draft.item_key}`).replace('{name}', state.draft.display_name).replace('{revision}', state.existing.revision).replace('{variants}', state.existing.variants)}</strong></p>
+      <dl><div><dt>{t.importVaultVariantEnvironments}</dt><dd>{state.draft.environments.map(environment => <code key={environment}>{environment}</code>)}</dd></div><div><dt>{t.importVaultVariantFields}</dt><dd>{state.draft.fields.length}</dd></div></dl>
+      <p>{t.importVaultVariantKept}</p>
+    </div>}
+    {state.status === 'problems' && !onlyExists && <div className="vault-import-problems" role="alert"><strong>{t.importVaultProblems}</strong><ul>{state.problems.map((problem, index) => <li key={index}>
+      {problem.line > 0 && <span>{t.importLine.replace('{line}', problem.line)}</span>}{problem.path && <code>{problem.key ? `${problem.path}: ${problem.key}` : problem.path}</code>}<span>{importProblemMessage(problem, t)}</span>
     </li>)}</ul></div>}
     {state.status === 'failed' && <ActionError error={state.error} t={t} />}
     <div className="vault-import-actions">
       <label className="vault-file-picker"><input type="file" accept=".yml,.yaml,application/yaml,text/yaml" aria-label={t.importVaultChooseFile} onChange={event => { chooseFile(event.target.files[0]); event.target.value = ''; }} /><span>{t.importVaultChooseFile}</span></label>
-      <div className="row-actions"><button type="button" onClick={onClose}>{t.cancel}</button><button className="primary-action compact-action" type="button" disabled={!source.trim() || state.status === 'checking'} onClick={check}>{state.status === 'checking' ? t.importVaultChecking : t.importVaultCheck}</button></div>
+      <div className="row-actions"><button type="button" onClick={onClose}>{t.cancel}</button>{state.status === 'variant'
+        ? <button className="primary-action compact-action" type="button" onClick={() => onAddVariant(state.draft)}>{t.importVaultReview}</button>
+        : <button className="primary-action compact-action" type="button" disabled={!source.trim() || state.status === 'checking'} onClick={() => check()}>{state.status === 'checking' ? t.importVaultChecking : target === 'existing_item' ? t.importVaultCheckVariant : t.importVaultCheck}</button>}</div>
     </div>
   </section>;
 }
@@ -2433,6 +2540,14 @@ function VaultItems({ principal, filters = new URLSearchParams(), t }) {
     setCreating(true);
     setError(null);
   };
+  // A file checked for an Item whose page never opened its editor is dropped here.
+  useEffect(() => { pendingVaultVariantImport = null; }, []);
+  const addImportedVariant = imported => {
+    pendingVaultVariantImport = imported;
+    setImporting(false);
+    setImportSource('');
+    window.location.hash = `/vault/${imported.namespace_key}/${imported.item_key}`;
+  };
   const create = async event => {
     event.preventDefault();
     setError(null);
@@ -2466,7 +2581,7 @@ function VaultItems({ principal, filters = new URLSearchParams(), t }) {
   return (
     <ResourcePage eyebrow="VLT / encrypted revisions" title={t.vault} body={t.vaultBody}
       action={principal.role === 'admin' && <div className="resource-heading-actions"><button className="secondary-action compact-action" type="button" aria-pressed={importing} onClick={() => setImporting(value => !value)}>{t.importVaultItem}</button><button className="primary-action compact-action" type="button" onClick={toggleCreate}>{t.newVaultItem}</button></div>}>
-      {importing && <VaultImportPanel source={importSource} onSourceChange={setImportSource} onLoad={loadImport} onClose={() => setImporting(false)} replacing={creating} t={t} />}
+      {importing && <VaultImportPanel source={importSource} onSourceChange={setImportSource} onLoad={loadImport} onAddVariant={addImportedVariant} onClose={() => setImporting(false)} replacing={creating} t={t} />}
       {creating && draft && <form className="vault-structured-form" onSubmit={create}>
         {imported && <p className="vault-import-loaded" role="status"><span>{t.importVaultLoaded.replace('{item}', imported.item).replace('{fields}', imported.fields).replace('{environments}', imported.environments)}</span>{!importing && <button type="button" onClick={() => setImporting(true)}>{t.importVaultEditFile}</button>}</p>}
         <section className="vault-item-basics"><div className="vault-editor-heading"><h2>{t.itemDetails}</h2></div><div className="vault-item-identity"><label>{t.namespace}<input required maxLength="63" pattern="[a-z][a-z0-9_-]{0,62}" autoComplete="off" value={newNamespaceKey} onChange={event => setNewNamespaceKey(event.target.value)} /><small>{t.namespaceHint}</small></label><label>{t.resourceKey}<input required maxLength="63" pattern="[a-z][a-z0-9_-]{0,62}" autoComplete="off" value={newItemKey} onChange={event => setNewItemKey(event.target.value)} /><small>{t.resourceKeyHint}</small></label><label>{t.displayName}<input name="display_name" required maxLength="255" autoComplete="off" value={newDisplayName} onChange={event => setNewDisplayName(event.target.value)} /></label></div></section>
@@ -2509,6 +2624,7 @@ function VaultDetail({ principal, namespaceKey, itemKey, t }) {
   const [revealed, setRevealed] = useState({});
   const [editor, setEditor] = useState({ status: 'idle' });
   const [notice, setNotice] = useState('');
+  const [importError, setImportError] = useState('');
   const [restoring, setRestoring] = useState(0);
   const [refresh, setRefresh] = useState(0);
   const history = useRevisionHistory(`/v1/vault-items/${encodeURIComponent(namespaceKey)}/${encodeURIComponent(itemKey)}/revisions`, refresh);
@@ -2528,7 +2644,10 @@ function VaultDetail({ principal, namespaceKey, itemKey, t }) {
         setViewedRevision(item.revision);
         setInspection({ status: 'idle' });
       })
-      .catch(() => live && setState({ status: 'failed' }));
+      .catch(() => {
+        pendingVaultVariantImport = null;
+        if (live) setState({ status: 'failed' });
+      });
     return () => { live = false; };
   }, [namespaceKey, itemKey, refresh]);
   useEffect(() => {
@@ -2553,8 +2672,9 @@ function VaultDetail({ principal, namespaceKey, itemKey, t }) {
       return null;
     }
   };
-  const startEdit = async () => {
+  const startEdit = async imported => {
     setNotice('');
+    setImportError('');
     setEditor({ status: 'loading' });
     const item = values.status === 'ready' && values.revision === state.item.revision ? values.item : await readValues();
     if (!item) {
@@ -2562,8 +2682,28 @@ function VaultDetail({ principal, namespaceKey, itemKey, t }) {
       return;
     }
     const draft = vaultDraftFromSnapshot(item.snapshot);
-    setEditor({ status: 'ready', displayName: item.display_name, draft, original: JSON.stringify({ displayName: item.display_name, snapshot: serializeVaultDraft(draft) }), error: null, impactConfirmed: false, saving: false });
+    // The saved state is recorded before an imported Variant is appended, so the editor opens with a change to save.
+    const original = JSON.stringify({ displayName: item.display_name, snapshot: serializeVaultDraft(draft) });
+    let added = null;
+    if (imported) {
+      if (!vaultVariantImportFits(item.snapshot, imported)) {
+        setEditor({ status: 'idle' });
+        setImportError(t.importVariantStale);
+        return;
+      }
+      added = { id: vaultEditorID(), environments: [...imported.environments], values: Object.fromEntries(draft.fields.map(field => [field._id, { text: imported.values[field.key] }])) };
+      draft.variants.push(added);
+    }
+    setEditor({ status: 'ready', displayName: item.display_name, draft, original, error: null, impactConfirmed: false, saving: false,
+      imported: added && { variant: added.id, environments: added.environments.join(', '), fields: draft.fields.length } });
   };
+  const loaded = state.status === 'ready';
+  useEffect(() => {
+    if (!loaded || !pendingVaultVariantImport) return;
+    const imported = pendingVaultVariantImport;
+    pendingVaultVariantImport = null;
+    if (imported.namespace_key === namespaceKey && imported.item_key === itemKey && principal.role === 'admin' && !state.item.archived) startEdit(imported);
+  }, [loaded]);
   const saveItem = async event => {
     event.preventDefault();
     if (editor.saving || impact.status !== 'ready') return;
@@ -2586,6 +2726,7 @@ function VaultDetail({ principal, namespaceKey, itemKey, t }) {
         body: JSON.stringify({ display_name: editor.displayName, expected_revision: state.item.revision, snapshot }),
       });
       setState(current => ({ ...current, item: { ...current.item, display_name: editor.displayName, revision: result.revision } }));
+      if (editor.imported) setSelected(editor.imported.variant);
       setEditor({ status: 'idle' });
       setValues({ status: 'idle' });
       setNotice(t.savedRevision.replace('{revision}', result.revision));
@@ -2634,14 +2775,16 @@ function VaultDetail({ principal, namespaceKey, itemKey, t }) {
     <div className={editor.status === 'ready' ? 'page vault-detail vault-editing' : 'page vault-detail'}>
       <div className="config-detail-heading">
         <div><p className="eyebrow">VLT / <code>{namespaceKey}</code> / <code>{itemKey}</code></p><h1 title={viewedItem?.display_name || state.item.display_name}>{viewedItem?.display_name || state.item.display_name}</h1></div>
-        <div className="detail-heading-actions"><div className="config-identity"><span>{viewedItem?.snapshot.fields.length ?? state.item.snapshot.fields.length} {t.fields}</span><code>v{viewedRevision}</code><span>{viewingCurrent ? t.current : t.readOnly}</span>{state.item.archived && <span className="status archived">{t.statusArchived}</span>}</div>{principal.role === 'admin' && viewingCurrent && !state.item.archived && editor.status !== 'ready' && <button className="secondary-action compact-action" type="button" disabled={editor.status === 'loading'} onClick={startEdit}>{t.editItem}</button>}</div>
+        <div className="detail-heading-actions"><div className="config-identity"><span>{viewedItem?.snapshot.fields.length ?? state.item.snapshot.fields.length} {t.fields}</span><code>v{viewedRevision}</code><span>{viewingCurrent ? t.current : t.readOnly}</span>{state.item.archived && <span className="status archived">{t.statusArchived}</span>}</div>{principal.role === 'admin' && viewingCurrent && !state.item.archived && editor.status !== 'ready' && <button className="secondary-action compact-action" type="button" disabled={editor.status === 'loading'} onClick={() => startEdit()}>{t.editItem}</button>}</div>
       </div>
       {notice && <p className="success-note vault-save-notice" role="status">{notice}</p>}
+      {importError && <p className="inline-error" role="alert">{importError}</p>}
       {editor.status === 'ready' && <form className="vault-structured-form vault-detail-editor" onSubmit={saveItem}>
         <div className="vault-edit-warning">{t.valueAccessWarning}</div>
+        {editor.imported && <p className="vault-import-loaded" role="status"><span>{t.importVariantLoaded.replace('{environments}', editor.imported.environments).replace('{fields}', editor.imported.fields)}</span></p>}
         <fieldset className="vault-save-fields" disabled={editor.saving}>
         <section className="vault-item-basics"><div className="vault-editor-heading"><h2>{t.itemDetails}</h2></div><div className="vault-item-identity"><label>{t.namespace}<input readOnly value={namespaceKey} /><small>{t.namespaceHint}</small></label><label>{t.resourceKey}<input readOnly value={itemKey} /></label><label>{t.displayName}<input required maxLength="255" value={editor.displayName} onChange={event => setEditor(current => ({ ...current, displayName: event.target.value, error: null, impactConfirmed: false }))} autoComplete="off" /></label></div></section>
-        <VaultSnapshotEditor draft={editor.draft} onChange={update => setEditor(current => ({ ...current, draft: typeof update === 'function' ? update(current.draft) : update, error: null, impactConfirmed: false }))} namespaceKey={namespaceKey} itemKey={itemKey} t={t} />
+        <VaultSnapshotEditor draft={editor.draft} initialVariant={editor.imported?.variant} onChange={update => setEditor(current => ({ ...current, draft: typeof update === 'function' ? update(current.draft) : update, error: null, impactConfirmed: false }))} namespaceKey={namespaceKey} itemKey={itemKey} t={t} />
         </fieldset>
         {impact.total > 0 && <div className="vault-impact-warning" role="alert"><strong>{t.vaultImpactWarning.replace('{total}', impact.total)}</strong>{impact.items.map(usage => <a href={`#/configs/${usage.config_key}/${usage.environment_key}`} key={`${usage.field_key}-${usage.environment_key}-${usage.config_key}`}><span>{usage.config_name}</span><code>{usage.environment_key} / {usage.config_key} @ v{usage.config_revision} · {usage.field_key}</code></a>)}</div>}
         <InventoryPagination collection={impact} t={t} hideSinglePage />

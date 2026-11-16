@@ -301,8 +301,9 @@ archive requests do not require this preview or its confirmation.
 
 ### Vault import from YAML / 从 YAML 导入 Vault Item
 
-**Import YAML** on the Vault page creates one new Item with one Variant from a
-file. Paste the YAML or choose a `.yml`/`.yaml` file (the same text gives the
+**Import YAML** on the Vault page reads one Variant from a file. The file creates
+a new Item, or adds that Variant to an Item that already exists (see
+[below](#add-a-variant-to-an-existing-item--向已有-item-新增-variant)). Paste the YAML or choose a `.yml`/`.yaml` file (the same text gives the
 same result), or start from **Download template**:
 
 ```yaml
@@ -343,13 +344,97 @@ values are already cleaned of edge whitespace, as a save would store them. **Cre
 item** then writes the whole Item with the usual `PUT`, idempotency, audit and
 redirect to the new Item. Checking the file again replaces the form.
 
-Vault 页面的“导入 YAML”用一个文件创建一个新的 Item 和一个 Variant。可以粘贴或选择
+Vault 页面的“导入 YAML”从一个文件读取一个 Variant：可以创建新的 Item，也可以向已有 Item
+新增这个 Variant（见下一节）。可以粘贴或选择
 `.yml`/`.yaml` 文件（内容相同则结果相同），也可以先“下载模板”。“检查文件”只读、
 不写入：未知或重复的键、锚点与别名、多个文档、非字符串或缺失的 `value`（空值写
 `""`）、File 字段、非法标识、超大值、不存在或已归档的环境，以及同 Namespace 与键的
 已有 Item（包括已归档）都会按路径和行号列出，报错中不包含值。检查通过后，结果按文件
 顺序填入现有的创建表单（Secret 默认隐藏），核对或调整后点击“创建 Vault Item”，通过
 现有的 `PUT` 一次写入，沿用幂等、审计和创建后跳转。
+
+### Add a Variant to an existing Item / 向已有 Item 新增 Variant
+
+A new Environment usually needs the same Fields with a few different values. Both
+ways below add one Variant to the edit draft of an existing Item. The Item keeps
+its Namespace, key and Vault references, the other Variants keep their IDs, values
+and bindings, and nothing is written until **Save item**. The save is the usual
+whole-Item `PUT` with the revision the editor opened, so a concurrent change is a
+`revision_conflict` that keeps the draft.
+
+**Copy another Variant**
+([#66](https://github.com/viber-ops/configra/issues/66)). In the editor,
+**Values for a new Variant** lists each Variant with the Environments that share
+its values. Choose one, then **Add Variant**. The new Variant gets its own ID, a
+one-time copy of every value (Text, Secret and File; Secrets stay hidden) and no
+Environments. Change the values that differ and tick its Environments. **Blank**
+remains the default. Later changes to either Variant do not affect the other.
+
+**Import from YAML**
+([#67](https://github.com/viber-ops/configra/issues/67)). When the file names an
+Item that already exists, **Check file** does not switch by itself: it offers
+**Add as a new Variant**. That choice checks the file against the Item:
+
+```http
+POST /v1/vault-items/import-preview
+Content-Type: application/json
+
+{"content":"namespace: order_service\n...","target":"existing_item"}
+```
+
+A clean file returns the draft with the Item's own display name, Field names and
+Field order, plus `"existing": {"revision": 7, "variants": 1}`. The file format is
+unchanged; `display_name`, Field `name` and the order of `fields` in the file are
+ignored for an existing Item. Besides the problems above, these are reported:
+
+| Code | Meaning |
+| --- | --- |
+| `item_not_found` | No Item has this Namespace and key. |
+| `item_archived` | The Item is archived. Import does not restore it. |
+| `item_has_file_field` | The Item has a File Field (`key` names it). Add the Variant in the editor instead. |
+| `field_missing` | The Item has a Field (`key` names it) that the file gives no value. Values are never taken from another Variant; write `""` for an empty one. |
+| `field_unknown` | The file has a Field the Item does not have. Import does not add Fields. |
+| `field_type_mismatch` | The Field's type differs from the Item's. |
+| `environment_bound` | A Variant of the Item already serves this Environment. Import never moves or overwrites it. |
+
+The preview reads the Item without values and writes nothing. After the summary
+(Item, revision, Environments, Field count), **Review in the editor** opens the
+Item's editor with the new Variant appended and selected. Opening the editor reads
+the Item's values, as **Edit item** always does. The file's values are passed in
+memory only. If the Item changed after the check so that the file no longer fits,
+nothing is loaded and the page says so. After the save, the Item opens on the new
+Variant.
+
+**Environment conflicts.** An Environment belongs to one Variant of an Item. In
+the editor, an Environment held by another Variant is labelled with that Variant.
+Ticking it still moves it, and the editor then states which Variant lost it and
+offers **Undo**. Copying a Variant never moves an Environment.
+
+Saving in the editor also applies the [Text rule](#vault-text-whitespace--vault-文本值的首尾空白)
+to every Variant, so an older single-line Text value with edge whitespace in
+another Variant is cleaned by the same save. The editor lists these before saving.
+
+为新环境新增 Variant 时，字段通常相同，只有少数值不同。下面两种方式都只是在已有 Item 的
+编辑草稿中追加一个 Variant：Item 的 Namespace、键和 Vault 引用不变，其他 Variant 的 ID、
+值和环境绑定不变，点击“保存 Item”之前不会写入。保存沿用整个 Item 的 `PUT` 和打开编辑器时
+的 Revision；并发修改会返回 `revision_conflict`，草稿保留。
+
+- **复制其他 Variant**（[#66](https://github.com/viber-ops/configra/issues/66)）：在编辑器
+  的“新 Variant 的初始值”中选择来源（每项标明 Variant 及共用这组值的环境），再点击“新增
+  Variant”。新 Variant 使用独立 ID，一次性复制全部值（Text、Secret、File；Secret 保持隐藏），
+  不带任何环境绑定。之后两个 Variant 互不影响。默认仍为“空白”。
+- **从 YAML 导入**（[#67](https://github.com/viber-ops/configra/issues/67)）：文件指向的
+  Item 已存在时，“检查文件”不会自动切换，而是提供“向已有 Item 新增 Variant”。选择后按已有
+  Item 严格检查：文件必须为 Item 的每个字段给出值且类型一致，不能多、不能少，也不会从其他
+  Variant 补值；目标环境已属于该 Item 的其他 Variant、Item 已归档或含 File 字段时都会报错。
+  文件格式不变，文件中的显示名称、字段名称和字段顺序对已有 Item 不生效。检查只读、不读取
+  值、不写入。确认摘要后点击“在编辑器中核对”，编辑器会带着新 Variant 打开并选中它；保存后
+  详情页停留在新 Variant。
+- **环境冲突**：一个环境只属于 Item 的一个 Variant。编辑器会标出已属于其他 Variant 的环境；
+  勾选仍会移动它，并明确提示从哪个 Variant 移出，可以“撤销”。复制 Variant 不会移动环境。
+- 在编辑器中保存时，[文本规则](#vault-text-whitespace--vault-文本值的首尾空白)对所有
+  Variant 生效：其他 Variant 中带首尾空白的旧单行 Text 值会在同一次保存中被清理，保存前
+  编辑器会列出这些值。
 
 ### Vault Text whitespace / Vault 文本值的首尾空白
 

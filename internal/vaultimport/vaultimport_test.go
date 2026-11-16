@@ -191,3 +191,41 @@ func TestParseBoundsTheFileAndTheReport(t *testing.T) {
 		t.Fatalf("report has %d problems, want %d", len(problems), MaxProblems)
 	}
 }
+
+func TestForExistingItemRequiresTheItemsExactFieldsAndKeepsItsDefinitions(t *testing.T) {
+	const file = "namespace: order_service\nitem: clients-conf\ndisplay_name: Renamed in the file\nenvironments: [hk180, hk181]\nfields:\n" +
+		"  - {key: token, name: Other name, type: secret, value: \"secret-sentinel\"}\n" +
+		"  - {key: lvl-data, type: text, value: \"\"}\n"
+	draft, problems := Parse([]byte(file))
+	if len(problems) != 0 {
+		t.Fatalf("parse problems = %+v", problems)
+	}
+	snapshot := vaultdoc.Snapshot{
+		Fields:   []vaultdoc.Field{{Key: "lvl-data", Name: "LVL data", Type: vaultdoc.Text}, {Key: "token", Name: "Token", Type: vaultdoc.Secret}},
+		Variants: []vaultdoc.Variant{{ID: "a", Environments: []string{"hk47"}}},
+	}
+
+	matched, problems := draft.ForExistingItem("Clients", snapshot)
+	if len(problems) != 0 {
+		t.Fatalf("matching file problems = %+v", problems)
+	}
+	// The stored display name, Field names and Field order win; an explicit "" is a value, not a missing Field.
+	if matched.DisplayName != "Clients" || !reflect.DeepEqual(matched.Fields, snapshot.Fields) || !reflect.DeepEqual(matched.Environments, []string{"hk180", "hk181"}) ||
+		!reflect.DeepEqual(matched.Values, map[string]string{"token": "secret-sentinel", "lvl-data": ""}) {
+		t.Fatalf("matched draft = %+v", matched)
+	}
+
+	snapshot.Fields = []vaultdoc.Field{{Key: "lvl-data", Type: vaultdoc.Secret}, {Key: "extra", Type: vaultdoc.Text}, {Key: "cert", Type: vaultdoc.File}}
+	snapshot.Variants = append(snapshot.Variants, vaultdoc.Variant{ID: "b", Environments: []string{"hk9", "hk181"}})
+	_, problems = draft.ForExistingItem("Clients", snapshot)
+	want := []Problem{
+		{Path: "item", Line: 2, Code: CodeItemHasFileField, Key: "cert"},
+		{Path: "fields[0].key", Line: 6, Code: CodeFieldUnknown},
+		{Path: "fields[1].type", Line: 7, Code: CodeFieldTypeMismatch},
+		{Path: "fields", Line: 5, Code: CodeFieldMissing, Key: "extra"},
+		{Path: "environments[1]", Line: 4, Code: CodeEnvironmentBound},
+	}
+	if !reflect.DeepEqual(problems, want) {
+		t.Fatalf("problems = %+v\nwant %+v", problems, want)
+	}
+}
